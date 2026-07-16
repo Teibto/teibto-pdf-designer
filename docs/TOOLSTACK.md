@@ -43,7 +43,7 @@ cd teibto-pdf-designer/designer && npm install && npm test
 1. **FreeMarker ไม่มี C-ternary** — `${cond ? a : b}` = template error ทันที → ใช้ `${cond?then(a, b)}` หรือ `<#if>`
 2. **Binding ไม่ null-safe ทำ PDF พังทั้งใบ** — field ว่าง 1 ตัว = error → ใช้ `${record.field!""}` เสมอ
 3. **BFO ไม่รู้จัก CSS `@page` margin boxes / `counter(page)`** — header/footer ซ้ำทุกหน้าใช้ `<macrolist><macro id="nlheader">` + `<body header="nlheader">` + `<pagenumber/>`/`<totalpages/>`
-4. **ฟอนต์ระบบไม่มีฝั่ง server** — Tahoma/Sarabun ไม่มีใน BFO → `<link name="THSarabun" type="font" subtype="truetype" src="${nsfont...}">` จาก File Cabinet ไม่งั้นภาษาไทยเป็นสี่เหลี่ยม
+4. **ภาษาไทยต้อง embed font เท่านั้น** (พิสูจน์บน SB2 2026-07-17, #22) — font-family ที่ไม่ embed (Tahoma, Sarabun, แม้แต่ NotoSansThai) ทำ **glyph ไทยหายเงียบ** ไม่มี error → ใช้ `<link name="THSarabunNew" type="font" subtype="truetype" src=... src-bold=... bytes="2">` โดยไฟล์ TTF ต้องติ๊ก **Available Without Login** และ src ต้องเป็น URL เต็มมี `h=` token + `_xt=.ttf` (token ออกใหม่ทุกครั้งที่ save ไฟล์ — เก็บใน script param ต้องอัปเดตตาม)
 5. **CSS ที่ BFO เมินเงียบ ๆ** — `object-fit`, `text-overflow: ellipsis`, `-webkit-*` — อย่าให้ designer เสนอ option ที่พิมพ์ไม่ได้
 6. **แก้ template ใน UI account ลูกค้าโดยไม่ commit กลับ = drift** — source of truth คือ `templates/master/` ใน repo นี้
 

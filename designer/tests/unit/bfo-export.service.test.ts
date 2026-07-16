@@ -104,7 +104,7 @@ describe('thai font embedding', () => {
     expect(xml).toContain('src="/core/media/media.nl?id=101"');
     expect(xml).toContain('src-bold="/core/media/media.nl?id=102"');
     expect(xml).toContain('bytes="2"');
-    expect(xml).toContain('font-family: THSarabunNew, NotoSansThai, sans-serif');
+    expect(xml).toContain('font-family: THSarabunNew, sans-serif');
   });
 
   it('regular-only: no src-bold attribute', () => {
