@@ -30,8 +30,10 @@ export interface BfoExportOptions {
   includePageHeaders?: boolean;
   /**
    * File Cabinet URLs of THSarabunNew TTFs to embed via <link type="font">.
-   * Server-side BFO has no system Thai fonts (no Tahoma/Sarabun) — without
-   * this, Thai text falls back to NetSuite's built-in NotoSansThai.
+   * REQUIRED for Thai documents: server-side BFO silently drops Thai glyphs
+   * with any non-embedded font-family (verified on SB2 — NotoSansThai in CSS
+   * does NOT render Thai). Files must be "Available Without Login" and the
+   * URL must be the full form with the h= token and _xt=.ttf suffix.
    */
   thaiFontUrls?: { regular: string; bold?: string };
 }
@@ -110,10 +112,12 @@ function buildFontLink(thaiFontUrls?: BfoExportOptions['thaiFontUrls']): string 
 function buildBfoCss(hasEmbeddedThaiFont: boolean): string {
   const lines: string[] = [];
 
-  // NotoSansThai is a NetSuite built-in font — the fallback that keeps Thai
-  // rendering even when no font is uploaded to the File Cabinet.
+  // WARNING (verified on SB2): non-embedded font-family names — including
+  // NotoSansThai — silently DROP Thai glyphs in BFO. Thai documents require
+  // thaiFontUrls (embedded <link type="font">); the fallback below only keeps
+  // Latin text readable.
   const fontFamily = hasEmbeddedThaiFont
-    ? 'THSarabunNew, NotoSansThai, sans-serif'
+    ? 'THSarabunNew, sans-serif'
     : 'NotoSansThai, sans-serif';
 
   // Base styles (page size/margins are <body> attributes in BFO, not @page CSS)

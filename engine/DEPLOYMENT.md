@@ -148,12 +148,14 @@ SuiteScripts/
 | `custscript_pld_font_regular` | Thai Font Regular URL | Free-Form Text |
 | `custscript_pld_font_bold` | Thai Font Bold URL | Free-Form Text |
 
-**ฟอนต์ไทย (จำเป็นถ้าเอกสารมีภาษาไทย):**
-1. Upload `engine/fonts/THSarabunNew-Regular.ttf` + `THSarabunNew-Bold.ttf` เข้า File Cabinet
-   (โฟลเดอร์ `SuiteScripts/pdf-layout-designer/fonts/`, ติ๊ก **Available Without Login**)
-2. เปิดไฟล์แต่ละตัว copy **URL** (รูปแบบ `/core/media/media.nl?id=...`) มาใส่ script parameters ข้างบน
-3. Designer จะฝัง `<link name="THSarabunNew" type="font" subtype="truetype" ... bytes="2">` ใน BFO XML ให้อัตโนมัติ
-   — ถ้าไม่ตั้ง params เอกสารใช้ฟอนต์ built-in `NotoSansThai` ของ NetSuite (ไทยยังอ่านได้ แต่ไม่ใช่หน้าตา Sarabun)
+**ฟอนต์ไทย (บังคับสำหรับเอกสารภาษาไทย — ไม่ embed = ตัวอักษรไทยหายเงียบ):**
+1. ไฟล์ font อยู่ที่ `engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/fonts/` (SDF deploy ให้อัตโนมัติ)
+2. เปิดไฟล์ทั้งสองใน File Cabinet → ติ๊ก **Available Without Login** → Save
+3. copy **URL เต็ม** จากหน้าไฟล์ (ต้องมี `h=` token และลงท้าย `_xt=.ttf` — token ออกใหม่ทุกครั้งที่ save ไฟล์)
+   มาใส่ script parameters ข้างบน
+4. Designer จะฝัง `<link name="THSarabunNew" type="font" subtype="truetype" src=... src-bold=... bytes="2">` ให้อัตโนมัติ
+
+> ⚠️ พิสูจน์แล้วบน SB2 (2026-07-17): font-family ที่ไม่ embed — รวมถึง `NotoSansThai` — ทำให้ **glyph ไทยถูก drop เงียบ ๆ** ใน PDF (ไม่ error) — เอกสารไทยทุกใบต้องตั้ง font params เสมอ
 
 ---
 

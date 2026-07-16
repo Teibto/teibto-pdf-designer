@@ -1,0 +1,17 @@
+<suitelet scriptid="customscript_pld_designer">
+  <name>PLD - PDF Designer</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/pdf-layout-designer/pld_sl_designer.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_pld_designer">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <runasrole>ADMINISTRATOR</runasrole>
+      <status>RELEASED</status>
+      <title>PLD Designer</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>

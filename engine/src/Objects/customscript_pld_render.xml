@@ -1,0 +1,17 @@
+<suitelet scriptid="customscript_pld_render">
+  <name>PLD - PDF Renderer</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/pdf-layout-designer/pld_sl_render_pdf.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_pld_render">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <runasrole>ADMINISTRATOR</runasrole>
+      <status>RELEASED</status>
+      <title>PLD Renderer</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>
