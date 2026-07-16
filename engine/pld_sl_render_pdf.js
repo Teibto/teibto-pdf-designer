@@ -168,11 +168,14 @@ define([
     var tplXml = loadTemplateXml(tplId);
     if (!tplXml) throw new Error('Template not found: ' + tplId);
 
-    // Replace FreeMarker expressions with placeholder text for preview
+    // Replace FreeMarker expressions with placeholder text for preview.
+    // The preview renderer has no data sources bound, so ANY ${...} left in
+    // the template (record, line, company, context, ...) is a render error —
+    // strip every interpolation and every <#...> directive, not just record.*.
     var previewXml = tplXml
-      .replace(/\$\{record\.\w+(\.\w+)*\}/g, '[Sample Data]')
-      .replace(/<#list[^>]*>/g, '')
-      .replace(/<\/#list>/g, '');
+      .replace(/\$\{[^}]*\}/g, '[Sample Data]')
+      .replace(/<#[^>]*>/g, '')
+      .replace(/<\/#[^>]*>/g, '');
 
     var renderer = render.create();
     renderer.templateContent = previewXml;
