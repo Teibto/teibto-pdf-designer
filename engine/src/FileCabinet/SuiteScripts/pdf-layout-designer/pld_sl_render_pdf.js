@@ -166,7 +166,6 @@ define([
     if (!tplId) throw new Error('Missing tplid for preview');
 
     var tplXml = loadTemplateXml(tplId);
-    if (!tplXml) throw new Error('Template not found: ' + tplId);
 
     // Replace FreeMarker expressions with placeholder text for preview.
     // The preview renderer has no data sources bound, so ANY ${...} left in
@@ -261,6 +260,13 @@ define([
     }
 
     var body = JSON.parse(context.request.body);
+
+    // XML is mandatory on every save — the engine has no generator of its own,
+    // so a template without XML can never render (#6, R4: no silent fallback).
+    if (!body.xml) {
+      throw new Error('Template XML is required. Export BFO XML from the designer and include it in the save payload (#6).');
+    }
+
     var tplId = body.id;
     var rec;
 
@@ -278,9 +284,7 @@ define([
     if (body.data) {
       rec.setValue({ fieldId: TPL_FLD_DATA, value: body.data });
     }
-    if (body.xml) {
-      rec.setValue({ fieldId: TPL_FLD_XML, value: body.xml });
-    }
+    rec.setValue({ fieldId: TPL_FLD_XML, value: body.xml });
     if (body.rectype) {
       rec.setValue({ fieldId: TPL_FLD_REC_TYPE, value: body.rectype });
     }
@@ -301,29 +305,24 @@ define([
 
   /**
    * Load BFO XML from template custom record.
+   * No fallback generation: the only BFO generator is the designer's
+   * bfo-export.service.ts — a template without XML is a hard error (#6, R4).
    */
   function loadTemplateXml(tplId) {
-    try {
-      var rec = record.load({ type: TPL_RECORD_TYPE, id: tplId });
-      var xmlContent = rec.getValue({ fieldId: TPL_FLD_XML });
+    var rec = record.load({ type: TPL_RECORD_TYPE, id: tplId });
+    var xmlContent = rec.getValue({ fieldId: TPL_FLD_XML });
 
-      if (xmlContent) return xmlContent;
-
-      // Fallback: generate XML from designer JSON data
-      var jsonData = rec.getValue({ fieldId: TPL_FLD_DATA });
-      if (jsonData) {
-        return generateXmlFromDesignerData(JSON.parse(jsonData));
-      }
-
-      return null;
-    } catch (e) {
-      log.error({ title: 'loadTemplateXml', details: e });
-      return null;
+    if (!xmlContent) {
+      throw new Error('Template ' + tplId + ' has no BFO XML. ' +
+        'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
     }
+
+    return xmlContent;
   }
 
   /**
    * Find default template for a record type.
+   * Same no-fallback rule as loadTemplateXml (#6, R4).
    */
   function findDefaultTemplateXml(recType) {
     var results = search.create({
@@ -335,20 +334,18 @@ define([
         'AND',
         [TPL_FLD_IS_DEFAULT, 'is', 'T']
       ],
-      columns: [TPL_FLD_XML, TPL_FLD_DATA]
+      columns: [TPL_FLD_XML]
     }).run().getRange({ start: 0, end: 1 });
 
     if (results.length === 0) return null;
 
     var xmlContent = results[0].getValue(TPL_FLD_XML);
-    if (xmlContent) return xmlContent;
-
-    var jsonData = results[0].getValue(TPL_FLD_DATA);
-    if (jsonData) {
-      return generateXmlFromDesignerData(JSON.parse(jsonData));
+    if (!xmlContent) {
+      throw new Error('Default template for ' + recType + ' (id ' + results[0].id + ') has no BFO XML. ' +
+        'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
     }
 
-    return null;
+    return xmlContent;
   }
 
   /**
@@ -382,231 +379,6 @@ define([
   }
 
   /**
-   * Generate BFO XML from designer JSON data (fallback).
-   * Converts the canvas state into a proper BFO XML document
-   * with FreeMarker syntax for N/render.
-   */
-  function generateXmlFromDesignerData(designerData) {
-    var elements = designerData.elements || [];
-    var page = designerData.page || { width: 595, height: 842, orientation: 'portrait' };
-
-    // Group elements by role
-    var grouped = {
-      header: [],
-      content: [],
-      table: [],
-      summary: [],
-      footer: [],
-      watermark: []
-    };
-
-    elements.forEach(function (el) {
-      var role = el.role || 'content';
-      if (grouped[role]) {
-        grouped[role].push(el);
-      } else {
-        grouped.content.push(el);
-      }
-    });
-
-    // Sort each group by Y position
-    Object.keys(grouped).forEach(function (key) {
-      grouped[key].sort(function (a, b) { return a.y - b.y; });
-    });
-
-    // Build XML
-    var xmlParts = [];
-
-    xmlParts.push('<?xml version="1.0" encoding="UTF-8"?>');
-    xmlParts.push('<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">');
-    xmlParts.push('<pdf>');
-
-    // ─── CSS ───
-    xmlParts.push('<head>');
-    xmlParts.push('<style type="text/css">');
-    xmlParts.push('body { font-family: Tahoma, sans-serif; font-size: 10pt; color: #333; }');
-    xmlParts.push('table { width: 100%; border-collapse: collapse; }');
-    xmlParts.push('th { background-color: #e8eaf0; font-weight: bold; padding: 6px 8px; text-align: left; border-bottom: 1.5px solid #ccc; }');
-    xmlParts.push('td { padding: 5px 8px; border-bottom: 0.5px solid #eee; }');
-    xmlParts.push('tr.alt { background-color: #f9fafb; }');
-    xmlParts.push('.header { font-size: 16pt; font-weight: bold; color: #111; margin-bottom: 8px; }');
-    xmlParts.push('.label { font-size: 8pt; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }');
-    xmlParts.push('.total-row td { font-weight: bold; border-top: 1.5px solid #333; }');
-    xmlParts.push('.text-right { text-align: right; }');
-    xmlParts.push('.text-center { text-align: center; }');
-    xmlParts.push('.footer { font-size: 8pt; color: #888; text-align: center; margin-top: 12px; padding-top: 8px; border-top: 0.5px solid #ddd; }');
-    xmlParts.push('</style>');
-    xmlParts.push('</head>');
-
-    // ─── BODY ───
-    xmlParts.push('<body size="' + (page.size || 'A4') + '"' +
-      (page.orientation === 'landscape' ? ' orientation="landscape"' : '') + '>');
-
-    // Header elements
-    grouped.header.forEach(function (el) {
-      xmlParts.push(renderElementToXml(el, 'record'));
-    });
-
-    // Content elements
-    grouped.content.forEach(function (el) {
-      xmlParts.push(renderElementToXml(el, 'record'));
-    });
-
-    // Table elements
-    grouped.table.forEach(function (el) {
-      xmlParts.push(renderTableToXml(el, 'record'));
-    });
-
-    // Summary elements
-    grouped.summary.forEach(function (el) {
-      xmlParts.push(renderElementToXml(el, 'record'));
-    });
-
-    // Footer elements
-    if (grouped.footer.length > 0) {
-      xmlParts.push('<div class="footer">');
-      grouped.footer.forEach(function (el) {
-        xmlParts.push(renderElementToXml(el, 'record'));
-      });
-      xmlParts.push('</div>');
-    }
-
-    xmlParts.push('</body>');
-    xmlParts.push('</pdf>');
-
-    return xmlParts.join('\n');
-  }
-
-  /**
-   * Render a single element to BFO XML with FreeMarker variables.
-   */
-  function renderElementToXml(el, recordAlias) {
-    var binding = el.binding || '';
-    var content = el.content || '';
-
-    // Resolve binding → FreeMarker syntax
-    if (binding) {
-      content = '${' + recordAlias + '.' + binding + '}';
-    } else if (content) {
-      // Replace {{path}} → ${record.path}
-      content = content.replace(/\{\{(.+?)\}\}/g, function (_, path) {
-        return '${' + recordAlias + '.' + path.trim() + '}';
-      });
-    }
-
-    switch (el.type) {
-      case 'header':
-        var styles = [];
-        if (el.fontSize) styles.push('font-size: ' + el.fontSize + 'pt');
-        if (el.fontWeight === 'bold') styles.push('font-weight: bold');
-        if (el.color && el.color !== '#111111') styles.push('color: ' + el.color);
-        if (el.textAlign) styles.push('text-align: ' + el.textAlign);
-        return '<h2 style="' + styles.join('; ') + '">' + escapeXml(content) + '</h2>';
-
-      case 'text':
-        var styles = [];
-        if (el.fontSize) styles.push('font-size: ' + el.fontSize + 'pt');
-        if (el.fontWeight === 'bold') styles.push('font-weight: bold');
-        if (el.color && el.color !== '#333333') styles.push('color: ' + el.color);
-        if (el.textAlign) styles.push('text-align: ' + el.textAlign);
-        return '<p style="' + styles.join('; ') + '">' + escapeXml(content) + '</p>';
-
-      case 'image':
-        var src = el.src || el.imageData || '';
-        if (binding) src = '${' + recordAlias + '.' + binding + '}';
-        return '<img src="' + escapeXml(src) + '" style="width: ' + el.w + 'px; height: ' + el.h + 'px;" />';
-
-      case 'shape':
-        var bg = el.bgColor || '#4f6ef7';
-        var radius = el.borderRadius || 0;
-        return '<div style="background: ' + bg + '; width: ' + el.w + 'px; height: ' + el.h + 'px;' +
-          (radius > 0 ? ' border-radius: ' + radius + 'px;' : '') +
-          (el.opacity < 1 ? ' opacity: ' + el.opacity + ';' : '') +
-          '"> </div>';
-
-      case 'line':
-        var lineColor = el.lineColor || '#ccc';
-        var lineWidth = el.lineWidth || 1;
-        var lineStyle = el.lineStyle || 'solid';
-        return '<hr style="border: none; border-top: ' + lineWidth + 'px ' + lineStyle + ' ' + lineColor + ';" />';
-
-      case 'list':
-        var items = el.items || [];
-        var listTag = el.listStyle === 'number' ? 'ol' : 'ul';
-        var listHtml = '<' + listTag + ' style="font-size: ' + (el.fontSize || 10) + 'pt;">';
-        items.forEach(function (item) {
-          listHtml += '<li>' + escapeXml(item) + '</li>';
-        });
-        listHtml += '</' + listTag + '>';
-        return listHtml;
-
-      default:
-        return '<!-- unsupported: ' + el.type + ' -->';
-    }
-  }
-
-  /**
-   * Render a table element to BFO XML with FreeMarker <#list> loop.
-   */
-  function renderTableToXml(el, recordAlias) {
-    var columns = el.columns || [];
-    var binding = el.binding || 'item';
-
-    if (columns.length === 0) return '<!-- table: no columns configured -->';
-
-    var parts = [];
-    parts.push('<table>');
-
-    // ─── Header Row ───
-    parts.push('<thead><tr>');
-    columns.forEach(function (col) {
-      if (col.hidden) return;
-      var style = 'text-align: ' + (col.align || 'left') + ';';
-      if (col.width) style += ' width: ' + col.width + 'px;';
-      parts.push('<th style="' + style + '">' + escapeXml(col.label || col.key) + '</th>');
-    });
-    parts.push('</tr></thead>');
-
-    // ─── Body with FreeMarker Loop ───
-    parts.push('<tbody>');
-    parts.push('<#list ' + recordAlias + '.' + binding + ' as line>');
-    // FreeMarker has no C-style ternary — use ?then(whenTrue, whenFalse)
-    parts.push('<tr class="${(line_index % 2 == 0)?then(\'\', \'alt\')}">');
-
-    columns.forEach(function (col) {
-      if (col.hidden) return;
-
-      var style = 'text-align: ' + (col.align || 'left') + ';';
-      if (col.bold) style += ' font-weight: bold;';
-
-      var value;
-      if (col.isIndex) {
-        value = '${line_index + 1}';
-      } else {
-        value = '${line.' + col.key + '}';
-
-        // Format based on column type
-        if (col.format === 'number') {
-          value = '${line.' + col.key + '?string["#,##0"]}';
-        } else if (col.format === 'currency') {
-          value = '${line.' + col.key + '?string["#,##0.00"]}';
-        } else if (col.format === 'percent') {
-          value = '${line.' + col.key + '?string["0.00"]}%';
-        }
-      }
-
-      parts.push('<td style="' + style + '">' + value + '</td>');
-    });
-
-    parts.push('</tr>');
-    parts.push('</#list>');
-    parts.push('</tbody>');
-    parts.push('</table>');
-
-    return parts.join('\n');
-  }
-
-  /**
    * Load company info from script parameters or company record.
    */
   function loadCompanyInfo() {
@@ -628,15 +400,6 @@ define([
     } catch (e) {
       return '';
     }
-  }
-
-  function escapeXml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
   }
 
   function sendJson(context, data) {
