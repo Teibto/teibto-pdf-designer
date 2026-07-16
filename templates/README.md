@@ -13,9 +13,11 @@ samples/   sample data สังเคราะห์ (JSON) สำหรับ 
 - ฟอนต์ไทยผ่าน `<link type="font">` (THSarabunNew ใน File Cabinet)
 - จุดที่ลูกค้าต่างกัน (โลโก้ สี ที่อยู่) parameterize ผ่าน `${company.*}` / `<#if>` — ไม่ fork ไฟล์ต่อลูกค้าใน repo นี้
 
-URL ฟอนต์เป็นค่าเฉพาะ account (มี `h=` token) จึง commit ไม่ได้ — ไฟล์ master ใช้ placeholder
-`{{PLD_FONT_REGULAR_URL}}` / `{{PLD_FONT_BOLD_URL}}` **ทุกจุดที่ปรากฏ** แล้วแทนที่ด้วย URL จริง
-ตอน save เข้า custom record ของแต่ละ account (ดู `engine/DEPLOYMENT.md` §ฟอนต์ไทย)
+ค่าเฉพาะ account ทั้งหมด — รวม URL ฟอนต์ไทย (มี `h=` token จึง commit ไม่ได้) — มาจาก config
+record `customrecord_pld_config` ผ่าน `${company.*}` (#9): ไฟล์ master save เข้า account ได้ตรง ๆ
+โดยไม่ต้องแก้ไฟล์ · ตั้งค่า config ตาม `engine/DEPLOYMENT.md` §Company Config
 
-> ⚠️ พิสูจน์บน SB2 (2026-07-17): ถ้า placeholder ไม่ถูกแทน BFO **ไม่ error** — ฟอนต์ถูกเมินเงียบ ๆ
-> แล้ว glyph ไทยหายทั้งใบ ตรวจง่ายสุดจากขนาด PDF: embed สำเร็จ = โตขึ้นหลายสิบ KB ต่อ subset
+- URL ใน attribute (font `src`, logo `src`) ต้องผ่าน `?xml` เสมอ — ค่า config มี `&` ดิบ
+  ไม่ escape = BFO parse พังหลัง FreeMarker แทนค่า
+- ⚠️ พิสูจน์บน SB2 (2026-07-17): font URL ว่าง/เสีย BFO **ไม่ error** — ฟอนต์ถูกเมินเงียบ ๆ
+  แล้ว glyph ไทยหายทั้งใบ ตรวจง่ายสุดจากขนาด PDF: embed สำเร็จ = โตขึ้นหลายสิบ KB ต่อ subset

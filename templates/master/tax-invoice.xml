@@ -7,12 +7,11 @@
   กติกา: docs/TOOLSTACK.md + templates/README.md (binding null-safe ทุกตัว,
   header/footer ผ่าน macrolist, ฟอนต์ไทย embed เท่านั้น)
 
-  จุดต่อ account (แทนที่ตอน save/deploy — ห้าม commit URL จริง):
-    {{PLD_FONT_REGULAR_URL}} / {{PLD_FONT_BOLD_URL}}
-      = URL เต็มของ THSarabunNew TTF ใน File Cabinet (ต้องมี h= token, ลงท้าย _xt=.ttf,
-        ไฟล์ติ๊ก Available Without Login) — ดู engine/DEPLOYMENT.md §ฟอนต์ไทย
+  จุดต่อลูกค้าทั้งหมดมาจาก ${company.*} = config record customrecord_pld_config
+  ของแต่ละ account (#9) — รวมถึง URL ฟอนต์ไทย (company.fontRegular / company.fontBold)
+  → ไฟล์นี้ save เข้า account ได้ตรง ๆ ไม่ต้องแก้อะไรเลย · ดู engine/DEPLOYMENT.md §Company Config
+  URL ใน attribute ต้องผ่าน ?xml เสมอ (ค่า config มี & ดิบ — ไม่ escape = BFO parse พัง)
 
-  จุดต่อลูกค้า (ผู้ขาย): ${company.*} จาก script parameters ของ render Suitelet
   ฝั่งผู้ซื้อ: เลขผู้เสียภาษี/สาขาใช้ field มาตรฐานกลาง custbody_buyer_taxid /
   custbody_buyer_branch — account ที่ใช้ field id อื่น แก้ mapping สองจุดนี้
 -->
@@ -77,14 +76,14 @@
 
 <pdf>
 <head>
-<link name="THSarabunNew" type="font" subtype="truetype" src="{{PLD_FONT_REGULAR_URL}}" src-bold="{{PLD_FONT_BOLD_URL}}" bytes="2" />
+<link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />
 <macrolist>
   <macro id="nlheader">
     <table style="width: 100%;">
       <tr>
         <td style="width: 58%;">
           <p class="cell">
-          <#if (company.logo!"") != ""><img src="${company.logo}" style="width: 64pt;" /><br /></#if>
+          <#if (company.logo!"") != ""><img src="${(company.logo)?xml}" style="width: 64pt;" /><br /></#if>
           <span class="company-name">${company.name!""}</span><br />
           <span>${company.address!""}</span><br />
           <span>โทร. ${company.phone!""}<#if (company.email!"") != ""> อีเมล ${company.email}</#if></span><br />

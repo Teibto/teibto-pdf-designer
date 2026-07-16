@@ -23,8 +23,9 @@ define([
   'N/runtime',
   'N/log',
   'N/xml',
-  'N/format'
-], function (render, record, search, file, runtime, log, xml, format) {
+  'N/format',
+  './pld_lib_company_config'
+], function (render, record, search, file, runtime, log, xml, format, companyConfig) {
 
   // ─── Custom Record Config ───
   const TPL_RECORD_TYPE   = 'customrecord_pld_template';
@@ -379,27 +380,12 @@ define([
   }
 
   /**
-   * Load company info from script parameters or company record.
+   * Load company info from the PLD config custom record (#9).
+   * Single source of ${company.*}: shared loader pld_lib_company_config.js —
+   * per-account setup is one config record, no template edits, no script params.
    */
   function loadCompanyInfo() {
-    var script = runtime.getCurrentScript();
-
-    return {
-      name:    getScriptParam(script, 'custscript_pld_company_name') || '',
-      address: getScriptParam(script, 'custscript_pld_company_addr') || '',
-      phone:   getScriptParam(script, 'custscript_pld_company_phone') || '',
-      taxId:   getScriptParam(script, 'custscript_pld_company_taxid') || '',
-      email:   getScriptParam(script, 'custscript_pld_company_email') || '',
-      logo:    getScriptParam(script, 'custscript_pld_company_logo') || ''
-    };
-  }
-
-  function getScriptParam(script, paramId) {
-    try {
-      return script.getParameter({ name: paramId }) || '';
-    } catch (e) {
-      return '';
-    }
+    return companyConfig.load();
   }
 
   function sendJson(context, data) {

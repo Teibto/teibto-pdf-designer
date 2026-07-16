@@ -135,27 +135,49 @@ SuiteScripts/
 | Status | Released |
 | Audience | Administrator, or roles ที่ต้องการ |
 
-**Script Parameters (Optional):**
+**Script Parameters (เฉพาะ Designer — generator ฝั่ง client ใช้ตอน export):**
 
 | ID | Label | Type |
 |----|-------|------|
-| `custscript_pld_company_name` | Company Name | Free-Form Text |
-| `custscript_pld_company_addr` | Company Address | Free-Form Text |
-| `custscript_pld_company_phone` | Company Phone | Free-Form Text |
-| `custscript_pld_company_taxid` | Tax ID | Free-Form Text |
-| `custscript_pld_company_email` | Company Email | Free-Form Text |
-| `custscript_pld_company_logo` | Logo URL | Free-Form Text |
 | `custscript_pld_font_regular` | Thai Font Regular URL | Free-Form Text |
 | `custscript_pld_font_bold` | Thai Font Bold URL | Free-Form Text |
+
+---
+
+## Company Config (customrecord_pld_config) — จุดตั้งค่า per-account จุดเดียว
+
+ค่าที่ template กลางอ้างผ่าน `${company.*}` ทั้งหมดมาจาก custom record **PDF Layout Config**
+(SDF deploy ให้อัตโนมัติ) — สร้าง 1 record ต่อ account แล้ว template ทุกใบใช้ได้ทันที
+โดยไม่ต้องแก้ template XML (#9) · Suitelet ใช้ record แรกที่ active; ถ้าไม่มี render ยังทำงาน
+(binding null-safe) แต่ค่า company ว่างทั้งหมด และมี audit log บอกไว้
+
+| Field | alias ใน template | หมายเหตุ |
+|-------|-------------------|----------|
+| Company Name (TH) | `${company.name}` | บังคับ |
+| Company Name (EN) | `${company.nameEn}` | |
+| Address (TH) | `${company.address}` | |
+| Address (EN) | `${company.addressEn}` | |
+| Phone | `${company.phone}` | |
+| Email | `${company.email}` | |
+| Tax ID | `${company.taxId}` | เลขประจำตัวผู้เสียภาษี 13 หลัก |
+| Branch | `${company.branch}` | เช่น สำนักงานใหญ่ (Head Office) |
+| Logo URL | `${company.logo}` | URL เต็มจาก File Cabinet (Available Without Login) |
+| Theme Color | `${company.themeColor}` | hex เช่น `#1a3c6e` |
+| Thai Font Regular URL | `${company.fontRegular}` | ดูขั้นตอนฟอนต์ด้านล่าง |
+| Thai Font Bold URL | `${company.fontBold}` | |
+| Feature Flags | `${company.flags}` | comma-separated — template ใช้ `company.flags?contains("x")` |
+
+> URL ทุกตัว (font/logo) ใน template ต้องผ่าน `?xml` เสมอ: `${(company.fontRegular!'')?xml}` —
+> ค่า config มี `&` ดิบ ไม่ escape = BFO parse พังหลัง FreeMarker แทนค่า
 
 **ฟอนต์ไทย (บังคับสำหรับเอกสารภาษาไทย — ไม่ embed = ตัวอักษรไทยหายเงียบ):**
 1. ไฟล์ font อยู่ที่ `engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/fonts/` (SDF deploy ให้อัตโนมัติ)
 2. เปิดไฟล์ทั้งสองใน File Cabinet → ติ๊ก **Available Without Login** → Save
 3. copy **URL เต็ม** จากหน้าไฟล์ (ต้องมี `h=` token และลงท้าย `_xt=.ttf` — token ออกใหม่ทุกครั้งที่ save ไฟล์)
-   มาใส่ script parameters ข้างบน
-4. Designer จะฝัง `<link name="THSarabunNew" type="font" subtype="truetype" src=... src-bold=... bytes="2">` ให้อัตโนมัติ
+   มาใส่ Thai Font Regular/Bold URL บน config record (และ script params ของ Designer ข้างบน)
+4. Template pack อ้าง `${company.fontRegular}` อยู่แล้ว — ไม่ต้องแก้ template
 
-> ⚠️ พิสูจน์แล้วบน SB2 (2026-07-17): font-family ที่ไม่ embed — รวมถึง `NotoSansThai` — ทำให้ **glyph ไทยถูก drop เงียบ ๆ** ใน PDF (ไม่ error) — เอกสารไทยทุกใบต้องตั้ง font params เสมอ
+> ⚠️ พิสูจน์แล้วบน SB2 (2026-07-17): font-family ที่ไม่ embed — รวมถึง `NotoSansThai` — ทำให้ **glyph ไทยถูก drop เงียบ ๆ** ใน PDF (ไม่ error) — เอกสารไทยทุกใบต้องตั้ง font URL บน config เสมอ
 
 ---
 
