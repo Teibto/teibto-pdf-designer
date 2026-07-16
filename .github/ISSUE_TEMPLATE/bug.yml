@@ -1,0 +1,38 @@
+name: 🐛 Bug report
+description: รายงานบั๊กของ engine / designer / template
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: ส่วนที่พบปัญหา
+      options:
+        - engine (SuiteScript / N/render)
+        - designer (SPA)
+        - templates (BFO XML)
+        - docs / อื่น ๆ
+    validations:
+      required: true
+  - type: textarea
+    id: symptom
+    attributes:
+      label: อาการ
+      description: เกิดอะไรขึ้น เทียบกับสิ่งที่ควรเกิด
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: ขั้นตอน reproduce + ตัวอย่าง
+      description: |
+        ขั้นตอนทีละข้อ + record/template ตัวอย่าง (ใช้ record id — ห้ามแปะข้อมูลจริงของลูกค้า
+        เช่น ตัวเลขเงิน/ชื่อคู่ค้า ตาม data classification: Internal)
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: หลักฐาน
+      description: error message, screenshot (crop/เบลอตัวเลขเงิน), execution log
+    validations:
+      required: true

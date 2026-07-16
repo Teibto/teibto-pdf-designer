@@ -1,0 +1,30 @@
+name: ✨ Feature / Task
+description: งานใหม่ — feature, refactor, template ใหม่
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What — จะทำอะไร
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why — ทำไมถึงต้องทำ / มูลค่าต่อ product
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: จุดที่เกี่ยวข้อง
+      description: ไฟล์/โมดูล/template ที่จะแตะ (เช่น engine/pld_sl_render_pdf.js, designer/src/services/bfo-export.service.ts)
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: เกณฑ์ตรวจรับ (Acceptance criteria)
+      description: ข้อ ๆ ที่ verify ได้จริง — งานถือว่าเสร็จเมื่ออะไรเป็นจริงบ้าง
+    validations:
+      required: true

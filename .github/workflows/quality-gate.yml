@@ -1,0 +1,70 @@
+# quality-gate.yml — Variant B: Generic Node / Python / React (Playbook §3.4)
+# canonical source: teibto-dev-standards/templates/quality-gate/ — copy ไปวางที่ .github/workflows/quality-gate.yml
+# ตอน scaffold: เปิดใช้ block ของ stack ที่ repo ใช้จริง (Node หรือ Python) แล้วลบ block ที่ไม่ใช้ทิ้ง
+# ชื่อ job ต้องเป็น `quality-gate` เสมอ เพื่อให้ branch protection อ้าง required check ชื่อเดียวทุก repo
+# @author Wichit Wongta @since 2026-07-10
+
+name: quality-gate
+
+on:
+  pull_request:
+  push:
+    tags: ["v*"] # รันก่อน release tag ด้วย (Playbook §6)
+
+env:
+  GITLEAKS_VERSION: "8.29.0" # pin โดย teibto-dev-standards — อัปเดตที่ template กลางเท่านั้น
+
+jobs:
+  quality-gate:
+    name: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks (pinned)
+        run: |
+          curl -sfL -o /tmp/gitleaks.tgz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/
+          gitleaks version
+
+      # 1) Secret scan — ห้าม opt-out ทุก governance profile (Playbook §2.4)
+      - name: Secret scan (working tree + staged)
+        run: bash scripts/secret-scan.sh
+
+      - name: Secret scan (full git history)
+        run: gitleaks git . --no-banner --redact
+
+      # 2) shellcheck
+      - name: shellcheck
+        run: |
+          files=$(find . -name "*.sh" -not -path "./node_modules/*" -not -path "./.venv/*")
+          if [ -n "$files" ]; then shellcheck $files; else echo "no shell scripts"; fi
+
+      # 3) Markdown lint เฉพาะ docs/
+      - name: Markdown lint (docs/)
+        run: npx --yes markdownlint-cli2 "docs/**/*.md" "README.md" "CLAUDE.md" || true
+        # เริ่มแบบ non-blocking (|| true) — เอาออกเมื่อทีมเก็บ lint เดิมหมดแล้ว
+
+      # ==================== STACK: Node / React ====================
+      # เปิดใช้เมื่อ repo เป็น Node/React แล้วลบ block Python ทิ้ง
+      - name: Node — lint + test
+        if: hashFiles('package.json') != ''
+        run: |
+          npm ci
+          npm run lint --if-present
+          npm test --if-present
+
+      # ==================== STACK: Python ====================
+      # เปิดใช้เมื่อ repo เป็น Python แล้วลบ block Node ทิ้ง
+      - name: Python — lint + test
+        if: hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != ''
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install ruff pytest
+          ruff check .
+          if [ -d tests ]; then pytest -q; else echo "no tests/ yet"; fi

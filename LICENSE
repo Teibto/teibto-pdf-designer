@@ -1,0 +1,30 @@
+Copyright (c) 2026 Teibto Co., Ltd. All rights reserved.
+
+PROPRIETARY AND CONFIDENTIAL — INTERNAL USE ONLY
+
+This repository contains proprietary software developed by Teibto Co., Ltd.
+as an internal product (teibto-pdf-designer: NetSuite PDF render engine,
+standard Thai template pack, and visual template designer) used across
+Teibto's NetSuite implementation engagements.
+
+No license, express or implied, is granted to any party outside
+Teibto Co., Ltd. You may not copy, modify, distribute, sublicense, publish,
+or use any part of this repository except:
+
+  1. as an authorized member of the Teibto team, for the sole purpose of
+     developing, deploying, and maintaining this product within Teibto's
+     implementation engagements; or
+  2. as expressly permitted in writing by Teibto Co., Ltd.
+
+Deployment of build artifacts into a customer's NetSuite account does not
+transfer ownership of, or grant any license to, the source code in this
+repository unless the customer contract states otherwise.
+
+Third-party components referenced or vendored in this repository
+(Lit, Immer, jsPDF, jsPDF-AutoTable, bwip-js, Vite, Sarabun / THSarabunNew
+fonts) remain governed by their respective upstream licenses.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL TEIBTO CO., LTD. BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE OUTSIDE THE
+AUTHORIZED SCOPE ABOVE.
