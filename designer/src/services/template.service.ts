@@ -1,0 +1,235 @@
+/**
+ * Template Persistence Service — Production Grade
+ * Save/load templates using IndexedDB (via idb-keyval).
+ * Includes schema validation and version migration on load/import.
+ *
+ * @author Wichit Wongta
+ */
+import { get, set, del, keys } from 'idb-keyval';
+import { nanoid } from 'nanoid';
+import type { DocumentTemplate } from '../models/template';
+import type { AppStore } from '../state/store';
+import { createDefaultPage } from '../models/page';
+import { createDefaultPagination } from '../models/template';
+import { validateTemplate } from './validation.service';
+import { migrateTemplate, needsMigration, CURRENT_VERSION } from './migration.service';
+import { clearPaginationCache } from './pagination.service';
+import { extractJsonKeys } from '../state/actions';
+
+const TEMPLATE_PREFIX = 'pld-template-';
+
+// ═══════════════════════════════════════
+// LIST
+// ═══════════════════════════════════════
+
+/** List all saved templates */
+export async function listTemplates(): Promise<DocumentTemplate[]> {
+  const allKeys = await keys();
+  const templateKeys = allKeys.filter(
+    (k) => typeof k === 'string' && k.startsWith(TEMPLATE_PREFIX),
+  );
+
+  const templates: DocumentTemplate[] = [];
+  for (const key of templateKeys) {
+    try {
+      const t = await get<DocumentTemplate>(key as string);
+      if (t) templates.push(t);
+    } catch (err) {
+      console.warn(`Failed to load template ${key}:`, err);
+    }
+  }
+
+  return templates.sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
+
+// ═══════════════════════════════════════
+// SAVE
+// ═══════════════════════════════════════
+
+/** Save current state as a template */
+export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
+  const state = store.state;
+  const now = new Date().toISOString();
+
+  const template: DocumentTemplate = {
+    id: state.template.id || nanoid(10),
+    name: state.template.name || 'Untitled Template',
+    version: CURRENT_VERSION,
+    createdAt: now,
+    updatedAt: now,
+    page: structuredClone(state.page),
+    pagination: structuredClone(state.pagination),
+    elements: structuredClone(state.elements),
+    jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
+  };
+
+  await set(`${TEMPLATE_PREFIX}${template.id}`, template);
+
+  store.dispatch((d) => {
+    d.template.id = template.id;
+    d.template.isDirty = false;
+  });
+
+  return template;
+}
+
+// ═══════════════════════════════════════
+// LOAD (with migration + validation)
+// ═══════════════════════════════════════
+
+/** Load a template into the store with migration and validation */
+export async function loadTemplate(
+  store: AppStore,
+  templateId: string,
+): Promise<{ warnings: string[] }> {
+  const raw = await get<Record<string, unknown>>(`${TEMPLATE_PREFIX}${templateId}`);
+  if (!raw) throw new Error(`Template not found: ${templateId}`);
+
+  const warnings: string[] = [];
+
+  // Step 1: Migrate if needed
+  let data = raw;
+  if (needsMigration(raw)) {
+    const migResult = migrateTemplate(raw);
+    data = migResult.template;
+    if (migResult.errors.length > 0) {
+      throw new Error(`Migration failed: ${migResult.errors.join('; ')}`);
+    }
+    if (migResult.migrated) {
+      warnings.push(`Template migrated from v${migResult.fromVersion} to v${CURRENT_VERSION}`);
+      // Save migrated version back to IndexedDB
+      await set(`${TEMPLATE_PREFIX}${templateId}`, data);
+    }
+  }
+
+  // Step 2: Validate
+  const validation = validateTemplate(data);
+  if (!validation.valid) {
+    const errorMessages = validation.errors.map((e) => `${e.path}: ${e.message}`);
+    throw new Error(`Template validation failed:\n${errorMessages.join('\n')}`);
+  }
+  if (validation.warnings.length > 0) {
+    warnings.push(...validation.warnings.map((w) => `${w.path}: ${w.message}`));
+  }
+
+  // Step 3: Apply to store
+  clearPaginationCache();
+  const template = data as unknown as DocumentTemplate;
+  store.dispatch((d) => {
+    d.elements = template.elements;
+    d.page = template.page;
+    d.pagination = { ...createDefaultPagination(), ...template.pagination };
+    d.jsonData = template.jsonData || null;
+    d.jsonKeys = template.jsonData ? extractJsonKeys(template.jsonData) : [];
+    d.template.id = template.id;
+    d.template.name = template.name;
+    d.template.isDirty = false;
+    d.selectedId = null;
+    d.multiSelect = [];
+    d.currentPage = 1;
+  });
+
+  return { warnings };
+}
+
+// ═══════════════════════════════════════
+// DELETE
+// ═══════════════════════════════════════
+
+/** Delete a saved template */
+export async function deleteTemplate(templateId: string): Promise<void> {
+  await del(`${TEMPLATE_PREFIX}${templateId}`);
+}
+
+// ═══════════════════════════════════════
+// EXPORT JSON
+// ═══════════════════════════════════════
+
+/** Export template as JSON string */
+export function exportTemplateJson(store: AppStore): string {
+  const state = store.state;
+
+  const template: DocumentTemplate = {
+    id: state.template.id || nanoid(10),
+    name: state.template.name,
+    version: CURRENT_VERSION,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    page: structuredClone(state.page),
+    pagination: structuredClone(state.pagination),
+    elements: structuredClone(state.elements),
+    jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
+  };
+
+  return JSON.stringify(template, null, 2);
+}
+
+// ═══════════════════════════════════════
+// IMPORT JSON (with validation + migration)
+// ═══════════════════════════════════════
+
+/**
+ * Import template from JSON string with full validation and migration.
+ * Throws on invalid JSON or failed validation.
+ */
+export function importTemplateJson(
+  store: AppStore,
+  json: string,
+): { warnings: string[] } {
+  // Step 0: Parse JSON safely
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(json);
+  } catch (err) {
+    throw new Error(`Invalid JSON: ${(err as Error).message}`);
+  }
+
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Template must be a JSON object');
+  }
+
+  const warnings: string[] = [];
+
+  // Step 1: Migrate if needed
+  if (needsMigration(raw)) {
+    const migResult = migrateTemplate(raw);
+    raw = migResult.template;
+    if (migResult.errors.length > 0) {
+      throw new Error(`Migration failed: ${migResult.errors.join('; ')}`);
+    }
+    if (migResult.migrated) {
+      warnings.push(...migResult.migrationsApplied);
+    }
+  }
+
+  // Step 2: Validate
+  const validation = validateTemplate(raw);
+  if (!validation.valid) {
+    const errorMessages = validation.errors.map((e) => `${e.path}: ${e.message}`);
+    throw new Error(`Template validation failed:\n${errorMessages.join('\n')}`);
+  }
+  if (validation.warnings.length > 0) {
+    warnings.push(...validation.warnings.map((w) => `${w.path}: ${w.message}`));
+  }
+
+  // Step 3: Apply
+  clearPaginationCache();
+  const template = raw as unknown as DocumentTemplate;
+  store.dispatch((d) => {
+    d.elements = template.elements || [];
+    d.page = template.page || createDefaultPage();
+    d.pagination = { ...createDefaultPagination(), ...(template.pagination || {}) };
+    d.jsonData = template.jsonData || null;
+    d.jsonKeys = template.jsonData ? extractJsonKeys(template.jsonData) : [];
+    d.template.id = template.id;
+    d.template.name = template.name;
+    d.template.isDirty = false;
+    d.selectedId = null;
+    d.multiSelect = [];
+    d.currentPage = 1;
+  });
+
+  return { warnings };
+}

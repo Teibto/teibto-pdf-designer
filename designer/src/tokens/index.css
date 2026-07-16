@@ -1,0 +1,8 @@
+/* ═══════════════════════════════════════
+   DESIGN TOKEN INDEX
+   Import all tokens in one place
+   ═══════════════════════════════════════ */
+
+@import './colors.css';
+@import './typography.css';
+@import './spacing.css';

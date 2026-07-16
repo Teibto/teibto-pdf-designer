@@ -1,0 +1,33 @@
+/* ═══════════════════════════════════════
+   TAILWIND CSS ENTRY
+   ═══════════════════════════════════════ */
+
+@import "tailwindcss";
+@import './base.css';
+
+/* ─── Tailwind Theme Extensions ─── */
+@theme {
+  /* Surface colors */
+  --color-surface-deep:    #0a0b10;
+  --color-surface-panel:   #12131a;
+  --color-surface-card:    #1a1b25;
+  --color-surface-hover:   #222430;
+  --color-surface-element: #282a38;
+
+  /* Accent colors */
+  --color-accent:       #4f6ef7;
+  --color-accent-green: #22d3a7;
+  --color-accent-orange:#f59e42;
+  --color-accent-pink:  #e74c8b;
+
+  /* Text colors */
+  --color-txt:       #e8e9f0;
+  --color-txt-dim:   #8a8ca0;
+  --color-txt-muted: #5c5e72;
+
+  /* Font families */
+  --font-sans:  'DM Sans', system-ui, sans-serif;
+  --font-mono:  'JetBrains Mono', monospace;
+  --font-serif: 'Playfair Display', serif;
+  --font-thai:  'Sarabun', sans-serif;
+}

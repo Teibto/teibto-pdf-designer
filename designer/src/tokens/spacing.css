@@ -1,0 +1,46 @@
+/* ═══════════════════════════════════════
+   SPACING & SHADOW TOKENS
+   ═══════════════════════════════════════ */
+
+:root {
+  /* ─── Spacing Scale ─── */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  6px;
+  --space-3:  8px;
+  --space-4:  10px;
+  --space-5:  12px;
+  --space-6:  14px;
+  --space-7:  16px;
+  --space-8:  20px;
+  --space-9:  24px;
+  --space-10: 30px;
+  --space-12: 40px;
+
+  /* ─── Border Radius ─── */
+  --radius-xs: 2px;
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* ─── Shadows ─── */
+  --shadow-sm:  0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md:  0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg:  0 20px 60px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 4px 12px rgba(79, 110, 247, 0.15);
+
+  /* ─── Transitions ─── */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+
+  /* ─── Z-Index Scale ─── */
+  --z-base:     1;
+  --z-dropdown: 10;
+  --z-sticky:   20;
+  --z-overlay:  100;
+  --z-modal:    500;
+  --z-toast:    1000;
+}

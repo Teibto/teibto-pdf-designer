@@ -1,0 +1,105 @@
+/**
+ * Template Data Model
+ * Represents a saveable/loadable document template.
+ *
+ * @author Wichit Wongta
+ */
+import type { CanvasElement } from './element';
+import type { PageConfig } from './page';
+
+export interface PaginationConfig {
+  mode: 'rows' | 'height';
+  rowsPerPage: number;
+  baseRowHeight: number;
+  lineHeightPx: number;
+  showContinuationHeader: boolean;
+
+  // ─── Advanced Layout Controls ───
+
+  /** Minimum rows allowed on the last page (orphan) or first continuation page (widow).
+   *  If a page break would leave fewer rows, it pulls/pushes rows to maintain this minimum.
+   *  Set 0 to disable. Default: 2 */
+  orphanWidowMinRows: number;
+
+  /** Summary element page break behavior.
+   *  - 'auto': summary shares last page if it fits, otherwise breaks to new page
+   *  - 'always': summary always starts on a fresh page (formal documents)
+   *  - 'samePage': never break, always on same page as last table rows
+   *  Default: 'auto' */
+  summaryBreak: 'auto' | 'always' | 'samePage';
+
+  /** When true, footer & summary elements are repositioned relative to where
+   *  the table content actually ends on each page, eliminating large gaps.
+   *  Default: true */
+  dynamicFooter: boolean;
+
+  /** Spacing in pt between table end and the first summary/footer element.
+   *  Only effective when dynamicFooter is true. Default: 16 */
+  dynamicFooterGap: number;
+
+  // ─── Page Break Controls (v2.2) ───
+
+  /** Force page break before these row indices (0-based).
+   *  E.g., [5, 15] forces a break before row 5 and row 15.
+   *  Empty array = disabled. */
+  forceBreakBeforeRows: number[];
+
+  /** Group rows by this data field — rows sharing the same value won't be
+   *  split across pages (keep-together). The engine treats each group as
+   *  an atomic block during bin-packing.
+   *  Empty string = disabled. */
+  keepTogetherField: string;
+
+  /** Header element visibility mode.
+   *  - 'all': header role visible on every page (default)
+   *  - 'firstOnly': header role visible only on first page
+   *  - 'firstLast': header role visible on first + last page only */
+  headerMode: 'all' | 'firstOnly' | 'firstLast';
+
+  /** Data field name for full-width column-span rows.
+   *  When this field is truthy in a data row, that row renders as a single
+   *  merged cell spanning all visible columns (section headers, subtotals).
+   *  Empty string = disabled. */
+  columnSpanField: string;
+}
+
+export interface DocumentTemplate {
+  /** Unique template ID */
+  id: string;
+  /** Human-readable name */
+  name: string;
+  /** Template version for migration */
+  version: string;
+  /** Creation timestamp */
+  createdAt: string;
+  /** Last modified timestamp */
+  updatedAt: string;
+
+  /** Page configuration */
+  page: PageConfig;
+  /** Pagination settings */
+  pagination: PaginationConfig;
+  /** Canvas elements */
+  elements: CanvasElement[];
+  /** Bound JSON data (optional) */
+  jsonData?: Record<string, unknown> | null;
+}
+
+/** Default pagination config */
+export function createDefaultPagination(): PaginationConfig {
+  return {
+    mode: 'rows',
+    rowsPerPage: 10,
+    baseRowHeight: 24,
+    lineHeightPx: 18,
+    showContinuationHeader: true,
+    orphanWidowMinRows: 2,
+    summaryBreak: 'auto',
+    dynamicFooter: true,
+    dynamicFooterGap: 16,
+    forceBreakBeforeRows: [],
+    keepTogetherField: '',
+    headerMode: 'all',
+    columnSpanField: '',
+  };
+}

@@ -1,0 +1,49 @@
+/* ═══════════════════════════════════════
+   COLOR TOKENS
+   PDF Layout Designer Design System
+   ═══════════════════════════════════════ */
+
+:root {
+  /* ─── Surface ─── */
+  --color-bg-deep:     #0a0b10;
+  --color-bg-panel:    #12131a;
+  --color-bg-card:     #1a1b25;
+  --color-bg-hover:    #222430;
+  --color-bg-element:  #282a38;
+
+  /* ─── Border ─── */
+  --color-border:        #2a2c3a;
+  --color-border-active: #4f6ef7;
+
+  /* ─── Brand / Accent ─── */
+  --color-accent:      #4f6ef7;
+  --color-accent-glow: rgba(79, 110, 247, 0.25);
+  --color-accent2:     #22d3a7;
+  --color-accent3:     #f59e42;
+  --color-accent4:     #e74c8b;
+
+  /* ─── Text ─── */
+  --color-text:        #e8e9f0;
+  --color-text-dim:    #8a8ca0;
+  --color-text-muted:  #5c5e72;
+
+  /* ─── Semantic ─── */
+  --color-danger:      #ef4444;
+  --color-success:     #22d3a7;
+  --color-warning:     #f59e42;
+  --color-info:        #4f6ef7;
+
+  /* ─── JSON Syntax ─── */
+  --color-json-key:    #4f6ef7;
+  --color-json-string: #22d3a7;
+  --color-json-number: #f59e42;
+  --color-json-bool:   #e74c8b;
+
+  /* ─── Element Roles ─── */
+  --color-role-header:    #4f6ef7;
+  --color-role-content:   #8a8ca0;
+  --color-role-table:     #f59e42;
+  --color-role-summary:   #22d3a7;
+  --color-role-footer:    #e74c8b;
+  --color-role-watermark: #6b7280;
+}

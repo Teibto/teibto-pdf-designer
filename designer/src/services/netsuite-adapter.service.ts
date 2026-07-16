@@ -1,0 +1,276 @@
+/**
+ * NetSuite API Adapter
+ * Bridges the PDF Layout Designer with NetSuite Suitelet backend.
+ * Detects if running inside NetSuite and provides:
+ * - Record data loading
+ * - Template CRUD (save to Custom Record)
+ * - BFO XML save (to Custom Record, NOT Advanced PDF Templates)
+ * - PDF render via Render Suitelet
+ *
+ * @author Wichit Wongta
+ */
+
+/** NetSuite context injected by the Suitelet */
+export interface NsContext {
+  userId: number;
+  userName: string;
+  userEmail: string;
+  role: number;
+  subsidiary: number;
+  accountId: string;
+  scriptId: string;
+  deploymentId: string;
+  environment: string;
+  recordType: string | null;
+  recordId: string | null;
+}
+
+/** Saved template metadata from NetSuite custom record */
+export interface NsTemplate {
+  id: string;
+  name: string;
+  rectype: string;
+  isDefault: boolean;
+  created: string;
+  modified: string;
+}
+
+// ═══════════════════════════════════════
+// DETECTION
+// ═══════════════════════════════════════
+
+export function isNetSuiteEnv(): boolean {
+  return !!(window as any).__NS_CONTEXT__;
+}
+
+export function getNsContext(): NsContext | null {
+  return (window as any).__NS_CONTEXT__ || null;
+}
+
+function getDesignerUrl(): string {
+  return (window as any).__NS_SUITELET_URL__ || '';
+}
+
+function getRendererUrl(): string {
+  return (window as any).__NS_RENDER_URL__ || '';
+}
+
+// ═══════════════════════════════════════
+// API HELPER (with retry + timeout)
+// ═══════════════════════════════════════
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+/** Retryable HTTP status codes */
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+async function suiteletFetch(
+  baseUrl: string,
+  action: string,
+  params: Record<string, string> = {},
+  method: 'GET' | 'POST' = 'GET',
+  body?: unknown,
+): Promise<unknown> {
+  if (!baseUrl) throw new Error('Suitelet URL not configured');
+
+  const url = new URL(baseUrl, window.location.origin);
+  url.searchParams.set('action', action);
+  for (const [key, val] of Object.entries(params)) {
+    url.searchParams.set(key, val);
+  }
+
+  const options: RequestInit = { method };
+  if (method === 'POST' && body) {
+    options.headers = { 'Content-Type': 'application/json' };
+    options.body = JSON.stringify(body);
+  }
+
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+      const response = await fetch(url.toString(), {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      // Non-retryable error
+      if (!RETRYABLE_STATUS.has(response.status)) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`NetSuite API error ${response.status}: ${errorText || response.statusText}`);
+      }
+
+      // Retryable error — will retry
+      lastError = new Error(`NetSuite API error ${response.status}: ${response.statusText}`);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        lastError = new Error(`NetSuite API timeout after ${DEFAULT_TIMEOUT_MS}ms`);
+      } else if (err instanceof TypeError) {
+        // Network error (offline, DNS failure, etc.)
+        lastError = new Error(`Network error: ${err.message}`);
+      } else {
+        throw err; // Non-retryable error (e.g., our own thrown error)
+      }
+    }
+
+    // Exponential backoff before retry
+    if (attempt < MAX_RETRIES) {
+      const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
+      console.warn(`[NS API] Retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms: ${lastError?.message}`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  throw lastError || new Error('NetSuite API failed after retries');
+}
+
+// ═══════════════════════════════════════
+// RECORD DATA
+// ═══════════════════════════════════════
+
+export async function loadRecordData(
+  recordType: string,
+  recordId: string,
+): Promise<Record<string, unknown>> {
+  const result = await suiteletFetch(getDesignerUrl(), 'load-record', {
+    rectype: recordType,
+    recid: recordId,
+  });
+  if ((result as any).error) throw new Error((result as any).error);
+  return result as Record<string, unknown>;
+}
+
+export async function autoLoadRecordIfAvailable(): Promise<Record<string, unknown> | null> {
+  const ctx = getNsContext();
+  if (!ctx?.recordType || !ctx?.recordId) return null;
+  return loadRecordData(ctx.recordType, ctx.recordId);
+}
+
+// ═══════════════════════════════════════
+// TEMPLATE CRUD (Custom Record)
+// ═══════════════════════════════════════
+
+export async function listNsTemplates(
+  recordType?: string,
+): Promise<NsTemplate[]> {
+  const params: Record<string, string> = {};
+  if (recordType) params.rectype = recordType;
+
+  const result = await suiteletFetch(getRendererUrl() || getDesignerUrl(), 'list', params);
+  if ((result as any).error) throw new Error((result as any).error);
+  return result as NsTemplate[];
+}
+
+/**
+ * Save template to NetSuite Custom Record.
+ * Saves both designer JSON state AND BFO XML.
+ */
+export async function saveNsTemplate(opts: {
+  id?: string;
+  name: string;
+  data: string;    // Designer JSON state
+  xml: string;     // BFO XML output
+  rectype?: string;
+  isDefault?: boolean;
+}): Promise<{ id: string; success: boolean }> {
+  const baseUrl = getRendererUrl() || getDesignerUrl();
+  const result = await suiteletFetch(baseUrl, 'save', {}, 'POST', {
+    id: opts.id || null,
+    name: opts.name,
+    data: opts.data,
+    xml: opts.xml,
+    rectype: opts.rectype || '',
+    isDefault: opts.isDefault || false,
+  });
+  if ((result as any).error) throw new Error((result as any).error);
+  return result as { id: string; success: boolean };
+}
+
+export async function getNsTemplate(
+  tplId: string,
+): Promise<{ id: string; name: string; data: string; xml: string; rectype: string }> {
+  const baseUrl = getRendererUrl() || getDesignerUrl();
+  const result = await suiteletFetch(baseUrl, 'get', { tplid: tplId });
+  if ((result as any).error) throw new Error((result as any).error);
+  return result as any;
+}
+
+// ═══════════════════════════════════════
+// PDF RENDER (via Render Suitelet)
+// ═══════════════════════════════════════
+
+/**
+ * Open rendered PDF in a new tab.
+ * Uses the Render Suitelet which does:
+ * Template (Custom Record) + Record Data → N/render → PDF
+ */
+export function openRenderedPdf(
+  recordType: string,
+  recordId: string,
+  templateId?: string,
+  download = false,
+): void {
+  const baseUrl = getRendererUrl();
+  if (!baseUrl) {
+    console.error('Render Suitelet URL not configured');
+    return;
+  }
+
+  const url = new URL(baseUrl, window.location.origin);
+  url.searchParams.set('action', 'render');
+  url.searchParams.set('rectype', recordType);
+  url.searchParams.set('recid', recordId);
+  if (templateId) url.searchParams.set('tplid', templateId);
+  if (download) url.searchParams.set('download', 'T');
+
+  window.open(url.toString(), download ? '_self' : '_blank');
+}
+
+/**
+ * Preview PDF with sample data (no real record).
+ */
+export function openPdfPreview(templateId: string): void {
+  const baseUrl = getRendererUrl();
+  if (!baseUrl) return;
+
+  const url = new URL(baseUrl, window.location.origin);
+  url.searchParams.set('action', 'preview');
+  url.searchParams.set('tplid', templateId);
+
+  window.open(url.toString(), '_blank');
+}
+
+// ═══════════════════════════════════════
+// URL BUILDER
+// ═══════════════════════════════════════
+
+export function buildDesignerUrl(
+  recordType: string,
+  recordId: string,
+): string {
+  const ctx = getNsContext();
+  const sid = ctx?.scriptId || 'customscript_pld_designer';
+  const did = ctx?.deploymentId || 'customdeploy_pld_designer';
+  return `/app/site/hosting/scriptlet.nl?script=${sid}&deploy=${did}&rectype=${recordType}&recid=${recordId}`;
+}
+
+export function buildRenderUrl(
+  recordType: string,
+  recordId: string,
+  templateId?: string,
+): string {
+  let url = `/app/site/hosting/scriptlet.nl?script=customscript_pld_render&deploy=customdeploy_pld_render`;
+  url += `&action=render&rectype=${recordType}&recid=${recordId}`;
+  if (templateId) url += `&tplid=${templateId}`;
+  return url;
+}
