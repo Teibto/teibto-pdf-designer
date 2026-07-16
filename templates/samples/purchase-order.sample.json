@@ -1,0 +1,47 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ยอดเงินคำนวณสอดคล้องกัน: subtotal 84,300.00 + VAT 7% 5,901.00 = 90,201.00 (ตัวอักษร: เก้าหมื่นสองร้อยเอ็ดบาทถ้วน — เคสทดสอบ 'เอ็ด') · entity = ผู้ขาย, shipaddress = สถานที่ส่งมอบ · @author Wichit Wongta @since 2026-07-17",
+  "record": {
+    "tranid": "PO-2026-0233",
+    "trandate": "17/07/2026",
+    "duedate": "31/07/2026",
+    "terms": "Net 45",
+    "employee": "อนุชา พงษ์พานิช",
+    "entity": "บริษัท วัสดุภัณฑ์ไทยอุตสาหกรรม จำกัด",
+    "billaddress": "202 หมู่ 7 ถนนพระราม 2 แขวงแสมดำ เขตบางขุนเทียน กรุงเทพมหานคร 10150",
+    "shipaddress": "คลังสินค้า 2 — 99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "ส่งมอบในเวลาทำการ 08:30-16:30 น. แจ้งล่วงหน้า 1 วันก่อนเข้าส่งสินค้า",
+    "item": [
+      { "item": "RAW-PLY-15", "description": "ไม้อัดเกรด A หนา 15 มม. ขนาด 120x240 ซม.", "quantity": 12, "units": "แผ่น", "rate": 1200.00, "amount": 14400.00 },
+      { "item": "HW-SCR-M6", "description": "สกรูหัวจมสแตนเลส M6x40 (กล่อง 100 ตัว)", "quantity": 40, "units": "กล่อง", "rate": 350.00, "amount": 14000.00 },
+      { "item": "MCH-DRL-SET", "description": "ชุดสว่านไขควงไร้สาย 18V พร้อมแบตเตอรี่สำรอง", "quantity": 3, "units": "ชุด", "rate": 8500.00, "amount": 25500.00 },
+      { "item": "RAW-LAM-WN", "description": "แผ่นลามิเนตลายไม้วอลนัท 120x240 ซม.", "quantity": 15, "units": "แผ่น", "rate": 1000.00, "amount": 15000.00 },
+      { "item": "PKG-CTN-L", "description": "กล่องกระดาษลูกฟูก 5 ชั้น ขนาดใหญ่ (มัด 10 ใบ)", "quantity": 22, "units": "มัด", "rate": 700.00, "amount": 15400.00 }
+    ],
+    "subtotal": 84300.00,
+    "discounttotal": 0,
+    "taxtotal": 5901.00,
+    "total": 90201.00
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
+    "phone": "0-2740-1234",
+    "email": "purchasing@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
+  },
+  "context": {
+    "today": "17/07/2026",
+    "now": "17/07/2026 09:30",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}

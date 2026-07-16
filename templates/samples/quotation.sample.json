@@ -1,0 +1,47 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ยอดเงินคำนวณสอดคล้องกัน: subtotal 210,000.00 − ส่วนลด 10,000.00 = 200,000.00 + VAT 7% 14,000.00 = 214,000.00 (ตัวอักษร: สองแสนหนึ่งหมื่นสี่พันบาทถ้วน) · duedate = วันยืนราคา (Expires) · @author Wichit Wongta @since 2026-07-17",
+  "record": {
+    "tranid": "QT-2026-0061",
+    "trandate": "17/07/2026",
+    "duedate": "16/08/2026",
+    "terms": "มัดจำ 30% ก่อนเริ่มงาน ส่วนที่เหลือชำระเมื่อส่งมอบ",
+    "salesrep": "วรรณา ศรีสุข",
+    "entity": "บริษัท เมืองทองพัฒนาอสังหา จำกัด",
+    "billaddress": "888 อาคารเมืองทองคอมเพล็กซ์ ชั้น 5 ถนนแจ้งวัฒนะ ตำบลบ้านใหม่ อำเภอปากเกร็ด จังหวัดนนทบุรี 11120",
+    "custbody_buyer_taxid": "0125557045678",
+    "custbody_buyer_branch": "สำนักงานใหญ่",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "ราคารวมค่าขนส่งและติดตั้งในเขตกรุงเทพฯ และปริมณฑล · ระยะเวลาส่งมอบ 30 วันหลังยืนยันสั่งซื้อ",
+    "item": [
+      { "item": "PRJ-FITOUT-5F", "description": "งานตกแต่งภายในสำนักงานชั้น 5 ตามแบบเลขที่ DWG-2026-114", "quantity": 1, "units": "งาน", "rate": 120000.00, "amount": 120000.00 },
+      { "item": "OFC-WS-4P", "description": "ชุดโต๊ะทำงานกลุ่ม 4 ที่นั่ง พร้อมฉากกั้นและรางไฟ", "quantity": 20, "units": "ชุด", "rate": 2250.00, "amount": 45000.00 },
+      { "item": "OFC-CHR-B", "description": "เก้าอี้สำนักงานตาข่ายระบายอากาศ รับประกัน 3 ปี", "quantity": 30, "units": "ตัว", "rate": 1100.00, "amount": 33000.00 },
+      { "item": "SVC-MA-1Y", "description": "บริการบำรุงรักษาเฟอร์นิเจอร์รายปี (ปีแรก)", "quantity": 12, "units": "เดือน", "rate": 1000.00, "amount": 12000.00 }
+    ],
+    "subtotal": 210000.00,
+    "discounttotal": -10000.00,
+    "taxtotal": 14000.00,
+    "total": 214000.00
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
+    "phone": "0-2740-1234",
+    "email": "sales@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
+  },
+  "context": {
+    "today": "17/07/2026",
+    "now": "17/07/2026 09:30",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}
