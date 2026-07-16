@@ -11,7 +11,7 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { showToast } from '../shared/toast-notification';
-import { isNetSuiteEnv, saveNsTemplate } from '../../services/netsuite-adapter.service';
+import { isNetSuiteEnv, getNsContext, saveNsTemplate } from '../../services/netsuite-adapter.service';
 import '../shared/modal';
 
 const RECORD_TYPES = [
@@ -320,6 +320,15 @@ export class PldBfoExportModal extends LitElement {
       useFreeMarker: this.useFreeMarker,
       includePageHeaders: this.includePageHeaders,
     };
+
+    // Embed Thai font when the hosting Suitelet provides File Cabinet URLs
+    const nsCtx = getNsContext();
+    if (nsCtx?.fontRegularUrl) {
+      options.thaiFontUrls = {
+        regular: nsCtx.fontRegularUrl,
+        bold: nsCtx.fontBoldUrl || undefined,
+      };
+    }
 
     this.xmlPreview = exportBfoXml(this.store.state, options);
   }

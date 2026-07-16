@@ -90,6 +90,50 @@ describe('exportBfoXml', () => {
 });
 
 // ═══════════════════════════════════════
+// THAI FONT EMBEDDING
+// ═══════════════════════════════════════
+
+describe('thai font embedding', () => {
+  it('emits <link type="font"> with bytes="2" when thaiFontUrls provided', () => {
+    const state = createMockState([makeText()]);
+    const xml = exportBfoXml(state, {
+      thaiFontUrls: { regular: '/core/media/media.nl?id=101', bold: '/core/media/media.nl?id=102' },
+    });
+
+    expect(xml).toContain('<link name="THSarabunNew" type="font" subtype="truetype"');
+    expect(xml).toContain('src="/core/media/media.nl?id=101"');
+    expect(xml).toContain('src-bold="/core/media/media.nl?id=102"');
+    expect(xml).toContain('bytes="2"');
+    expect(xml).toContain('font-family: THSarabunNew, NotoSansThai, sans-serif');
+  });
+
+  it('regular-only: no src-bold attribute', () => {
+    const state = createMockState([makeText()]);
+    const xml = exportBfoXml(state, { thaiFontUrls: { regular: '/core/media/media.nl?id=101' } });
+
+    expect(xml).toContain('src="/core/media/media.nl?id=101"');
+    expect(xml).not.toContain('src-bold');
+  });
+
+  it('without thaiFontUrls: no link, falls back to built-in NotoSansThai', () => {
+    const state = createMockState([makeText()]);
+    const xml = exportBfoXml(state);
+
+    expect(xml).not.toContain('type="font"');
+    expect(xml).toContain('font-family: NotoSansThai, sans-serif');
+  });
+
+  it('escapes XML-sensitive characters in font URLs', () => {
+    const state = createMockState([makeText()]);
+    const xml = exportBfoXml(state, {
+      thaiFontUrls: { regular: '/core/media/media.nl?id=101&e=T' },
+    });
+
+    expect(xml).toContain('id=101&amp;e=T');
+  });
+});
+
+// ═══════════════════════════════════════
 // HEADER/FOOTER MACROS
 // ═══════════════════════════════════════
 
