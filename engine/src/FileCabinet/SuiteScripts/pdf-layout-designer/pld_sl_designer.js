@@ -314,6 +314,12 @@ define([
       const data = body.data; // JSON string of template
       const recType = body.rectype || '';
 
+      // XML is mandatory — the engine has no generator of its own, so a template
+      // saved without XML can never render (#6, R4: no silent fallback).
+      if (!body.xml) {
+        throw new Error('Template XML is required. Export BFO XML from the designer and include it in the save payload (#6).');
+      }
+
       let rec;
       if (templateId) {
         rec = record.load({ type: 'customrecord_pld_template', id: templateId });
@@ -325,6 +331,7 @@ define([
       rec.setValue({ fieldId: 'name', value: name || 'Untitled' });
       rec.setValue({ fieldId: 'custrecord_pld_tpl_name', value: name });
       rec.setValue({ fieldId: 'custrecord_pld_tpl_data', value: data });
+      rec.setValue({ fieldId: 'custrecord_pld_tpl_xml', value: body.xml });
       if (recType) {
         rec.setValue({ fieldId: 'custrecord_pld_tpl_rectype', value: recType });
       }
