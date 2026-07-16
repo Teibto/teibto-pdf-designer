@@ -49,22 +49,12 @@ jobs:
         run: npx --yes markdownlint-cli2 "docs/**/*.md" "README.md" "CLAUDE.md" || true
         # เริ่มแบบ non-blocking (|| true) — เอาออกเมื่อทีมเก็บ lint เดิมหมดแล้ว
 
-      # ==================== STACK: Node / React ====================
-      # เปิดใช้เมื่อ repo เป็น Node/React แล้วลบ block Python ทิ้ง
-      - name: Node — lint + test
-        if: hashFiles('package.json') != ''
+      # ==================== STACK: Node (designer/) ====================
+      # monorepo: แอปหลักอยู่ designer/ — ไม่มี package.json ที่ root
+      - name: Node — lint + test (designer/)
+        if: hashFiles('designer/package.json') != ''
+        working-directory: designer
         run: |
           npm ci
           npm run lint --if-present
           npm test --if-present
-
-      # ==================== STACK: Python ====================
-      # เปิดใช้เมื่อ repo เป็น Python แล้วลบ block Node ทิ้ง
-      - name: Python — lint + test
-        if: hashFiles('pyproject.toml') != '' || hashFiles('requirements.txt') != ''
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install ruff pytest
-          ruff check .
-          if [ -d tests ]; then pytest -q; else echo "no tests/ yet"; fi
