@@ -478,3 +478,99 @@ describe('column overflow in BFO table', () => {
     expect(xml).not.toContain('colspan');
   });
 });
+
+// ═══════════════════════════════════════
+// NULL-SAFETY (#4) — ทุก FreeMarker binding ต้องมี default
+// field ว่าง 1 ตัวห้ามทำ PDF พังทั้งใบ (N/render fail ทั้ง render ถ้า expression resolve ไม่ได้)
+// ใช้ !'' (single quote) เพราะอยู่ใน XML attribute ได้และรอด escapeXml (double quote โดน escape เป็น &quot;)
+// ═══════════════════════════════════════
+
+describe('null-safe bindings (#4)', () => {
+  it('text binding gets null-safe default', () => {
+    const state = createMockState([makeText({ binding: 'custbody_note' })]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain("${transaction.custbody_note!''}");
+  });
+
+  it('inline {{path}} content gets null-safe default', () => {
+    const state = createMockState([makeText({ content: 'Ref: {{otherrefnum}}' })]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain("${transaction.otherrefnum!''}");
+  });
+
+  it('table loop is null-safe: (record.list)![]', () => {
+    const state = createMockState([makeTable()]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain('<#list (transaction.order.lines)![] as lines>');
+  });
+
+  it('table cells get null-safe default', () => {
+    const state = createMockState([makeTable()]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain("${lines.item!''}");
+    expect(xml).toContain("${lines.qty!''}");
+  });
+
+  it('column-span row label gets null-safe default', () => {
+    const state = createMockState([makeTable()]);
+    const stateWithSpan = { ...state, pagination: { ...createDefaultPagination(), columnSpanField: 'isSection' } };
+    const xml = exportBfoXml(stateWithSpan, { useFreeMarker: true });
+
+    expect(xml).toContain("${lines.item!''}</td></tr>");
+  });
+
+  it('image src binding gets null-safe default that survives escapeXml', () => {
+    const img = {
+      id: 'img-1', type: 'image', name: 'Logo', role: 'content',
+      x: 0, y: 0, w: 100, h: 50, zIndex: 0, locked: false, visible: true,
+      src: '', objectFit: 'contain', binding: 'custbody_logo_url',
+    } as ImageElement;
+    const state = createMockState([img]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain("${transaction.custbody_logo_url!''}");
+    expect(xml).not.toContain('&quot;}');
+  });
+
+  it('no unsafe interpolation remains for bound elements', () => {
+    const state = createMockState([
+      makeText({ binding: 'custbody_a' }),
+      makeTable(),
+    ]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    const all = xml.match(/\$\{(?:transaction|lines)\.[^}]*\}/g) ?? [];
+    const unsafe = all.filter((m) => !m.includes("!''"));
+    expect(unsafe).toEqual([]);
+  });
+});
+
+describe('barcode null-safety (#4)', () => {
+  const makeBarcode = (overrides: any = {}) => ({
+    id: 'bc-1', type: 'barcode', name: 'BC', role: 'content',
+    x: 0, y: 0, w: 120, h: 40, zIndex: 0, locked: false, visible: true,
+    value: 'STATIC123', barcodeType: 'code128',
+    ...overrides,
+  });
+
+  it('bound barcode is wrapped in has_content guard (empty value = hard BFO error)', () => {
+    const state = createMockState([makeBarcode({ binding: 'tranid' })]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain("<#if (transaction.tranid!'')?has_content>");
+    expect(xml).toContain("value=\"${transaction.tranid!''}\"");
+    expect(xml).toContain('</#if>');
+  });
+
+  it('static barcode has no guard', () => {
+    const state = createMockState([makeBarcode()]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain('value="STATIC123"');
+    expect(xml).not.toContain('<#if');
+  });
+});

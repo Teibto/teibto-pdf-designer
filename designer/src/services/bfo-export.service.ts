@@ -318,12 +318,13 @@ function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean)
 }
 
 function imageToHtml(el: ImageElement, recordType: string, useFreeMarker: boolean): string {
-  let src = el.src || '';
-  if (el.binding && useFreeMarker) {
-    src = convertBindingToFreeMarker(el.binding, recordType);
-  }
+  // FreeMarker expression goes into the attribute raw — escapeXml would mangle the
+  // !'' null-safe default into &apos; and break the expression when N/render runs (#4).
+  const src = el.binding && useFreeMarker
+    ? convertBindingToFreeMarker(el.binding, recordType)
+    : escapeXml(el.src || '');
 
-  return `<img src="${escapeXml(src)}" style="width: ${el.w}pt; height: ${el.h}pt; object-fit: ${el.objectFit};" />`;
+  return `<img src="${src}" style="width: ${el.w}pt; height: ${el.h}pt; object-fit: ${el.objectFit};" />`;
 }
 
 /**
@@ -387,7 +388,8 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
 
   if (useFreeMarker && el.binding) {
     const listVar = el.binding.split('.').pop() || 'item';
-    lines.push(`<#list ${recordType}.${el.binding} as ${listVar}>`);
+    // Null-safe list: record without sublist lines renders an empty table, not an error (#4)
+    lines.push(`<#list (${recordType}.${el.binding})![] as ${listVar}>`);
 
     // Column span: conditionally render merged row or normal row
     if (spanField) {
@@ -395,12 +397,12 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       // [FUNC-2] Use first non-index column for span row label (index column has no meaningful value)
       const spanLabelCol = visibleCols.find((c) => !c.isIndex) ?? visibleCols[0];
       lines.push(`<#if ${listVar}.${spanField}?has_content>`);
-      lines.push(`<tr><td colspan="${visibleCols.length}" style="${spanStyle}">\${${listVar}.${spanLabelCol.key}}</td></tr>`);
+      lines.push(`<tr><td colspan="${visibleCols.length}" style="${spanStyle}">\${${listVar}.${spanLabelCol.key}!''}</td></tr>`);
       lines.push('<#else>');
       lines.push('<tr>');
       visibleCols.forEach((col) => {
         const style = cellOverflowStyle(col, el.borderColor);
-        lines.push(`  <td style="${style}">\${${listVar}.${col.key}}</td>`);
+        lines.push(`  <td style="${style}">\${${listVar}.${col.key}!''}</td>`);
       });
       lines.push('</tr>');
       lines.push('</#if>');
@@ -408,7 +410,7 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       lines.push('<tr>');
       visibleCols.forEach((col) => {
         const style = cellOverflowStyle(col, el.borderColor);
-        lines.push(`  <td style="${style}">\${${listVar}.${col.key}}</td>`);
+        lines.push(`  <td style="${style}">\${${listVar}.${col.key}!''}</td>`);
       });
       lines.push('</tr>');
     }
@@ -448,8 +450,9 @@ function lineToHtml(el: LineElement): string {
 }
 
 function barcodeToHtml(el: BarcodeElement, recordType: string, useFreeMarker: boolean): string {
-  const value = el.binding && useFreeMarker
-    ? convertBindingToFreeMarker(el.binding, recordType)
+  const bound = !!el.binding && useFreeMarker;
+  const value = bound
+    ? convertBindingToFreeMarker(el.binding!, recordType)
     : escapeXml(el.value);
 
   // BFO supports barcode rendering via <barcode> tag
@@ -461,11 +464,22 @@ function barcodeToHtml(el: BarcodeElement, recordType: string, useFreeMarker: bo
   };
   const bfoType = barcodeTypeMap[el.barcodeType] || 'code128';
 
-  return [
+  const barcodeTag = [
     `<!-- Barcode: ${escapeXml(el.name)} -->`,
     `<barcode codetype="${bfoType}" value="${value}"`,
     `  style="width: ${el.w}pt; height: ${el.h}pt;"`,
     `  showtext="true" />`,
+  ].join('\n');
+
+  if (!bound) return barcodeTag;
+
+  // Verified on SB2 (#4): barcode with an empty value is a HARD BFO error
+  // ('Missing "value" attribute in barcode') — null-safe !'' alone is not enough,
+  // the whole element must be skipped when the bound field is empty.
+  return [
+    `<#if (${recordType}.${el.binding}!'')?has_content>`,
+    barcodeTag,
+    `</#if>`,
   ].join('\n');
 }
 
@@ -492,7 +506,11 @@ function listToHtml(el: ListElement, recordType: string, useFreeMarker: boolean)
   ].join('\n');
 }
 
-/** Convert a JSON binding path to FreeMarker variable syntax */
+/**
+ * Convert a JSON binding path to FreeMarker variable syntax.
+ * Always null-safe (`!""`): one empty field must not kill the whole PDF —
+ * N/render fails the entire render on an unresolvable expression (#4).
+ */
 function convertBindingToFreeMarker(path: string, recordType: string): string {
-  return `\${${recordType}.${path}}`;
+  return `\${${recordType}.${path}!''}`;
 }
