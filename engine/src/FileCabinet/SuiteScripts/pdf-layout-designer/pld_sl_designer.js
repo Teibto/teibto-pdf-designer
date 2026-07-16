@@ -321,10 +321,12 @@ define([
         rec = record.create({ type: 'customrecord_pld_template' });
       }
 
+      // Built-in name is mandatory (custom record includeName=T) — set it too.
+      rec.setValue({ fieldId: 'name', value: name || 'Untitled' });
       rec.setValue({ fieldId: 'custrecord_pld_tpl_name', value: name });
       rec.setValue({ fieldId: 'custrecord_pld_tpl_data', value: data });
       if (recType) {
-        rec.setValue({ fieldId: 'custrecord_pld_tpl_type', value: recType });
+        rec.setValue({ fieldId: 'custrecord_pld_tpl_rectype', value: recType });
       }
 
       const savedId = rec.save();

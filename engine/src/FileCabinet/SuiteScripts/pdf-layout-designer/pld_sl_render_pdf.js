@@ -270,6 +270,9 @@ define([
       rec = record.create({ type: TPL_RECORD_TYPE });
     }
 
+    // Built-in name is mandatory (custom record includeName=T) — set it too,
+    // not only the custom label field, or save fails with "Please enter value(s) for: Name".
+    rec.setValue({ fieldId: 'name', value: body.name || 'Untitled' });
     rec.setValue({ fieldId: TPL_FLD_NAME, value: body.name || 'Untitled' });
 
     if (body.data) {
