@@ -2,6 +2,8 @@
 <!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
 <#--
   ใบกำกับภาษี / ใบแจ้งหนี้ (เต็มรูป) — master template · Issue #7
+  @author Wichit Wongta
+  @since 2026-07-17
   กติกา: docs/TOOLSTACK.md + templates/README.md (binding null-safe ทุกตัว,
   header/footer ผ่าน macrolist, ฟอนต์ไทย embed เท่านั้น)
 

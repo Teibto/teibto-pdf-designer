@@ -1,5 +1,5 @@
 {
-  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ยอดเงินคำนวณสอดคล้องกัน: subtotal 308,350.00 − ส่วนลด 9,250.50 = 299,099.50 + VAT 7% 20,936.97 = 320,036.47",
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ยอดเงินคำนวณสอดคล้องกัน: subtotal 308,350.00 − ส่วนลด 9,250.50 = 299,099.50 + VAT 7% 20,936.97 = 320,036.47 · @author Wichit Wongta @since 2026-07-17",
   "record": {
     "tranid": "INV-2026-0042",
     "trandate": "17/07/2026",
