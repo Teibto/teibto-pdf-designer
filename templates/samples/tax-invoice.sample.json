@@ -34,12 +34,18 @@
   },
   "company": {
     "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
     "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
     "phone": "0-2740-1234",
     "email": "billing@tbfurniture.example.co.th",
     "taxId": "0105561098765",
     "branch": "สำนักงานใหญ่ (Head Office)",
-    "logo": ""
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
   },
   "context": {
     "today": "17/07/2026",

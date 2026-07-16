@@ -15,8 +15,9 @@ define([
   'N/url',
   'N/search',
   'N/record',
-  'N/log'
-], function (serverWidget, file, runtime, url, search, record, log) {
+  'N/log',
+  './pld_lib_company_config'
+], function (serverWidget, file, runtime, url, search, record, log, companyConfig) {
 
   /**
    * File Cabinet folder ID where the built app files live.
@@ -209,14 +210,9 @@ define([
       }
     }
 
-    // ─── Company Info ───
+    // ─── Company Info (customrecord_pld_config — single source, #9) ───
     try {
-      data.company = {
-        name: runtime.getCurrentScript().getParameter({ name: 'custscript_pld_company_name' }) || '',
-        address: runtime.getCurrentScript().getParameter({ name: 'custscript_pld_company_addr' }) || '',
-        phone: runtime.getCurrentScript().getParameter({ name: 'custscript_pld_company_phone' }) || '',
-        taxId: runtime.getCurrentScript().getParameter({ name: 'custscript_pld_company_taxid' }) || '',
-      };
+      data.company = companyConfig.load();
     } catch (e) {
       data.company = {};
     }
