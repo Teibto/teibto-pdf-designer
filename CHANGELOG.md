@@ -2,6 +2,11 @@
 
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/) · วันที่ `YYYY-MM-DD` · SemVer ต่อ repo (R7)
 
+## [Unreleased]
+
+### Added
+- Master templates อีก 5 ฟอร์มครบชุด Standard Template Pack: `invoice`, `purchase-order`, `delivery-note`, `receipt`, `quotation` ใน `templates/master/` + sample สังเคราะห์ต่อฟอร์มใน `templates/samples/` — โครง/CSS/macro/font pattern เดียวกับ `tax-invoice.xml` ทุกไฟล์ ทั้ง 5 ฟอร์ม render จริงผ่านบน Teibto SB2 (#8)
+
 ## [0.2.0] - 2026-07-17
 
 Phase 1 (render-correct engine) จบครบ + master template แรกของ Standard Template Pack
