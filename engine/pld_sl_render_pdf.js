@@ -564,7 +564,8 @@ define([
     // ─── Body with FreeMarker Loop ───
     parts.push('<tbody>');
     parts.push('<#list ' + recordAlias + '.' + binding + ' as line>');
-    parts.push('<tr class="${line_index % 2 == 0 ? \'\' : \'alt\'}">');
+    // FreeMarker has no C-style ternary — use ?then(whenTrue, whenFalse)
+    parts.push('<tr class="${(line_index % 2 == 0)?then(\'\', \'alt\')}">');
 
     columns.forEach(function (col) {
       if (col.hidden) return;
