@@ -69,15 +69,15 @@ describe('exportBfoXml', () => {
     expect(xml).toContain('<pdf>');
     expect(xml).toContain('</pdf>');
     expect(xml).toContain('<head>');
-    expect(xml).toContain('<body>');
+    expect(xml).toContain('<body');
   });
 
-  it('includes page CSS', () => {
+  it('sets page size as body attribute (BFO), not @page CSS', () => {
     const state = createMockState([]);
     const xml = exportBfoXml(state);
 
-    expect(xml).toContain('@page');
-    expect(xml).toContain('portrait');
+    expect(xml).toContain('size="A4"');
+    expect(xml).not.toContain('@page');
   });
 
   it('uses landscape when configured', () => {
@@ -85,7 +85,59 @@ describe('exportBfoXml', () => {
     state.page.orientation = 'landscape';
     const xml = exportBfoXml(state);
 
-    expect(xml).toContain('landscape');
+    expect(xml).toContain('size="A4-LANDSCAPE"');
+  });
+});
+
+// ═══════════════════════════════════════
+// HEADER/FOOTER MACROS
+// ═══════════════════════════════════════
+
+describe('header/footer macros', () => {
+  it('emits macrolist with nlheader for header-role elements', () => {
+    const state = createMockState([makeText({ type: 'header', role: 'header', content: 'Company' })]);
+    const xml = exportBfoXml(state);
+
+    expect(xml).toContain('<macrolist>');
+    expect(xml).toContain('<macro id="nlheader">');
+    expect(xml).toContain('header="nlheader"');
+    expect(xml).toMatch(/header-height="\d+pt"/);
+  });
+
+  it('emits nlfooter with pagenumber/totalpages for footer-role elements', () => {
+    const state = createMockState([makeText({ role: 'footer', content: 'Thank you' })]);
+    const xml = exportBfoXml(state);
+
+    expect(xml).toContain('<macro id="nlfooter">');
+    expect(xml).toContain('footer="nlfooter"');
+    expect(xml).toContain('<pagenumber/>');
+    expect(xml).toContain('<totalpages/>');
+    expect(xml).not.toContain('counter(page');
+  });
+
+  it('header/footer elements are not duplicated in body when in macros', () => {
+    const state = createMockState([makeText({ type: 'header', role: 'header', content: 'OnlyOnceHeader' })]);
+    const xml = exportBfoXml(state);
+
+    expect(xml.indexOf('OnlyOnceHeader')).toBe(xml.lastIndexOf('OnlyOnceHeader'));
+    expect(xml).not.toContain('<div id="header"');
+  });
+
+  it('no macrolist when no header/footer roles', () => {
+    const state = createMockState([makeText({ role: 'content' })]);
+    const xml = exportBfoXml(state);
+
+    expect(xml).not.toContain('<macrolist>');
+    expect(xml).not.toContain('header="nlheader"');
+  });
+
+  it('includePageHeaders=false keeps header elements inline in body', () => {
+    const state = createMockState([makeText({ type: 'header', role: 'header', content: 'InlineHeader' })]);
+    const xml = exportBfoXml(state, { includePageHeaders: false });
+
+    expect(xml).not.toContain('<macrolist>');
+    expect(xml).toContain('InlineHeader');
+    expect(xml).toContain('<div id="header"');
   });
 });
 
@@ -203,10 +255,12 @@ describe('section grouping', () => {
     ]);
     const xml = exportBfoXml(state);
 
-    const headerPos = xml.indexOf('HEADER');
+    // header role lives in the macrolist (head), before the body sections
+    const headerPos = xml.indexOf('<macro id="nlheader">');
     const contentPos = xml.indexOf('CONTENT');
     const summaryPos = xml.indexOf('SUMMARY');
 
+    expect(headerPos).toBeGreaterThan(-1);
     expect(headerPos).toBeLessThan(contentPos);
     expect(contentPos).toBeLessThan(summaryPos);
   });
@@ -256,7 +310,7 @@ describe('edge cases', () => {
     const state = createMockState([]);
     const xml = exportBfoXml(state);
 
-    expect(xml).toContain('<body>');
+    expect(xml).toContain('<body size="A4" padding="0.5in">');
     expect(xml).toContain('</body>');
   });
 
