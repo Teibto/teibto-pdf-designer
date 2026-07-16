@@ -45,61 +45,111 @@ export function exportBfoXml(
 
   const { page, elements } = state;
 
-  // Build CSS
-  const css = buildBfoCss(page, elements, includePageHeaders);
+  // Repeating header/footer must be BFO macros — NetSuite's BFO engine does
+  // not support CSS @page margin boxes or counter(page)/counter(pages).
+  const headerElements = includePageHeaders ? elements.filter((e) => e.role === 'header') : [];
+  const footerElements = includePageHeaders ? elements.filter((e) => e.role === 'footer') : [];
+  const useMacros = headerElements.length > 0 || footerElements.length > 0;
 
-  // Build body HTML
-  const bodyHtml = buildBfoBody(elements, recordType, useFreeMarker, state.pagination);
+  const macrolist = useMacros
+    ? buildMacrolist(headerElements, footerElements, recordType, useFreeMarker, state.pagination)
+    : '';
+
+  // Build CSS
+  const css = buildBfoCss();
+
+  // Build body HTML (header/footer live in macros when useMacros)
+  const bodyHtml = buildBfoBody(elements, recordType, useFreeMarker, state.pagination, useMacros);
+
+  const bodyAttrs = buildBodyAttrs(page, headerElements, footerElements);
 
   // Wrap in full BFO template
   return `<?xml version="1.0"?>
 <!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
 <pdf>
 <head>
-<style type="text/css">
+${macrolist ? macrolist + '\n' : ''}<style type="text/css">
 ${css}
 </style>
 </head>
-<body>
+<body${bodyAttrs}>
 ${bodyHtml}
 </body>
 </pdf>`;
 }
 
 /** Build BFO-compatible CSS */
-function buildBfoCss(
-  page: AppState['page'],
-  elements: CanvasElement[],
-  includePageHeaders: boolean,
-): string {
+function buildBfoCss(): string {
   const lines: string[] = [];
 
-  // Page setup
-  const isLandscape = page.orientation === 'landscape';
-  lines.push(`@page {`);
-  lines.push(`  size: ${isLandscape ? 'landscape' : 'portrait'};`);
-  lines.push(`  margin: 0.5in;`);
-  lines.push(`}`);
-
-  // Base styles
+  // Base styles (page size/margins are <body> attributes in BFO, not @page CSS)
   lines.push(`body { font-family: sans-serif; font-size: 10pt; color: #333; }`);
   lines.push(`table { border-collapse: collapse; }`);
   lines.push(`th, td { padding: 4pt 6pt; }`);
 
-  // Header/Footer regions
-  if (includePageHeaders) {
-    const headerElements = elements.filter((e) => e.role === 'header');
-    const footerElements = elements.filter((e) => e.role === 'footer');
+  return lines.join('\n');
+}
 
-    if (headerElements.length > 0) {
-      lines.push(`@page { @top-center { content: ""; } }`);
-    }
-    if (footerElements.length > 0) {
-      lines.push(`@page { @bottom-center { content: "Page " counter(page) " of " counter(pages); } }`);
-    }
+/** Bounding-box height (pt) of a group of elements, with breathing room */
+function roleHeight(els: CanvasElement[], minHeight: number): number {
+  if (els.length === 0) return 0;
+  const top = Math.min(...els.map((e) => e.y));
+  const bottom = Math.max(...els.map((e) => e.y + e.h));
+  return Math.max(Math.ceil(bottom - top) + 8, minHeight);
+}
+
+/** Build <macrolist> with nlheader/nlfooter macros for repeat-on-every-page content */
+function buildMacrolist(
+  headerElements: CanvasElement[],
+  footerElements: CanvasElement[],
+  recordType: string,
+  useFreeMarker: boolean,
+  pagination?: PaginationConfig,
+): string {
+  const lines: string[] = [];
+  lines.push('<macrolist>');
+
+  if (headerElements.length > 0) {
+    lines.push('<macro id="nlheader">');
+    headerElements.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push('</macro>');
   }
 
+  if (footerElements.length > 0) {
+    lines.push('<macro id="nlfooter">');
+    footerElements.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push('<p style="font-size: 8pt; color: #888888; text-align: center;">Page <pagenumber/> of <totalpages/></p>');
+    lines.push('</macro>');
+  }
+
+  lines.push('</macrolist>');
   return lines.join('\n');
+}
+
+/** Body attributes: page size/orientation + macro bindings (BFO attributes, not CSS) */
+function buildBodyAttrs(
+  page: AppState['page'],
+  headerElements: CanvasElement[],
+  footerElements: CanvasElement[],
+): string {
+  const attrs: string[] = [];
+
+  const sizeName = page.size === 'Custom' ? 'A4' : page.size;
+  attrs.push(`size="${sizeName}${page.orientation === 'landscape' ? '-LANDSCAPE' : ''}"`);
+
+  if (headerElements.length > 0) {
+    attrs.push('header="nlheader"');
+    attrs.push(`header-height="${roleHeight(headerElements, 24)}pt"`);
+  }
+  if (footerElements.length > 0) {
+    attrs.push('footer="nlfooter"');
+    // extra room for the appended "Page X of Y" line
+    attrs.push(`footer-height="${roleHeight(footerElements, 20) + 14}pt"`);
+  }
+
+  attrs.push('padding="0.5in"');
+
+  return ' ' + attrs.join(' ');
 }
 
 /** Build BFO body HTML from elements */
@@ -108,15 +158,16 @@ function buildBfoBody(
   recordType: string,
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
+  headerFooterInMacros = false,
 ): string {
   const lines: string[] = [];
 
   // Group by role for proper ordering
-  const header = elements.filter((e) => e.role === 'header');
+  const header = headerFooterInMacros ? [] : elements.filter((e) => e.role === 'header');
   const content = elements.filter((e) => e.role === 'content');
   const tables = elements.filter((e) => e.role === 'table');
   const summary = elements.filter((e) => e.role === 'summary');
-  const footer = elements.filter((e) => e.role === 'footer');
+  const footer = headerFooterInMacros ? [] : elements.filter((e) => e.role === 'footer');
   const watermark = elements.filter((e) => e.role === 'watermark');
 
   // Header section
