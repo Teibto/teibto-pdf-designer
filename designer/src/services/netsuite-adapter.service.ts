@@ -23,6 +23,9 @@ export interface NsContext {
   environment: string;
   recordType: string | null;
   recordId: string | null;
+  /** File Cabinet URLs of THSarabunNew TTFs (script params — see engine/DEPLOYMENT.md) */
+  fontRegularUrl?: string | null;
+  fontBoldUrl?: string | null;
 }
 
 /** Saved template metadata from NetSuite custom record */

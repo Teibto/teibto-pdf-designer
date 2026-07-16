@@ -28,6 +28,12 @@ export interface BfoExportOptions {
   useFreeMarker?: boolean;
   /** Include page header/footer CSS */
   includePageHeaders?: boolean;
+  /**
+   * File Cabinet URLs of THSarabunNew TTFs to embed via <link type="font">.
+   * Server-side BFO has no system Thai fonts (no Tahoma/Sarabun) — without
+   * this, Thai text falls back to NetSuite's built-in NotoSansThai.
+   */
+  thaiFontUrls?: { regular: string; bold?: string };
 }
 
 /**
@@ -41,6 +47,7 @@ export function exportBfoXml(
     recordType = 'transaction',
     useFreeMarker = true,
     includePageHeaders = true,
+    thaiFontUrls,
   } = options;
 
   const { page, elements } = state;
@@ -55,8 +62,10 @@ export function exportBfoXml(
     ? buildMacrolist(headerElements, footerElements, recordType, useFreeMarker, state.pagination)
     : '';
 
+  const fontLink = buildFontLink(thaiFontUrls);
+
   // Build CSS
-  const css = buildBfoCss();
+  const css = buildBfoCss(!!thaiFontUrls);
 
   // Build body HTML (header/footer live in macros when useMacros)
   const bodyHtml = buildBfoBody(elements, recordType, useFreeMarker, state.pagination, useMacros);
@@ -68,7 +77,7 @@ export function exportBfoXml(
 <!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
 <pdf>
 <head>
-${macrolist ? macrolist + '\n' : ''}<style type="text/css">
+${fontLink ? fontLink + '\n' : ''}${macrolist ? macrolist + '\n' : ''}<style type="text/css">
 ${css}
 </style>
 </head>
@@ -78,12 +87,37 @@ ${bodyHtml}
 </pdf>`;
 }
 
+/** Embed THSarabunNew from the File Cabinet (server-side BFO has no system Thai fonts) */
+function buildFontLink(thaiFontUrls?: BfoExportOptions['thaiFontUrls']): string {
+  if (!thaiFontUrls?.regular) return '';
+
+  const attrs = [
+    'name="THSarabunNew"',
+    'type="font"',
+    'subtype="truetype"',
+    `src="${escapeXml(thaiFontUrls.regular)}"`,
+  ];
+  if (thaiFontUrls.bold) {
+    attrs.push(`src-bold="${escapeXml(thaiFontUrls.bold)}"`);
+  }
+  // bytes="2" — 2-byte glyph encoding, required for non-Latin scripts
+  attrs.push('bytes="2"');
+
+  return `<link ${attrs.join(' ')} />`;
+}
+
 /** Build BFO-compatible CSS */
-function buildBfoCss(): string {
+function buildBfoCss(hasEmbeddedThaiFont: boolean): string {
   const lines: string[] = [];
 
+  // NotoSansThai is a NetSuite built-in font — the fallback that keeps Thai
+  // rendering even when no font is uploaded to the File Cabinet.
+  const fontFamily = hasEmbeddedThaiFont
+    ? 'THSarabunNew, NotoSansThai, sans-serif'
+    : 'NotoSansThai, sans-serif';
+
   // Base styles (page size/margins are <body> attributes in BFO, not @page CSS)
-  lines.push(`body { font-family: sans-serif; font-size: 10pt; color: #333; }`);
+  lines.push(`body { font-family: ${fontFamily}; font-size: 10pt; color: #333; }`);
   lines.push(`table { border-collapse: collapse; }`);
   lines.push(`th, td { padding: 4pt 6pt; }`);
 

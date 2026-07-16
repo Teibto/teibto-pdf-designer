@@ -145,6 +145,15 @@ SuiteScripts/
 | `custscript_pld_company_taxid` | Tax ID | Free-Form Text |
 | `custscript_pld_company_email` | Company Email | Free-Form Text |
 | `custscript_pld_company_logo` | Logo URL | Free-Form Text |
+| `custscript_pld_font_regular` | Thai Font Regular URL | Free-Form Text |
+| `custscript_pld_font_bold` | Thai Font Bold URL | Free-Form Text |
+
+**ฟอนต์ไทย (จำเป็นถ้าเอกสารมีภาษาไทย):**
+1. Upload `engine/fonts/THSarabunNew-Regular.ttf` + `THSarabunNew-Bold.ttf` เข้า File Cabinet
+   (โฟลเดอร์ `SuiteScripts/pdf-layout-designer/fonts/`, ติ๊ก **Available Without Login**)
+2. เปิดไฟล์แต่ละตัว copy **URL** (รูปแบบ `/core/media/media.nl?id=...`) มาใส่ script parameters ข้างบน
+3. Designer จะฝัง `<link name="THSarabunNew" type="font" subtype="truetype" ... bytes="2">` ใน BFO XML ให้อัตโนมัติ
+   — ถ้าไม่ตั้ง params เอกสารใช้ฟอนต์ built-in `NotoSansThai` ของ NetSuite (ไทยยังอ่านได้ แต่ไม่ใช่หน้าตา Sarabun)
 
 ---
 
@@ -305,7 +314,7 @@ ${record.trandate?string["dd/MM/yyyy"]} ← Date format
 | Designer โหลดช้า | JS bundle ใหญ่ | ปกติโหลดครั้งแรกช้า, ครั้งต่อไป cache |
 | Template save fail | Custom Record ไม่มี / field ผิด | ตรวจ field IDs ตรงกับ script |
 | CSS ไม่ทำงานใน PDF | BFO ไม่รองรับ CSS บางอย่าง | ดู [BFO CSS Reference](https://www.netsuite.com/portal/developers/resources/apis/suitescript/ss-reference.shtml) |
-| ภาษาไทยไม่แสดง | ต้องใช้ font ที่รองรับไทย | ใน CSS: `font-family: Tahoma, "Angsana New", sans-serif;` |
+| ภาษาไทยไม่แสดง | BFO ฝั่ง server ไม่มีฟอนต์ระบบไทย (Tahoma/Sarabun ใช้ไม่ได้) | ตั้ง `custscript_pld_font_regular/bold` (ดู §ฟอนต์ไทย) หรือใช้ `font-family: NotoSansThai` (built-in) |
 
 ---
 

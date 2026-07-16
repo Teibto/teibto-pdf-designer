@@ -149,6 +149,10 @@ define([
       // Record context if opened from a record
       recordType: context.request.parameters.rectype || null,
       recordId: context.request.parameters.recid || null,
+      // File Cabinet URLs of THSarabunNew TTFs — designer embeds them as
+      // <link type="font"> in exported BFO XML (server BFO has no Thai fonts)
+      fontRegularUrl: script.getParameter({ name: 'custscript_pld_font_regular' }) || null,
+      fontBoldUrl: script.getParameter({ name: 'custscript_pld_font_bold' }) || null,
     };
 
     return ctx;
