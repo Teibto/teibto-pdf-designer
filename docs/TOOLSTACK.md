@@ -46,6 +46,11 @@ cd teibto-pdf-designer/designer && npm install && npm test
 4. **ภาษาไทยต้อง embed font เท่านั้น** (พิสูจน์บน SB2 2026-07-17, #22) — font-family ที่ไม่ embed (Tahoma, Sarabun, แม้แต่ NotoSansThai) ทำ **glyph ไทยหายเงียบ** ไม่มี error → ใช้ `<link name="THSarabunNew" type="font" subtype="truetype" src=... src-bold=... bytes="2">` โดยไฟล์ TTF ต้องติ๊ก **Available Without Login** และ src ต้องเป็น URL เต็มมี `h=` token + `_xt=.ttf` (token ออกใหม่ทุกครั้งที่ save ไฟล์ — เก็บใน script param ต้องอัปเดตตาม)
 5. **CSS ที่ BFO เมินเงียบ ๆ** — `object-fit`, `text-overflow: ellipsis`, `-webkit-*` — อย่าให้ designer เสนอ option ที่พิมพ์ไม่ได้
 6. **แก้ template ใน UI account ลูกค้าโดยไม่ commit กลับ = drift** — source of truth คือ `templates/master/` ใน repo นี้
+7. **BFO justify ข้อความเปล่าใน `<td>` ที่ wrap หลายบรรทัด** (ช่องไฟยืด, cluster ไทยแตกเช่น "หน ้า") — `text-align` บน td หรือ `align` attr เอาไม่อยู่ → ห่อเนื้อหา cell ด้วย block `<p>` ที่ระบุ alignment เอง (พิสูจน์บน SB2 2026-07-17, #7)
+8. **เลขคณิตใน N/render คืน double** — `1125 % 100` = `25.0` → `?c` ได้ `"25.0"` แล้ว `"."?number` พังเงียบ → ใส่ `?int` ทุกผลลัพธ์ `%`/`*` ก่อนแปลงเป็น string
+9. **Field ที่ไม่มีบน record ผูกมาเป็น `''` ไม่ใช่ missing** — default ของ `!` เช่น `${record.x!"-"}` จะไม่โผล่ (ได้ค่าว่างแทน) และ expression ที่พังใน `${...}` ถูกกลืนเป็นค่าว่างเงียบ ๆ ไม่ error
+10. **`<div>` ระดับ body ถูก BFO ทิ้งทั้ง element เงียบ ๆ** — ใช้ `<p>`/`<table>` เท่านั้น
+11. **Font URL เสีย (เช่น placeholder ไม่ถูกแทน) ไม่ error** — BFO เมิน `<link type="font">` เงียบ ๆ แล้วไทยหายทั้งใบ · เช็คเร็วสุดจากขนาด PDF: embed สำเร็จโตขึ้น ~13KB+ ต่อ font subset
 
 ## สิ่งที่ repo นี้ *ไม่มี* (โดยเจตนา)
 

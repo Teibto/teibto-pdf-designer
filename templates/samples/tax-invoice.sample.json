@@ -1,0 +1,50 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ยอดเงินคำนวณสอดคล้องกัน: subtotal 308,350.00 − ส่วนลด 9,250.50 = 299,099.50 + VAT 7% 20,936.97 = 320,036.47",
+  "record": {
+    "tranid": "INV-2026-0042",
+    "trandate": "17/07/2026",
+    "duedate": "16/08/2026",
+    "otherrefnum": "PO-88012",
+    "terms": "Net 30",
+    "salesrep": "สมชาย ใจดี",
+    "entity": "บริษัท เจริญการค้าไทย จำกัด (มหาชน)",
+    "billaddress": "128/22 อาคารพญาไทพลาซ่า ชั้น 15 ถนนพญาไท แขวงทุ่งพญาไท เขตราชเทวี กรุงเทพมหานคร 10400",
+    "custbody_buyer_taxid": "0107536000315",
+    "custbody_buyer_branch": "สำนักงานใหญ่",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "จัดส่งและติดตั้งภายใน 14 วันหลังยืนยันคำสั่งซื้อ",
+    "item": [
+      { "item": "FUR-DSK-120", "description": "ชุดโต๊ะทำงานไม้สัก ขนาด 120x60 ซม.", "quantity": 10, "units": "ชุด", "rate": 4500.00, "amount": 45000.00 },
+      { "item": "FUR-CHR-HB", "description": "เก้าอี้สำนักงานพนักพิงสูง ปรับระดับได้", "quantity": 20, "units": "ตัว", "rate": 2850.00, "amount": 57000.00 },
+      { "item": "FUR-CAB-4D", "description": "ตู้เอกสารเหล็ก 4 ลิ้นชัก พร้อมกุญแจล็อก", "quantity": 8, "units": "ใบ", "rate": 3200.00, "amount": 25600.00 },
+      { "item": "LGT-LED-DT", "description": "โคมไฟตั้งโต๊ะ LED ปรับความสว่าง 3 ระดับ", "quantity": 30, "units": "ชิ้น", "rate": 590.00, "amount": 17700.00 },
+      { "item": "FUR-PAR-160", "description": "ฉากกั้นสำนักงานบุผ้า สูง 160 ซม.", "quantity": 15, "units": "แผง", "rate": 1950.00, "amount": 29250.00 },
+      { "item": "FUR-SHF-5L", "description": "ชั้นวางหนังสือไม้ 5 ชั้น", "quantity": 6, "units": "ตัว", "rate": 2400.00, "amount": 14400.00 },
+      { "item": "FUR-CNF-10", "description": "โต๊ะประชุมไม้วีเนียร์ 10 ที่นั่ง", "quantity": 1, "units": "ตัว", "rate": 28500.00, "amount": 28500.00 },
+      { "item": "FUR-CHR-CF", "description": "เก้าอี้ห้องประชุม โครงเหล็กชุบโครเมียม", "quantity": 10, "units": "ตัว", "rate": 1650.00, "amount": 16500.00 },
+      { "item": "BRD-GLS-240", "description": "กระดานไวท์บอร์ดกระจก 120x240 ซม. พร้อมติดตั้ง", "quantity": 2, "units": "แผ่น", "rate": 8900.00, "amount": 17800.00 },
+      { "item": "SVC-INSTALL", "description": "ค่าบริการติดตั้งและขนส่ง เขตกรุงเทพฯ และปริมณฑล", "quantity": 1, "units": "งาน", "rate": 12000.00, "amount": 12000.00 },
+      { "item": "FLR-CPT-SQM", "description": "พรมปูพื้นสำนักงานแบบแผ่น (ต่อตารางเมตร)", "quantity": 85, "units": "ตร.ม.", "rate": 320.00, "amount": 27200.00 },
+      { "item": "WND-RLB-STD", "description": "ผ้าม่านม้วนกันแสง ระบบโซ่ดึง", "quantity": 12, "units": "ชุด", "rate": 1450.00, "amount": 17400.00 }
+    ],
+    "subtotal": 308350.00,
+    "discounttotal": -9250.50,
+    "taxtotal": 20936.97,
+    "total": 320036.47
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "phone": "0-2740-1234",
+    "email": "billing@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": ""
+  },
+  "context": {
+    "today": "17/07/2026",
+    "now": "17/07/2026 09:30",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}
