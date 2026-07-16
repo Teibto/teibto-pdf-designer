@@ -1,0 +1,274 @@
+<?xml version="1.0"?>
+<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
+<#--
+  ใบแจ้งหนี้ — master template · Issue #8
+  @author Wichit Wongta
+  @since 2026-07-17
+  โครง/CSS/macro/font pattern เดียวกับ tax-invoice.xml (reference ของ Standard Template Pack)
+  กติกา: docs/TOOLSTACK.md + templates/README.md (binding null-safe ทุกตัว,
+  header/footer ผ่าน macrolist, ฟอนต์ไทย embed เท่านั้น)
+
+  จุดต่อลูกค้าทั้งหมดมาจาก ${company.*} = config record customrecord_pld_config
+  ของแต่ละ account (#9) — รวมถึง URL ฟอนต์ไทย (company.fontRegular / company.fontBold)
+  → ไฟล์นี้ save เข้า account ได้ตรง ๆ ไม่ต้องแก้อะไรเลย · ดู engine/DEPLOYMENT.md §Company Config
+  URL ใน attribute ต้องผ่าน ?xml เสมอ (ค่า config มี & ดิบ — ไม่ escape = BFO parse พัง)
+
+  ฝั่งผู้ซื้อ: เลขผู้เสียภาษี/สาขาใช้ field มาตรฐานกลาง custbody_buyer_taxid /
+  custbody_buyer_branch — account ที่ใช้ field id อื่น แก้ mapping สองจุดนี้
+-->
+
+<#-- ═══ จำนวนเงินเป็นตัวอักษรไทย (บาทถ้วน/สตางค์) ═══ -->
+<#assign PLD_DIGITS = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"]>
+<#assign PLD_PLACES = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"]>
+
+<#-- อ่านเลข 0..999999 หนึ่งกลุ่ม (กติกา: สิบ ไม่ใช่หนึ่งสิบ · ยี่สิบ · เอ็ด ท้ายเลขที่มากกว่าสิบ
+     หรือกลุ่มที่มีหลักล้านนำหน้า เช่น 1000001 = หนึ่งล้านเอ็ด) -->
+<#function pldReadGroup g hasHigher>
+  <#local s = "">
+  <#local str = g?c>
+  <#local len = str?length>
+  <#list 0..(len - 1) as i>
+    <#local d = str[i..i]?number>
+    <#local p = len - i - 1>
+    <#if d != 0>
+      <#if p == 1>
+        <#if d == 1><#local s = s + "สิบ">
+        <#elseif d == 2><#local s = s + "ยี่สิบ">
+        <#else><#local s = s + PLD_DIGITS[d] + "สิบ"></#if>
+      <#elseif p == 0 && d == 1 && (g gt 10 || hasHigher)>
+        <#local s = s + "เอ็ด">
+      <#else>
+        <#local s = s + PLD_DIGITS[d] + PLD_PLACES[p]>
+      </#if>
+    </#if>
+  </#list>
+  <#return s>
+</#function>
+
+<#function pldBahtText amount>
+  <#-- N/render คืนเลขจาก * และ % เป็น double (25 % 100 = "25.0") — ?int ทุกจุดก่อน ?c
+       ไม่งั้น g?c ได้ "25.0" แล้ว "."?number พังเงียบทั้ง function -->
+  <#local total = (((amount?abs) * 100)?round)?int>
+  <#local baht = (total / 100)?int>
+  <#local satang = (total % 100)?int>
+  <#local words = "">
+  <#if baht == 0>
+    <#local words = "ศูนย์">
+  <#else>
+    <#local remaining = baht>
+    <#local groups = []>
+    <#list 1..3 as pass>
+      <#if remaining gt 0>
+        <#local groups = [(remaining % 1000000)?int] + groups>
+        <#local remaining = (remaining / 1000000)?int>
+      </#if>
+    </#list>
+    <#list groups as g>
+      <#local words = words + pldReadGroup(g, (g_index gt 0))>
+      <#if g_has_next><#local words = words + "ล้าน"></#if>
+    </#list>
+  </#if>
+  <#if satang == 0>
+    <#return words + "บาทถ้วน">
+  <#else>
+    <#return words + "บาท" + pldReadGroup(satang, false) + "สตางค์">
+  </#if>
+</#function>
+
+<pdf>
+<head>
+<link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />
+<macrolist>
+  <macro id="nlheader">
+    <table style="width: 100%;">
+      <tr>
+        <td style="width: 58%;">
+          <p class="cell">
+          <#if (company.logo!"") != ""><img src="${(company.logo)?xml}" style="width: 64pt;" /><br /></#if>
+          <span class="company-name">${company.name!""}</span><br />
+          <span>${company.address!""}</span><br />
+          <span>โทร. ${company.phone!""}<#if (company.email!"") != ""> อีเมล ${company.email}</#if></span><br />
+          <span class="bold">เลขประจำตัวผู้เสียภาษี ${company.taxId!""} ${company.branch!"สำนักงานใหญ่ (Head Office)"}</span>
+          </p>
+        </td>
+        <td style="width: 42%; text-align: right;">
+          <span class="doc-title">ใบแจ้งหนี้</span><br />
+          <span class="doc-title-en">INVOICE</span><br />
+          <span class="doc-copy">${record.custbody_doc_copy_label!"ต้นฉบับ (Original)"}</span><br />
+          <span>เลขที่ (No.) <span class="bold">${record.tranid!""}</span></span><br />
+          <span>วันที่ (Date) <span class="bold">${record.trandate!""}</span></span>
+        </td>
+      </tr>
+    </table>
+    <hr class="header-rule" />
+  </macro>
+  <macro id="nlfooter">
+    <table style="width: 100%;">
+      <tr>
+        <td class="footer-note">เอกสารเลขที่ ${record.tranid!""} จัดทำโดยระบบคอมพิวเตอร์ (Computer-generated document)</td>
+        <td class="footer-note" style="text-align: right;">หน้า (Page) <pagenumber/> / <totalpages/></td>
+      </tr>
+    </table>
+  </macro>
+</macrolist>
+<style type="text/css">
+body { font-family: THSarabunNew, sans-serif; font-size: 12pt; color: #000000; }
+table { border-collapse: collapse; }
+td, th { padding: 2pt 4pt; vertical-align: top; }
+.bold { font-weight: bold; }
+.company-name { font-size: 15pt; font-weight: bold; }
+.doc-title { font-size: 17pt; font-weight: bold; }
+.doc-title-en { font-size: 11pt; color: #333333; }
+.doc-copy { font-size: 11pt; font-weight: bold; }
+.header-rule { border: none; border-top: 1pt solid #000000; margin-top: 4pt; }
+.section-label { font-size: 10pt; font-weight: bold; color: #555555; }
+.party-box td { border: 0.5pt solid #000000; padding: 4pt 6pt; }
+.items th { border: 0.5pt solid #000000; background-color: #eeeeee; text-align: center; font-weight: bold; padding: 3pt 4pt; }
+.items td { border: 0.5pt solid #000000; padding: 3pt 4pt; }
+/* BFO justify ข้อความเปล่าใน td ที่ wrap หลายบรรทัด (ช่องไฟยืด, cluster ไทยแตก) — text-align
+   บน td หรือ align attr เอาไม่อยู่ ต้องห่อเนื้อหา cell ด้วย block p ที่ระบุ alignment เอง */
+p.cell { margin: 0; text-align: left; }
+p.cell-c { margin: 0; text-align: center; }
+.desc { font-size: 10pt; color: #444444; }
+td.c { text-align: center; }
+td.r { text-align: right; }
+.summary td { padding: 2pt 6pt; }
+.grand td { font-weight: bold; font-size: 13pt; border-top: 1pt solid #000000; border-bottom: 2pt solid #000000; }
+.amount-text { font-weight: bold; }
+.sig-box { border: 0.5pt solid #000000; text-align: center; padding: 6pt 4pt; }
+.footer-note { font-size: 9pt; color: #555555; }
+</style>
+</head>
+<body header="nlheader" header-height="120pt" footer="nlfooter" footer-height="26pt" size="A4" padding="0.35in">
+
+<#-- ═══ ลูกค้า + เงื่อนไขเอกสาร ═══ -->
+<table class="party-box" style="width: 100%;">
+  <tr>
+    <td style="width: 62%;">
+      <p class="cell">
+      <span class="section-label">ลูกค้า (Customer)</span><br />
+      <span class="bold">${record.entity!""}</span><br />
+      <span>${record.billaddress!""}</span><br />
+      <span>เลขประจำตัวผู้เสียภาษี ${record.custbody_buyer_taxid!""} สาขา ${record.custbody_buyer_branch!""}</span>
+      </p>
+    </td>
+    <td style="width: 38%;">
+      <p class="cell">
+      <span class="section-label">อ้างอิง (Reference)</span><br />
+      <span>ใบสั่งซื้อ (PO No.): ${record.otherrefnum!""}</span><br />
+      <span>เงื่อนไขชำระเงิน (Terms): ${record.terms!""}</span><br />
+      <span>ครบกำหนด (Due Date): ${record.duedate!""}</span><br />
+      <span>ผู้ขาย (Sales Rep): ${record.salesrep!""}</span>
+      </p>
+    </td>
+  </tr>
+</table>
+
+<br />
+
+<#-- ═══ รายการสินค้า/บริการ ═══ -->
+<table class="items" style="width: 100%;">
+  <thead>
+    <tr>
+      <th style="width: 7%;">ลำดับ<br />No.</th>
+      <th style="width: 43%;">รายการ<br />Description</th>
+      <th style="width: 9%;">จำนวน<br />Qty</th>
+      <th style="width: 9%;">หน่วย<br />Unit</th>
+      <th style="width: 16%;">ราคาต่อหน่วย<br />Unit Price</th>
+      <th style="width: 16%;">จำนวนเงิน<br />Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    <#list (record.item)![] as line>
+    <tr>
+      <td class="c">${line_index + 1}</td>
+      <td><p class="cell">${line.item!""}<#if (line.description!"") != ""><br /><span class="desc">${line.description}</span></#if></p></td>
+      <td class="c">${(line.quantity!0)?string["#,##0.##"]}</td>
+      <td class="c">${line.units!""}</td>
+      <td class="r">${(line.rate!0)?string["#,##0.00"]}</td>
+      <td class="r">${(line.amount!0)?string["#,##0.00"]}</td>
+    </tr>
+    </#list>
+  </tbody>
+</table>
+
+<#-- ═══ สรุปยอด + จำนวนเงินตัวอักษร ═══ -->
+<table class="summary" style="width: 100%;">
+  <tr>
+    <td style="width: 55%;">
+      <p class="cell">
+      <br />
+      <span class="section-label">จำนวนเงินรวมทั้งสิ้น (ตัวอักษร)</span><br />
+      <span class="amount-text">(${pldBahtText(record.total!0)})</span>
+      <#if (record.memo!"") != "">
+      <br /><br />
+      <span class="section-label">หมายเหตุ (Remarks)</span><br />
+      <span>${record.memo}</span>
+      </#if>
+      </p>
+    </td>
+    <td style="width: 45%;">
+      <table style="width: 100%;">
+        <tr>
+          <td><p class="cell">รวมมูลค่าสินค้า/บริการ (Subtotal)</p></td>
+          <td class="r">${(record.subtotal!0)?string["#,##0.00"]}</td>
+        </tr>
+        <#if (record.discounttotal!0) != 0>
+        <tr>
+          <td><p class="cell">ส่วนลด (Discount)</p></td>
+          <td class="r">${((record.discounttotal!0)?abs)?string["#,##0.00"]}</td>
+        </tr>
+        <tr>
+          <td><p class="cell">มูลค่าหลังหักส่วนลด (Net Amount)</p></td>
+          <td class="r">${((record.subtotal!0) + (record.discounttotal!0))?string["#,##0.00"]}</td>
+        </tr>
+        </#if>
+        <tr>
+          <td><p class="cell">ภาษีมูลค่าเพิ่ม (VAT)</p></td>
+          <td class="r">${(record.taxtotal!0)?string["#,##0.00"]}</td>
+        </tr>
+        <tr class="grand">
+          <td><p class="cell">จำนวนเงินรวมทั้งสิ้น (Grand Total)</p></td>
+          <td class="r">${(record.total!0)?string["#,##0.00"]}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<br /><br />
+
+<#-- ═══ ช่องลายเซ็น ═══ -->
+<table style="width: 100%;">
+  <tr>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ผู้วางบิล (Billed by)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+    <td style="width: 2%;"> </td>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ผู้รับวางบิล (Received by)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+    <td style="width: 2%;"> </td>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ผู้มีอำนาจลงนาม (Authorized Signature)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+  </tr>
+</table>
+
+</body>
+</pdf>

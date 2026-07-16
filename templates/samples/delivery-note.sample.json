@@ -1,0 +1,41 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · เอกสารส่งของไม่แสดงราคา — line มีเฉพาะ item/description/quantity/units · entity = ลูกค้า, shipaddress = สถานที่ส่งมอบ, createdfrom = ใบสั่งขายต้นทาง · @author Wichit Wongta @since 2026-07-17",
+  "record": {
+    "tranid": "DN-2026-0089",
+    "trandate": "17/07/2026",
+    "createdfrom": "SO-2026-0074",
+    "otherrefnum": "PO-90455",
+    "entity": "บริษัท สยามเทครุ่งเรือง จำกัด",
+    "shipaddress": "อาคารคลังสินค้า B ชั้น 1 — 55/9 ถนนสาทรใต้ แขวงทุ่งมหาเมฆ เขตสาทร กรุงเทพมหานคร 10120",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "โปรดตรวจนับสินค้าให้ครบถ้วนก่อนลงนามรับสินค้า",
+    "item": [
+      { "item": "OFC-DSK-A", "description": "โต๊ะทำงานผู้บริหาร ท็อปไม้วอลนัท 160x80 ซม.", "quantity": 10, "units": "ตัว" },
+      { "item": "OFC-CHR-B", "description": "เก้าอี้สำนักงานตาข่ายระบายอากาศ รับประกัน 3 ปี", "quantity": 30, "units": "ตัว" },
+      { "item": "NET-SW-24P", "description": "สวิตช์เครือข่าย 24 พอร์ต Gigabit", "quantity": 6, "units": "เครื่อง" },
+      { "item": "CBL-CAT6-305", "description": "สายแลน CAT6 กล่อง 305 เมตร", "quantity": 5, "units": "กล่อง" },
+      { "item": "ACC-KBD-TRAY", "description": "ถาดวางคีย์บอร์ดใต้โต๊ะ แบบรางเลื่อน", "quantity": 10, "units": "ชุด" }
+    ]
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
+    "phone": "0-2740-1234",
+    "email": "logistics@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
+  },
+  "context": {
+    "today": "17/07/2026",
+    "now": "17/07/2026 09:30",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}

@@ -1,0 +1,170 @@
+<?xml version="1.0"?>
+<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
+<#--
+  ใบส่งสินค้า — master template · Issue #8
+  @author Wichit Wongta
+  @since 2026-07-17
+  โครง/CSS/macro/font pattern เดียวกับ tax-invoice.xml (reference ของ Standard Template Pack)
+  กติกา: docs/TOOLSTACK.md + templates/README.md (binding null-safe ทุกตัว,
+  header/footer ผ่าน macrolist, ฟอนต์ไทย embed เท่านั้น)
+
+  จุดต่อลูกค้าทั้งหมดมาจาก ${company.*} = config record customrecord_pld_config
+  ของแต่ละ account (#9) — ไฟล์นี้ save เข้า account ได้ตรง ๆ ไม่ต้องแก้อะไรเลย
+
+  Field mapping ฝั่ง itemfulfillment: entity = ลูกค้า, shipaddress = สถานที่ส่งมอบ,
+  createdfrom = ใบสั่งขายต้นทาง — เอกสารส่งของไม่แสดงราคา จึงไม่มีส่วนสรุปยอด/ตัวอักษร
+-->
+
+<pdf>
+<head>
+<link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />
+<macrolist>
+  <macro id="nlheader">
+    <table style="width: 100%;">
+      <tr>
+        <td style="width: 58%;">
+          <p class="cell">
+          <#if (company.logo!"") != ""><img src="${(company.logo)?xml}" style="width: 64pt;" /><br /></#if>
+          <span class="company-name">${company.name!""}</span><br />
+          <span>${company.address!""}</span><br />
+          <span>โทร. ${company.phone!""}<#if (company.email!"") != ""> อีเมล ${company.email}</#if></span><br />
+          <span class="bold">เลขประจำตัวผู้เสียภาษี ${company.taxId!""} ${company.branch!"สำนักงานใหญ่ (Head Office)"}</span>
+          </p>
+        </td>
+        <td style="width: 42%; text-align: right;">
+          <span class="doc-title">ใบส่งสินค้า</span><br />
+          <span class="doc-title-en">DELIVERY NOTE</span><br />
+          <span class="doc-copy">${record.custbody_doc_copy_label!"ต้นฉบับ (Original)"}</span><br />
+          <span>เลขที่ (No.) <span class="bold">${record.tranid!""}</span></span><br />
+          <span>วันที่ (Date) <span class="bold">${record.trandate!""}</span></span>
+        </td>
+      </tr>
+    </table>
+    <hr class="header-rule" />
+  </macro>
+  <macro id="nlfooter">
+    <table style="width: 100%;">
+      <tr>
+        <td class="footer-note">เอกสารเลขที่ ${record.tranid!""} จัดทำโดยระบบคอมพิวเตอร์ (Computer-generated document)</td>
+        <td class="footer-note" style="text-align: right;">หน้า (Page) <pagenumber/> / <totalpages/></td>
+      </tr>
+    </table>
+  </macro>
+</macrolist>
+<style type="text/css">
+body { font-family: THSarabunNew, sans-serif; font-size: 12pt; color: #000000; }
+table { border-collapse: collapse; }
+td, th { padding: 2pt 4pt; vertical-align: top; }
+.bold { font-weight: bold; }
+.company-name { font-size: 15pt; font-weight: bold; }
+.doc-title { font-size: 17pt; font-weight: bold; }
+.doc-title-en { font-size: 11pt; color: #333333; }
+.doc-copy { font-size: 11pt; font-weight: bold; }
+.header-rule { border: none; border-top: 1pt solid #000000; margin-top: 4pt; }
+.section-label { font-size: 10pt; font-weight: bold; color: #555555; }
+.party-box td { border: 0.5pt solid #000000; padding: 4pt 6pt; }
+.items th { border: 0.5pt solid #000000; background-color: #eeeeee; text-align: center; font-weight: bold; padding: 3pt 4pt; }
+.items td { border: 0.5pt solid #000000; padding: 3pt 4pt; }
+/* BFO justify ข้อความเปล่าใน td ที่ wrap หลายบรรทัด (ช่องไฟยืด, cluster ไทยแตก) — text-align
+   บน td หรือ align attr เอาไม่อยู่ ต้องห่อเนื้อหา cell ด้วย block p ที่ระบุ alignment เอง */
+p.cell { margin: 0; text-align: left; }
+p.cell-c { margin: 0; text-align: center; }
+.desc { font-size: 10pt; color: #444444; }
+td.c { text-align: center; }
+td.r { text-align: right; }
+.amount-text { font-weight: bold; }
+.sig-box { border: 0.5pt solid #000000; text-align: center; padding: 6pt 4pt; }
+.footer-note { font-size: 9pt; color: #555555; }
+</style>
+</head>
+<body header="nlheader" header-height="120pt" footer="nlfooter" footer-height="26pt" size="A4" padding="0.35in">
+
+<#-- ═══ ลูกค้า + อ้างอิง ═══ -->
+<table class="party-box" style="width: 100%;">
+  <tr>
+    <td style="width: 62%;">
+      <p class="cell">
+      <span class="section-label">ลูกค้า (Customer)</span><br />
+      <span class="bold">${record.entity!""}</span><br />
+      <span class="section-label">สถานที่ส่งมอบ (Ship To)</span><br />
+      <span>${record.shipaddress!""}</span>
+      </p>
+    </td>
+    <td style="width: 38%;">
+      <p class="cell">
+      <span class="section-label">อ้างอิง (Reference)</span><br />
+      <span>ใบสั่งขาย (SO No.): ${record.createdfrom!""}</span><br />
+      <span>ใบสั่งซื้อลูกค้า (PO No.): ${record.otherrefnum!""}</span>
+      </p>
+    </td>
+  </tr>
+</table>
+
+<br />
+
+<#-- ═══ รายการสินค้า (เอกสารส่งของ — ไม่แสดงราคา) ═══ -->
+<table class="items" style="width: 100%;">
+  <thead>
+    <tr>
+      <th style="width: 8%;">ลำดับ<br />No.</th>
+      <th style="width: 62%;">รายการ<br />Description</th>
+      <th style="width: 15%;">จำนวน<br />Qty</th>
+      <th style="width: 15%;">หน่วย<br />Unit</th>
+    </tr>
+  </thead>
+  <tbody>
+    <#list (record.item)![] as line>
+    <tr>
+      <td class="c">${line_index + 1}</td>
+      <td><p class="cell">${line.item!""}<#if (line.description!"") != ""><br /><span class="desc">${line.description}</span></#if></p></td>
+      <td class="c">${(line.quantity!0)?string["#,##0.##"]}</td>
+      <td class="c">${line.units!""}</td>
+    </tr>
+    </#list>
+  </tbody>
+</table>
+
+<#if (record.memo!"") != "">
+<br />
+<p class="cell">
+<span class="section-label">หมายเหตุ (Remarks)</span><br />
+<span>${record.memo}</span>
+</p>
+</#if>
+
+<br /><br />
+
+<#-- ═══ ช่องลายเซ็น ═══ -->
+<table style="width: 100%;">
+  <tr>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ผู้รับสินค้า (Received by)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+    <td style="width: 2%;"> </td>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ผู้ส่งสินค้า (Delivered by)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+    <td style="width: 2%;"> </td>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ผู้ตรวจสอบ (Checked by)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+  </tr>
+</table>
+
+</body>
+</pdf>

@@ -1,0 +1,49 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ยอดเงินคำนวณสอดคล้องกัน: subtotal 152,500.00 − ส่วนลด 2,500.00 = 150,000.00 + VAT 7% 10,500.00 = 160,500.00 (ตัวอักษร: หนึ่งแสนหกหมื่นห้าร้อยบาทถ้วน) · @author Wichit Wongta @since 2026-07-17",
+  "record": {
+    "tranid": "INV-2026-0107",
+    "trandate": "17/07/2026",
+    "duedate": "16/08/2026",
+    "otherrefnum": "PO-90455",
+    "terms": "Net 30",
+    "salesrep": "วรรณา ศรีสุข",
+    "entity": "บริษัท สยามเทครุ่งเรือง จำกัด",
+    "billaddress": "55/9 อาคารสาทรซิตี้ทาวเวอร์ ชั้น 21 ถนนสาทรใต้ แขวงทุ่งมหาเมฆ เขตสาทร กรุงเทพมหานคร 10120",
+    "custbody_buyer_taxid": "0105549123456",
+    "custbody_buyer_branch": "สำนักงานใหญ่",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "กรุณาชำระภายในกำหนด — เกินกำหนดคิดดอกเบี้ยตามเงื่อนไขสัญญา",
+    "item": [
+      { "item": "OFC-DSK-A", "description": "โต๊ะทำงานผู้บริหาร ท็อปไม้วอลนัท 160x80 ซม.", "quantity": 10, "units": "ตัว", "rate": 2500.00, "amount": 25000.00 },
+      { "item": "OFC-CHR-B", "description": "เก้าอี้สำนักงานตาข่ายระบายอากาศ รับประกัน 3 ปี", "quantity": 30, "units": "ตัว", "rate": 1500.00, "amount": 45000.00 },
+      { "item": "NET-SW-24P", "description": "สวิตช์เครือข่าย 24 พอร์ต Gigabit พร้อมติดตั้งในตู้แร็ค", "quantity": 6, "units": "เครื่อง", "rate": 5000.00, "amount": 30000.00 },
+      { "item": "CBL-CAT6-305", "description": "สายแลน CAT6 กล่อง 305 เมตร พร้อมค่าเดินสาย", "quantity": 5, "units": "กล่อง", "rate": 3700.00, "amount": 18500.00 },
+      { "item": "SVC-SETUP", "description": "ค่าบริการติดตั้งระบบและทดสอบการใช้งาน (ต่อวันทำงาน)", "quantity": 8, "units": "วัน", "rate": 4250.00, "amount": 34000.00 }
+    ],
+    "subtotal": 152500.00,
+    "discounttotal": -2500.00,
+    "taxtotal": 10500.00,
+    "total": 160500.00
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
+    "phone": "0-2740-1234",
+    "email": "billing@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
+  },
+  "context": {
+    "today": "17/07/2026",
+    "now": "17/07/2026 09:30",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}
