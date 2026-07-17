@@ -14,6 +14,7 @@ import { createDefaultPagination } from '../models/template';
 import { validateTemplate } from './validation.service';
 import { migrateTemplate, needsMigration, CURRENT_VERSION } from './migration.service';
 import { clearPaginationCache } from './pagination.service';
+import { elementsToBands } from './band-layout.service';
 import { extractJsonKeys } from '../state/actions';
 
 const TEMPLATE_PREFIX = 'pld-template-';
@@ -62,6 +63,9 @@ export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
     page: structuredClone(state.page),
     pagination: structuredClone(state.pagination),
     elements: structuredClone(state.elements),
+    // Persist band edits so they survive reload (#47 3b). Only when non-empty —
+    // an element-only template regenerates its bands from elements on load.
+    bands: state.bands.length ? structuredClone(state.bands) : undefined,
     jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
   };
 
@@ -119,6 +123,9 @@ export async function loadTemplate(
   const template = data as unknown as DocumentTemplate;
   store.dispatch((d) => {
     d.elements = template.elements;
+    // Restore persisted bands; legacy element-only templates regenerate them from
+    // elements so band mode always has a structure (#47 3b).
+    d.bands = template.bands ?? elementsToBands(template.elements);
     d.page = template.page;
     d.pagination = { ...createDefaultPagination(), ...template.pagination };
     d.jsonData = template.jsonData || null;
@@ -160,6 +167,7 @@ export function exportTemplateJson(store: AppStore): string {
     page: structuredClone(state.page),
     pagination: structuredClone(state.pagination),
     elements: structuredClone(state.elements),
+    bands: state.bands.length ? structuredClone(state.bands) : undefined,
     jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
   };
 
@@ -219,6 +227,7 @@ export function importTemplateJson(
   const template = raw as unknown as DocumentTemplate;
   store.dispatch((d) => {
     d.elements = template.elements || [];
+    d.bands = template.bands ?? elementsToBands(template.elements || []);
     d.page = template.page || createDefaultPage();
     d.pagination = { ...createDefaultPagination(), ...(template.pagination || {}) };
     d.jsonData = template.jsonData || null;
