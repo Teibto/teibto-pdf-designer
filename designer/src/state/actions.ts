@@ -918,3 +918,46 @@ export function moveElementToCell(
     }
   }, { name: 'moveElementToCell', undoable: false }));
 }
+
+/**
+ * Add a new element into a specific cell (#49). The element is created in the
+ * shared pool via addElement, then re-roled to the band's role so it belongs here
+ * and survives a re-sync from canvas (an element with a mismatched role would jump
+ * bands). addElement already selects it, so the property panel opens on the new
+ * chip. (A restrictive type→role palette filter is a later #49 concern — no
+ * acceptance table exists yet, so any element type is accepted for now.)
+ */
+export function addElementToCell(
+  store: AppStore,
+  type: ElementType,
+  bandIdx: number,
+  rowIdx: number,
+  colIdx: number,
+): void {
+  const band = store.state.bands[bandIdx];
+  if (!band?.rows[rowIdx]?.columns[colIdx]) return;
+  const id = addElement(store, type, 0, 0); // pool + selection (geometry unused in band mode)
+  store.dispatch(tagAction((draft) => {
+    const el = draft.elements.find((e) => e.id === id);
+    if (el) el.role = band.role;
+    draft.bands[bandIdx].rows[rowIdx].columns[colIdx].elementIds.push(id);
+  }, { name: 'addElementToCell', undoable: false }));
+}
+
+/** Remove an element from BOTH the shared pool and its band cell (skip if locked). */
+export function removeBandElement(store: AppStore, elId: string): void {
+  const el = store.state.elements.find((e) => e.id === elId);
+  if (el?.locked) return;
+  store.dispatch(tagAction((draft) => {
+    draft.elements = draft.elements.filter((e) => e.id !== elId);
+    if (draft.selectedId === elId) draft.selectedId = null;
+    for (const band of draft.bands) {
+      for (const row of band.rows) {
+        for (const col of row.columns) {
+          const i = col.elementIds.indexOf(elId);
+          if (i >= 0) col.elementIds.splice(i, 1);
+        }
+      }
+    }
+  }, { name: 'removeBandElement', undoable: false }));
+}
