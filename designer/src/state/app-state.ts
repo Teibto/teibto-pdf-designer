@@ -5,6 +5,7 @@
  * @author Wichit Wongta
  */
 import type { CanvasElement } from '../models/element';
+import type { Band } from '../models/bands';
 import type { PageConfig } from '../models/page';
 import type { PaginationConfig } from '../models/template';
 
@@ -19,6 +20,11 @@ export interface GridConfig {
 export interface AppState {
   // ─── Canvas ───
   elements: CanvasElement[];
+  /** Band-mode layout (#13/#47). Regenerated from `elements` on band-mode entry;
+   *  edited directly by band actions; read by the band-mode export path. Empty
+   *  until band mode is entered. `elements` remains the source of truth for the
+   *  production canvas + element-path export until cutover. */
+  bands: Band[];
   selectedId: string | null;
   multiSelect: string[];
   zoom: number;

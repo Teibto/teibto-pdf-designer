@@ -23,6 +23,7 @@ import { ELEMENT_DEFAULTS } from '../models/element';
 import type { PageSizeName, Orientation } from '../models/page';
 import { resolvePageDimensions } from '../models/page';
 import { validatePropertyUpdate } from '../services/validation.service';
+import { elementsToBands, redistributeRowWidths } from '../services/band-layout.service';
 import { tagAction } from './middleware';
 
 // ═══════════════════════════════════════
@@ -794,4 +795,31 @@ export function deleteSelected(store: AppStore): void {
     draft.multiSelect = draft.multiSelect.filter((id) => !deletableIds.includes(id));
     draft.template.isDirty = true;
   });
+}
+
+// ═══════════════════════════════════════
+// BAND ACTIONS (#47) — band mode edits state.bands directly
+// ═══════════════════════════════════════
+
+/** Regenerate bands from the current elements (call on band-mode entry). */
+export function regenerateBands(store: AppStore): void {
+  store.dispatch((draft) => {
+    draft.bands = elementsToBands(current(draft).elements);
+  });
+}
+
+/** Set a column's width % and redistribute the row to keep the sum at 100. */
+export function setColumnWidth(
+  store: AppStore,
+  bandIdx: number,
+  rowIdx: number,
+  colIdx: number,
+  pct: number,
+): void {
+  store.dispatch(tagAction((draft) => {
+    const row = draft.bands[bandIdx]?.rows[rowIdx];
+    if (!row) return;
+    const widths = redistributeRowWidths(row.columns.map((c) => c.widthPct), colIdx, pct);
+    row.columns.forEach((c, i) => { c.widthPct = widths[i]; });
+  }, { name: 'setColumnWidth', undoable: true, batchKey: `bandw-${bandIdx}-${rowIdx}-${colIdx}` }));
 }

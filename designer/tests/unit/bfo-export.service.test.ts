@@ -4,7 +4,7 @@
  * @author Wichit Wongta
  */
 import { describe, it, expect } from 'vitest';
-import { exportBfoXml, type BfoExportOptions } from '../../src/services/bfo-export.service';
+import { exportBfoXml, renderBandsBody, type BfoExportOptions } from '../../src/services/bfo-export.service';
 import type { AppState } from '../../src/state/app-state';
 import { createDefaultPage } from '../../src/models/page';
 import { createDefaultPagination } from '../../src/models/template';
@@ -622,5 +622,36 @@ describe('band layout export (#45)', () => {
     // outer band table wraps, inner data table (<#list>) sits inside a <td>
     expect(xml).toContain('<table style="width: 100%; border-collapse: collapse;"><tr>');
     expect(xml).toMatch(/<td[^>]*>[\s\S]*<#list \(record\.order\.lines\)/);
+  });
+});
+
+// ═══════════════════════════════════════
+// BAND-MODE EXPORT (#47) — renderBandsBody reads state.bands directly
+// ═══════════════════════════════════════
+
+describe('renderBandsBody (#47 band-mode export path)', () => {
+  const twoColBand = (w0: number, w1: number) => ([{
+    role: 'content' as const,
+    rows: [{
+      id: 'content-r0',
+      columns: [
+        { id: 'c0', widthPct: w0, elements: [makeText({ content: 'A' })] },
+        { id: 'c1', widthPct: w1, elements: [makeText({ content: 'B' })] },
+      ],
+    }],
+  }]);
+
+  it('emits <td width%> straight from the band column widths', () => {
+    const html = renderBandsBody(twoColBand(30, 70));
+    expect(html).toContain('width: 30%');
+    expect(html).toContain('width: 70%');
+  });
+
+  it('a widthPct edit changes the BFO output (edit reaches print via band path)', () => {
+    const before = renderBandsBody(twoColBand(30, 70));
+    const after = renderBandsBody(twoColBand(55, 45));
+    expect(before).toContain('width: 30%');
+    expect(after).toContain('width: 55%');
+    expect(after).not.toContain('width: 30%');
   });
 });

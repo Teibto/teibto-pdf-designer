@@ -4,7 +4,7 @@
  * @author Wichit Wongta
  */
 import { describe, it, expect } from 'vitest';
-import { elementsToBands, bandsToElements, normalizeWidths } from '../../src/services/band-layout.service';
+import { elementsToBands, bandsToElements, normalizeWidths, redistributeRowWidths } from '../../src/services/band-layout.service';
 import { BAND_ORDER } from '../../src/models/bands';
 import type { CanvasElement, ElementRoleType } from '../../src/models/element';
 
@@ -129,5 +129,26 @@ describe('normalizeWidths', () => {
   });
   it('empty → empty', () => {
     expect(normalizeWidths([])).toEqual([]);
+  });
+});
+
+describe('redistributeRowWidths (#47)', () => {
+  it('sets target column and keeps row sum at 100', () => {
+    const w = redistributeRowWidths([30, 70], 0, 50);
+    expect(w[0]).toBe(50);
+    expect(w.reduce((s, v) => s + v, 0)).toBe(100);
+  });
+  it('clamps target to [5, 95]', () => {
+    expect(redistributeRowWidths([50, 50], 0, 200)[0]).toBe(95);
+    expect(redistributeRowWidths([50, 50], 0, -5)[0]).toBe(5);
+  });
+  it('distributes remainder across the other columns proportionally', () => {
+    const w = redistributeRowWidths([20, 30, 50], 0, 40); // others 30:50 share 60 → 22:38 (approx)
+    expect(w[0]).toBe(40);
+    expect(w.reduce((s, v) => s + v, 0)).toBe(100);
+    expect(w[2]).toBeGreaterThan(w[1]);
+  });
+  it('single column stays 100', () => {
+    expect(redistributeRowWidths([100], 0, 40)).toEqual([100]);
   });
 });

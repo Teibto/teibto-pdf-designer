@@ -15,7 +15,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
-import { elementsToBands } from '../../services/band-layout.service';
+import { regenerateBands, setColumnWidth } from '../../state/actions';
 import { ELEMENT_ROLES } from '../../constants/roles';
 
 @customElement('pld-band-view')
@@ -28,7 +28,9 @@ export class PldBandView extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    // re-render when the design changes (elements are the source of truth)
+    // Entering band mode: regenerate bands from elements once (#47). Band edits
+    // then live in state.bands; elements stay untouched until cutover.
+    regenerateBands(this.store);
     this.store.addEventListener('state-changed', this._onState);
   }
   disconnectedCallback() {
@@ -44,7 +46,9 @@ export class PldBandView extends LitElement {
     .band-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--color-bg-card, #1a1b25); }
     .row { display: flex; gap: 8px; }
     .cell { border: 1px dashed var(--color-border, #2a2c3a); border-radius: 6px; padding: 8px; min-height: 34px; display: flex; flex-direction: column; gap: 4px; }
-    .cell-w { font-size: 10px; font-family: var(--font-mono, monospace); color: var(--color-text-dim, #8a8ca0); }
+    .cell-w { display: flex; align-items: center; gap: 4px; font-size: 10px; font-family: var(--font-mono, monospace); color: var(--color-text-dim, #8a8ca0); }
+    .cell-w button { width: 16px; height: 16px; line-height: 1; border: 1px solid var(--color-border, #2a2c3a); border-radius: 3px; background: var(--color-bg-hover, #222430); color: var(--color-text, #e8e9f0); cursor: pointer; padding: 0; font-size: 11px; }
+    .cell-w button:disabled { opacity: .35; cursor: default; }
     .chip { font-size: 11px; color: var(--color-text, #e8e9f0); background: var(--color-bg-hover, #222430); border-radius: 4px; padding: 2px 6px; }
     .chip .t { color: var(--color-text-dim, #8a8ca0); font-family: var(--font-mono, monospace); font-size: 10px; }
     .empty { color: var(--color-text-dim, #8a8ca0); font-size: 13px; text-align: center; padding: 40px; }
@@ -52,22 +56,28 @@ export class PldBandView extends LitElement {
 
   render() {
     void this._tick;
-    const bands = elementsToBands(this.store.state.elements);
+    const bands = this.store.state.bands;
     if (bands.length === 0) return html`<div class="empty">ยังไม่มี element — กด Sample หรือวางของบน canvas ก่อน</div>`;
 
     return html`
       <div class="doc">
-        ${bands.map((band) => {
+        ${bands.map((band, bi) => {
           const role = ELEMENT_ROLES[band.role];
           return html`
             <div class="band" style="--band-color: ${role.color};">
               <div class="band-head">${role.label} <span style="opacity:.7;font-weight:400;">· ${band.rows.length} row</span></div>
               <div class="band-body">
-                ${band.rows.map((row) => html`
+                ${band.rows.map((row, ri) => html`
                   <div class="row">
-                    ${row.columns.map((col) => html`
+                    ${row.columns.map((col, ci) => html`
                       <div class="cell" style="flex: ${col.widthPct} 1 0;">
-                        <span class="cell-w">${col.widthPct}%</span>
+                        <span class="cell-w">
+                          ${row.columns.length > 1 ? html`
+                            <button ?disabled=${col.widthPct <= 5} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct - 5)}>−</button>
+                            <span>${col.widthPct}%</span>
+                            <button ?disabled=${col.widthPct >= 95} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct + 5)}>+</button>
+                          ` : html`<span>${col.widthPct}%</span>`}
+                        </span>
                         ${col.elements.length
                           ? col.elements.map((el) => html`<span class="chip">${el.name || el.type} <span class="t">${el.type}</span></span>`)
                           : nothing}

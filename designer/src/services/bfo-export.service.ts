@@ -180,6 +180,21 @@ function renderBand(
   return out.join('\n');
 }
 
+/**
+ * Render stored bands (state.bands) to BFO body HTML — the band-mode export path
+ * (#47). Reads bands directly so band edits (e.g. column widths) reach the output
+ * without going through the element path. Reuses the same renderBand as the
+ * element path, so band-mode output matches what #45 verified on SB2.
+ */
+export function renderBandsBody(
+  bands: Band[],
+  recordType = 'record',
+  useFreeMarker = true,
+  pagination?: PaginationConfig,
+): string {
+  return bands.map((band) => renderBand(band, recordType, useFreeMarker, pagination)).join('\n');
+}
+
 /** Render a single-role element group via the band model (row/column layout). */
 function renderElementsAsBands(
   els: CanvasElement[],
