@@ -15,11 +15,9 @@ import { ELEMENT_ROLES } from '../../constants/roles';
 import { resolveTemplateString, resolveBinding } from '../../services/binding.service';
 import { computePagination, finalizePagination } from '../../services/pagination.service';
 import { formatCellValue } from '../../utils/format';
-import { exportPdf } from '../../services/pdf-export.service';
 import { getCachedBarcodeSvg } from '../../services/barcode.service';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { isNetSuiteEnv, getNsContext, renderLivePreview, openRenderedPdf } from '../../services/netsuite-adapter.service';
-import { showToast } from '../shared/toast-notification';
 import '../shared/modal';
 
 @customElement('pld-preview-modal')
@@ -31,7 +29,6 @@ export class PldPreviewModal extends LitElement {
 
   @state() private previewPage = 1;
   @state() private totalPages = 1;
-  @state() private exporting = false;
   @state() private zoom = 90;
 
   // Server-side preview (#12) — real N/render PDF, only inside NetSuite + record
@@ -428,14 +425,6 @@ export class PldPreviewModal extends LitElement {
           <span class="zoom-label">${this.zoom}%</span>
           <button class="nav-btn" @click=${() => this.zoom = Math.min(200, this.zoom + 10)}>+</button>
         </div>
-
-        <button
-          class="export-btn"
-          ?disabled=${this.exporting}
-          @click=${this._exportPdf}
-        >
-          ${this.exporting ? '⟳ Generating...' : '📄 Export PDF'}
-        </button>
       </div>
 
       <!-- Preview Page -->
@@ -708,21 +697,6 @@ export class PldPreviewModal extends LitElement {
         </table>
       </div>
     `;
-  }
-
-  private async _exportPdf() {
-    this.exporting = true;
-    try {
-      await exportPdf(this.store.state, {
-        filename: `${this.store.state.template.name || 'document'}.pdf`,
-        openInNewTab: true,
-      });
-      showToast('PDF exported!', 'success');
-    } catch (err) {
-      showToast(`Export failed: ${err}`, 'error');
-    } finally {
-      this.exporting = false;
-    }
   }
 
   private _close() {
