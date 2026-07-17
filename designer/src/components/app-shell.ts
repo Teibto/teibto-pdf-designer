@@ -25,7 +25,6 @@ import { applyMiddleware } from '../state/middleware';
 import './layout/app-header';
 import './layout/template-bar';
 import './layout/sidebar-left';
-import './canvas/pdf-canvas';
 import './canvas/band-view';
 import './layout/sidebar-right';
 import './flow/flow-view';
