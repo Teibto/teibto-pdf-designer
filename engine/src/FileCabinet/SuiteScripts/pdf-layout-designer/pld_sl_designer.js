@@ -15,8 +15,9 @@ define([
   'N/search',
   'N/record',
   'N/log',
-  './pld_lib_company_config'
-], function (file, runtime, url, search, record, log, companyConfig) {
+  './pld_lib_company_config',
+  './pld_lib_invoice_data'
+], function (file, runtime, url, search, record, log, companyConfig, invoiceData) {
 
   /**
    * File Cabinet path of the built SPA bundle. deploy.sh (#39) stages
@@ -145,6 +146,11 @@ define([
   function buildNsContext(context) {
     const user = runtime.getCurrentUser();
     const script = runtime.getCurrentScript();
+    // Font URLs for embedding Thai in exported BFO XML: prefer script params, else
+    // fall back to the company-config record (which stores them) so Thai renders
+    // without needing the deployment params set.
+    var cfg = {};
+    try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
 
     const ctx = {
       userId: user.id,
@@ -161,8 +167,8 @@ define([
       recordId: context.request.parameters.recid || null,
       // File Cabinet URLs of THSarabunNew TTFs — designer embeds them as
       // <link type="font"> in exported BFO XML (server BFO has no Thai fonts)
-      fontRegularUrl: script.getParameter({ name: 'custscript_pld_font_regular' }) || null,
-      fontBoldUrl: script.getParameter({ name: 'custscript_pld_font_bold' }) || null,
+      fontRegularUrl: script.getParameter({ name: 'custscript_pld_font_regular' }) || cfg.fontRegular || null,
+      fontBoldUrl: script.getParameter({ name: 'custscript_pld_font_bold' }) || cfg.fontBold || null,
     };
 
     return ctx;
@@ -186,8 +192,12 @@ define([
         return;
       }
 
-      const rec = record.load({ type: recType, id: recId });
-      const data = extractRecordData(rec, recType);
+      // Invoices load the curated schema (SuiteQL) so the mapping UI's keys match
+      // exactly what the render binds (design = data = print). Other record types
+      // keep the raw extract for now.
+      const data = (recType === 'invoice')
+        ? invoiceData.buildInvoiceData(recId)
+        : extractRecordData(record.load({ type: recType, id: recId }), recType);
 
       context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
       context.response.write(JSON.stringify(data));
