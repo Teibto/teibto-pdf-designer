@@ -824,10 +824,10 @@ export function setColumnWidth(
   }, { name: 'setColumnWidth', undoable: true, batchKey: `bandw-${bandIdx}-${rowIdx}-${colIdx}` }));
 }
 
-// Band structural edits are tagged undoable:false on purpose: the history service
-// snapshots only `elements` + `selectedId`, never `bands`, so recording them would
-// push meaningless element snapshots that undo can't restore. Band mode is a
-// pre-cutover bridge; element undo takes over once bands become derived (slice 3).
+// Band structural edits are undoable (#47 cutover): the history service now
+// snapshots `state.bands` alongside elements, so Ctrl+Z restores band layout the
+// same as canvas edits. (addElementToCell stays undoable:false because the
+// addElement it calls already pushes the undo point — see there.)
 
 /** Insert a new empty row (one full-width empty column) into a band. */
 export function addBandRow(store: AppStore, bandIdx: number, atIdx?: number): void {
@@ -837,7 +837,7 @@ export function addBandRow(store: AppStore, bandIdx: number, atIdx?: number): vo
     const row = { id: nanoid(8), columns: [{ id: nanoid(8), widthPct: 100, elementIds: [] }] };
     const at = atIdx == null ? band.rows.length : Math.max(0, Math.min(atIdx, band.rows.length));
     band.rows.splice(at, 0, row);
-  }, { name: 'addBandRow', undoable: false }));
+  }, { name: 'addBandRow', undoable: true }));
 }
 
 /** Remove a row from a band. */
@@ -846,7 +846,7 @@ export function removeBandRow(store: AppStore, bandIdx: number, rowIdx: number):
     const band = draft.bands[bandIdx];
     if (!band?.rows[rowIdx]) return;
     band.rows.splice(rowIdx, 1);
-  }, { name: 'removeBandRow', undoable: false }));
+  }, { name: 'removeBandRow', undoable: true }));
 }
 
 /** Move a row up (dir=-1) or down (dir=+1) within its band. */
@@ -858,7 +858,7 @@ export function moveBandRow(store: AppStore, bandIdx: number, rowIdx: number, di
     if (to < 0 || to >= rows.length) return;
     const [row] = rows.splice(rowIdx, 1);
     rows.splice(to, 0, row);
-  }, { name: 'moveBandRow', undoable: false }));
+  }, { name: 'moveBandRow', undoable: true }));
 }
 
 /** Split a column into two — the new empty column shares the original's width. */
@@ -871,7 +871,7 @@ export function splitColumn(store: AppStore, bandIdx: number, rowIdx: number, co
     const right = col.widthPct - left;
     col.widthPct = left;
     row.columns.splice(colIdx + 1, 0, { id: nanoid(8), widthPct: right, elementIds: [] });
-  }, { name: 'splitColumn', undoable: false }));
+  }, { name: 'splitColumn', undoable: true }));
 }
 
 /** Merge a column into the previous one — elements concatenate, widths add. */
@@ -884,7 +884,7 @@ export function mergeColumn(store: AppStore, bandIdx: number, rowIdx: number, co
     prev.elementIds.push(...cur.elementIds);
     prev.widthPct += cur.widthPct;
     row.columns.splice(colIdx, 1);
-  }, { name: 'mergeColumn', undoable: false }));
+  }, { name: 'mergeColumn', undoable: true }));
 }
 
 /**
@@ -916,7 +916,7 @@ export function moveElementToCell(
         }
       }
     }
-  }, { name: 'moveElementToCell', undoable: false }));
+  }, { name: 'moveElementToCell', undoable: true }));
 }
 
 /**
@@ -941,6 +941,8 @@ export function addElementToCell(
     const el = draft.elements.find((e) => e.id === id);
     if (el) el.role = band.role;
     draft.bands[bandIdx].rows[rowIdx].columns[colIdx].elementIds.push(id);
+    // undoable:false — the addElement above already pushed the undo snapshot, so a
+    // single Ctrl+Z removes the whole "add element to cell" (element + band ref).
   }, { name: 'addElementToCell', undoable: false }));
 }
 
@@ -959,5 +961,5 @@ export function removeBandElement(store: AppStore, elId: string): void {
         }
       }
     }
-  }, { name: 'removeBandElement', undoable: false }));
+  }, { name: 'removeBandElement', undoable: true }));
 }

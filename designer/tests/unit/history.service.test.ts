@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { AppStore } from '../../src/state/store';
 import { HistoryService } from '../../src/services/history.service';
 import { applyMiddleware, tagAction } from '../../src/state/middleware';
-import { addElement, removeElement, selectElement, setZoom } from '../../src/state/actions';
+import { addElement, removeElement, selectElement, setZoom, regenerateBands, splitColumn, setColumnWidth } from '../../src/state/actions';
 
 function createStoreWithHistory() {
   const store = new AppStore();
@@ -201,5 +201,44 @@ describe('middleware cleanup', () => {
     // After cleanup, actions should NOT record history
     addElement(store, 'text', 50, 50);
     expect(history.canUndo).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════
+// BAND EDITS ARE UNDOABLE (#47 cutover)
+// ═══════════════════════════════════════
+
+describe('HistoryService — band edits', () => {
+  function seed() {
+    const { store, history } = createStoreWithHistory();
+    addElement(store, 'header', 0, 0);
+    addElement(store, 'header', 300, 0); // same row → 2 columns
+    regenerateBands(store);
+    return { store, history };
+  }
+
+  it('undo restores band structure after splitColumn', () => {
+    const { store, history } = seed();
+    const before = structuredClone(store.state.bands);
+    const colsBefore = store.state.bands[0].rows[0].columns.length;
+
+    splitColumn(store, 0, 0, 0);
+    expect(store.state.bands[0].rows[0].columns.length).toBe(colsBefore + 1);
+
+    history.undo();
+    expect(store.state.bands).toEqual(before);
+    expect(store.state.bands[0].rows[0].columns.length).toBe(colsBefore);
+  });
+
+  it('redo re-applies a band width edit', () => {
+    const { store, history } = seed();
+    setColumnWidth(store, 0, 0, 0, 25);
+    expect(store.state.bands[0].rows[0].columns[0].widthPct).toBe(25);
+
+    history.undo();
+    expect(store.state.bands[0].rows[0].columns[0].widthPct).not.toBe(25);
+
+    history.redo();
+    expect(store.state.bands[0].rows[0].columns[0].widthPct).toBe(25);
   });
 });
