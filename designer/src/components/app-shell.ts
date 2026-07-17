@@ -291,6 +291,9 @@ export class PldAppShell extends LitElement {
     clearPaginationCache();
     this.store.dispatch((draft) => {
       draft.elements = structuredClone(tpl.elements);
+      // Sample carries its band structure (#47 3b) — load it so band mode shows the
+      // authored layout directly instead of regenerating from elements on entry.
+      draft.bands = tpl.bands ? structuredClone(tpl.bands) : [];
       draft.page = { ...tpl.page };
       draft.pagination = { ...tpl.pagination };
       draft.jsonData = tpl.jsonData ? structuredClone(tpl.jsonData) : null;
