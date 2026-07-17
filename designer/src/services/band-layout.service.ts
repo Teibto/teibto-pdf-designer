@@ -77,7 +77,7 @@ function buildRow(role: string, ri: number, rowEls: CanvasElement[]): BandRow {
   const columns: BandColumn[] = ordered.map((el, ci) => ({
     id: `${role}-r${ri}-c${ci}`,
     widthPct: widths[ci],
-    elements: [el],
+    elementIds: [el.id],
   }));
 
   return { id: `${role}-r${ri}`, columns };
@@ -153,15 +153,24 @@ export function redistributeRowWidths(
 }
 
 /**
- * Flatten bands back to a plain element list (band → row → column → elements),
- * in document order. Read-model for the transition; no element is added or dropped.
+ * Flatten bands back to a plain element list (band → row → column order), in
+ * document order. Bands store element ids (#49 model B), so ids are resolved
+ * against `elements`; an id with no matching element is skipped (a stale ref,
+ * e.g. an element deleted on the free canvas). Read-model for the transition.
  */
-export function bandsToElements(bands: readonly Band[]): CanvasElement[] {
+export function bandsToElements(
+  bands: readonly Band[],
+  elements: readonly CanvasElement[],
+): CanvasElement[] {
+  const byId = new Map(elements.map((e) => [e.id, e]));
   const out: CanvasElement[] = [];
   for (const band of bands) {
     for (const row of band.rows) {
       for (const col of row.columns) {
-        for (const el of col.elements) out.push(el);
+        for (const id of col.elementIds) {
+          const el = byId.get(id);
+          if (el) out.push(el);
+        }
       }
     }
   }

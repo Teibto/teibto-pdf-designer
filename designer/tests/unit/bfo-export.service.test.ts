@@ -630,28 +630,42 @@ describe('band layout export (#45)', () => {
 // ═══════════════════════════════════════
 
 describe('renderBandsBody (#47 band-mode export path)', () => {
+  // Model B (#49): columns hold element ids; properties come from state.elements.
+  const elements = [makeText({ id: 'A', content: 'A' }), makeText({ id: 'B', content: 'B' })];
   const twoColBand = (w0: number, w1: number) => ([{
     role: 'content' as const,
     rows: [{
       id: 'content-r0',
       columns: [
-        { id: 'c0', widthPct: w0, elements: [makeText({ content: 'A' })] },
-        { id: 'c1', widthPct: w1, elements: [makeText({ content: 'B' })] },
+        { id: 'c0', widthPct: w0, elementIds: ['A'] },
+        { id: 'c1', widthPct: w1, elementIds: ['B'] },
       ],
     }],
   }]);
 
   it('emits <td width%> straight from the band column widths', () => {
-    const html = renderBandsBody(twoColBand(30, 70));
+    const html = renderBandsBody(twoColBand(30, 70), elements);
     expect(html).toContain('width: 30%');
     expect(html).toContain('width: 70%');
   });
 
   it('a widthPct edit changes the BFO output (edit reaches print via band path)', () => {
-    const before = renderBandsBody(twoColBand(30, 70));
-    const after = renderBandsBody(twoColBand(55, 45));
+    const before = renderBandsBody(twoColBand(30, 70), elements);
+    const after = renderBandsBody(twoColBand(55, 45), elements);
     expect(before).toContain('width: 30%');
     expect(after).toContain('width: 55%');
     expect(after).not.toContain('width: 30%');
+  });
+
+  it('resolves ids from state.elements — a property edit reaches print', () => {
+    const edited = [makeText({ id: 'A', content: 'EDITED-CONTENT' }), elements[1]];
+    const html = renderBandsBody(twoColBand(50, 50), edited);
+    expect(html).toContain('EDITED-CONTENT');
+  });
+
+  it('skips a stale id without crashing', () => {
+    const html = renderBandsBody(twoColBand(50, 50), [elements[1]]); // 'A' missing
+    expect(html).toContain('width: 50%'); // structure still renders
+    expect(html).not.toContain('>A<');
   });
 });

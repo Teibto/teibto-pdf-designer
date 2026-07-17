@@ -48,7 +48,7 @@ describe('elementsToBands', () => {
     ]);
     const row = bands[0].rows[0];
     expect(bands[0].rows).toHaveLength(1);
-    expect(row.columns.map((c) => c.elements[0].id)).toEqual(['left', 'right']);
+    expect(row.columns.map((c) => c.elementIds[0])).toEqual(['left', 'right']);
   });
 
   it('starts a NEW row when there is a clear vertical gap', () => {
@@ -57,8 +57,8 @@ describe('elementsToBands', () => {
       el('bottom', 'content', 0, 100, 200, 30),
     ]);
     expect(bands[0].rows).toHaveLength(2);
-    expect(bands[0].rows[0].columns[0].elements[0].id).toBe('top');
-    expect(bands[0].rows[1].columns[0].elements[0].id).toBe('bottom');
+    expect(bands[0].rows[0].columns[0].elementIds[0]).toBe('top');
+    expect(bands[0].rows[1].columns[0].elementIds[0]).toBe('bottom');
   });
 
   it('column widthPct in a row sums to exactly 100', () => {
@@ -94,7 +94,7 @@ describe('round-trip elementsToBands → bandsToElements', () => {
       el('f1', 'footer', 0, 720, 400, 20),
       el('w1', 'watermark', 100, 300, 300, 300),
     ];
-    const flat = bandsToElements(elementsToBands(els));
+    const flat = bandsToElements(elementsToBands(els), els);
     // no element lost
     expect(new Set(flat.map((e) => e.id))).toEqual(new Set(els.map((e) => e.id)));
     expect(flat).toHaveLength(els.length);
@@ -110,7 +110,15 @@ describe('round-trip elementsToBands → bandsToElements', () => {
 
   it('empty input → empty bands → empty elements', () => {
     expect(elementsToBands([])).toEqual([]);
-    expect(bandsToElements([])).toEqual([]);
+    expect(bandsToElements([], [])).toEqual([]);
+  });
+
+  it('skips a stale id (element deleted from the pool) without crashing', () => {
+    const els = [el('a', 'content', 0, 0, 100, 30), el('b', 'content', 0, 100, 100, 30)];
+    const bands = elementsToBands(els);
+    // element 'a' deleted from the shared pool → its band id is now stale
+    const flat = bandsToElements(bands, [els[1]]);
+    expect(flat.map((e) => e.id)).toEqual(['b']);
   });
 });
 

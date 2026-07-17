@@ -619,14 +619,14 @@ describe('addBandRow', () => {
     expect(rows).toHaveLength(before + 1);
     expect(rows[rows.length - 1].columns).toHaveLength(1);
     expect(rows[rows.length - 1].columns[0].widthPct).toBe(100);
-    expect(rows[rows.length - 1].columns[0].elements).toHaveLength(0);
+    expect(rows[rows.length - 1].columns[0].elementIds).toHaveLength(0);
   });
 
   it('inserts at the given index', () => {
     const store = createStoreWithBands();
     addBandRow(store, 1, 0); // content band, before its only row
-    expect(store.state.bands[1].rows[0].columns[0].elements).toHaveLength(0);
-    expect(store.state.bands[1].rows[1].columns[0].elements).toHaveLength(1);
+    expect(store.state.bands[1].rows[0].columns[0].elementIds).toHaveLength(0);
+    expect(store.state.bands[1].rows[1].columns[0].elementIds).toHaveLength(1);
   });
 
   it('no-op for a nonexistent band', () => {
@@ -677,8 +677,8 @@ describe('splitColumn', () => {
     const cols = store.state.bands[1].rows[0].columns;
     expect(cols).toHaveLength(2);
     expect(sumWidths(store, 1, 0)).toBe(100);
-    expect(cols[1].elements).toHaveLength(0); // new column is empty
-    expect(cols[0].elements).toHaveLength(1); // elements stay in the left column
+    expect(cols[1].elementIds).toHaveLength(0); // new column is empty
+    expect(cols[0].elementIds).toHaveLength(1); // elements stay in the left column
   });
 
   it('no-op for a missing column', () => {
@@ -696,7 +696,7 @@ describe('mergeColumn', () => {
     const cols = store.state.bands[0].rows[0].columns;
     expect(cols).toHaveLength(1);
     expect(cols[0].widthPct).toBe(100);
-    expect(cols[0].elements).toHaveLength(2);
+    expect(cols[0].elementIds).toHaveLength(2);
   });
 
   it('no-op when merging the first column', () => {
@@ -709,28 +709,28 @@ describe('mergeColumn', () => {
 describe('moveElementToCell', () => {
   it('re-parents an element to another cell within the band', () => {
     const store = createStoreWithBands();
-    const rightEl = store.state.bands[0].rows[0].columns[1].elements[0];
-    moveElementToCell(store, rightEl.id, 0, 0, 0); // move right → left cell
+    const rightId = store.state.bands[0].rows[0].columns[1].elementIds[0];
+    moveElementToCell(store, rightId, 0, 0, 0); // move right → left cell
     const cols = store.state.bands[0].rows[0].columns;
-    expect(cols[0].elements.map((e) => e.id)).toContain(rightEl.id);
-    expect(cols[1].elements).toHaveLength(0);
+    expect(cols[0].elementIds).toContain(rightId);
+    expect(cols[1].elementIds).toHaveLength(0);
   });
 
-  it('never touches element geometry', () => {
+  it('never touches element geometry (bands hold ids; state.elements unchanged)', () => {
     const store = createStoreWithBands();
-    const el = store.state.bands[0].rows[0].columns[1].elements[0];
-    const { x, y, w, h } = el;
-    moveElementToCell(store, el.id, 0, 0, 0);
-    const moved = store.state.bands[0].rows[0].columns[0].elements.find((e) => e.id === el.id)!;
-    expect([moved.x, moved.y, moved.w, moved.h]).toEqual([x, y, w, h]);
+    const id = store.state.bands[0].rows[0].columns[1].elementIds[0];
+    const before = structuredClone(store.state.elements.find((e) => e.id === id)!);
+    moveElementToCell(store, id, 0, 0, 0);
+    const after = store.state.elements.find((e) => e.id === id)!;
+    expect([after.x, after.y, after.w, after.h]).toEqual([before.x, before.y, before.w, before.h]);
   });
 
   it('is a no-op for an element in a different band (no cross-band moves)', () => {
     const store = createStoreWithBands();
-    const contentEl = store.state.bands[1].rows[0].columns[0].elements[0];
+    const contentId = store.state.bands[1].rows[0].columns[0].elementIds[0];
     // Try to move the content element into a header cell → rejected
-    moveElementToCell(store, contentEl.id, 0, 0, 0);
-    expect(store.state.bands[1].rows[0].columns[0].elements.map((e) => e.id)).toContain(contentEl.id);
-    expect(store.state.bands[0].rows[0].columns[0].elements.map((e) => e.id)).not.toContain(contentEl.id);
+    moveElementToCell(store, contentId, 0, 0, 0);
+    expect(store.state.bands[1].rows[0].columns[0].elementIds).toContain(contentId);
+    expect(store.state.bands[0].rows[0].columns[0].elementIds).not.toContain(contentId);
   });
 });
