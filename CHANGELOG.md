@@ -10,6 +10,7 @@
 - ESLint flat config `designer/eslint.config.js` (typescript-eslint) + script `lint` — quality-gate รัน `npm run lint` กลับมาแล้ว (จับ bug เป็น error, noise เชิงสไตล์เป็น warn); แก้ 3 error เดิม (`{}` type, `@ts-ignore` stale 2 จุด) (#17)
 
 ### Fixed
+- secret-scan false positive จาก `.qa-profiles/` (Chrome QA profile ที่ gitignore) — เพิ่ม `.gitleaks.toml` allowlist path นี้ (gitleaks auto-detect ที่ root, ไม่ต้องแตะ canonical `secret-scan.sh`); ยืนยันด้วย canary ว่า secret จริงนอก path ยังถูกจับ (#25)
 - วรรณยุกต์/สระไทยลอยหลุดจากฐานในทุก PDF (เห็นชัดบนฐานเตี้ย เช่น น้ำ ค่า) — เปลี่ยนฟอนต์ฝังจาก `THSarabunNew` เป็น `THSarabunPSK`. BFO ของ NetSuite ไม่ apply GPOS mark positioning; THSarabunNew พึ่ง GPOS ดึง mark ลง THSarabunPSK วาง mark ถูกใน glyph outline เอง. แก้ที่ไฟล์ฟอนต์ bundled (`engine/src/.../fonts/`) + DEPLOYMENT.md; template ไม่แตะ (อ้าง `${company.fontRegular/fontBold}` จาก config อยู่แล้ว) — พิสูจน์ด้วย render จริงบน SB2 (#32)
 
 ## [0.2.0] - 2026-07-17

@@ -1,0 +1,13 @@
+# gitleaks config — extend default rules + allowlist path ที่ gitignore ไม่มีวันเข้า commit (#25)
+# gitleaks auto-detect ไฟล์นี้ที่ root ของ scan target (secret-scan.sh เรียก `gitleaks dir .`)
+# ทำให้ gate R6 แดงเฉพาะของที่มีโอกาสหลุดจริง — ไม่ใช่ browser internals ของ QA profile
+# secret-scan.sh เป็น canonical จาก teibto-dev-standards (ห้ามแก้ per-repo) จึงคุม noise ที่ config นี้แทน
+# @author Wichit Wongta @since 2026-07-17
+title = "teibto-pdf-designer gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Chrome persistent QA profile (.qa-profiles/) — gitignored, browser internals ชน pattern (#25)"
+paths = ['''(^|/)\.qa-profiles/''']
