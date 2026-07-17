@@ -577,3 +577,50 @@ describe('barcode null-safety (#4)', () => {
     expect(xml).not.toContain('<#if');
   });
 });
+
+// ═══════════════════════════════════════
+// BAND LAYOUT (#45) — row/column → <table>
+// ═══════════════════════════════════════
+
+describe('band layout export (#45)', () => {
+  it('two elements on the same visual row → <table> with <td width%>', () => {
+    const state = createMockState([
+      makeText({ content: 'Left', x: 0, y: 10, w: 120, h: 30 }),
+      makeText({ content: 'Right', x: 200, y: 10, w: 280, h: 30 }),
+    ]);
+    const xml = exportBfoXml(state);
+
+    expect(xml).toContain('<table style="width: 100%; border-collapse: collapse;"><tr>');
+    expect(xml).toMatch(/<td style="width: \d+%; vertical-align: top;">/);
+    // widths proportional 120:280 ≈ 30:70
+    expect(xml).toContain('width: 30%');
+    expect(xml).toContain('width: 70%');
+  });
+
+  it('single element → no band table wrapper (flow passthrough, output unchanged)', () => {
+    const xml = exportBfoXml(createMockState([makeText({ content: 'solo' })]));
+    expect(xml).not.toContain('<table style="width: 100%; border-collapse: collapse;">');
+  });
+
+  it('two vertically-separated elements → two rows, neither wrapped in a band table', () => {
+    const state = createMockState([
+      makeText({ content: 'top', x: 0, y: 0, w: 200, h: 30 }),
+      makeText({ content: 'bottom', x: 0, y: 100, w: 200, h: 30 }),
+    ]);
+    const xml = exportBfoXml(state);
+    expect(xml).not.toContain('<table style="width: 100%; border-collapse: collapse;">');
+  });
+
+  it('a table placed beside text (multi-column row) nests inside a <td> (BFO nested table)', () => {
+    // table forced into content role so it shares a row with the text
+    const tbl = makeTable({ role: 'content', x: 250, y: 10, w: 250, h: 100 });
+    const state = createMockState([
+      makeText({ content: 'note', x: 0, y: 10, w: 200, h: 100 }),
+      tbl,
+    ]);
+    const xml = exportBfoXml(state);
+    // outer band table wraps, inner data table (<#list>) sits inside a <td>
+    expect(xml).toContain('<table style="width: 100%; border-collapse: collapse;"><tr>');
+    expect(xml).toMatch(/<td[^>]*>[\s\S]*<#list \(record\.order\.lines\)/);
+  });
+});

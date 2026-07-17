@@ -20,6 +20,8 @@ import type {
   ListElement,
 } from '../models/element';
 import { escapeXml, sanitizeColor, sanitizeNumericCss } from './validation.service';
+import { elementsToBands } from './band-layout.service';
+import type { Band } from '../models/bands';
 
 export interface BfoExportOptions {
   /**
@@ -146,6 +148,50 @@ function roleHeight(els: CanvasElement[], minHeight: number): number {
   return Math.max(Math.ceil(bottom - top) + 8, minHeight);
 }
 
+/**
+ * Render one band as BFO HTML (#13/#45). Each row with ≥2 columns becomes a
+ * `<table><tr><td width="%">` so BFO honors the horizontal placement exactly
+ * (design = print). A single-column row is emitted directly WITHOUT a table
+ * wrapper — this avoids needless nesting and, critically, keeps the item table
+ * (a lone full-width element) un-nested so its cross-page pagination is
+ * unaffected. Only a table deliberately placed beside another element nests.
+ */
+function renderBand(
+  band: Band,
+  recordType: string,
+  useFreeMarker: boolean,
+  pagination?: PaginationConfig,
+): string {
+  const out: string[] = [];
+  for (const row of band.rows) {
+    if (row.columns.length <= 1) {
+      const col = row.columns[0];
+      if (col) col.elements.forEach((el) => out.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+      continue;
+    }
+    out.push('<table style="width: 100%; border-collapse: collapse;"><tr>');
+    for (const col of row.columns) {
+      out.push(`<td style="width: ${col.widthPct}%; vertical-align: top;">`);
+      col.elements.forEach((el) => out.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+      out.push('</td>');
+    }
+    out.push('</tr></table>');
+  }
+  return out.join('\n');
+}
+
+/** Render a single-role element group via the band model (row/column layout). */
+function renderElementsAsBands(
+  els: CanvasElement[],
+  recordType: string,
+  useFreeMarker: boolean,
+  pagination?: PaginationConfig,
+): string {
+  return elementsToBands(els)
+    .map((band) => renderBand(band, recordType, useFreeMarker, pagination))
+    .join('\n');
+}
+
 /** Build <macrolist> with nlheader/nlfooter macros for repeat-on-every-page content */
 function buildMacrolist(
   headerElements: CanvasElement[],
@@ -159,13 +205,13 @@ function buildMacrolist(
 
   if (headerElements.length > 0) {
     lines.push('<macro id="nlheader">');
-    headerElements.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push(renderElementsAsBands(headerElements, recordType, useFreeMarker, pagination));
     lines.push('</macro>');
   }
 
   if (footerElements.length > 0) {
     lines.push('<macro id="nlfooter">');
-    footerElements.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push(renderElementsAsBands(footerElements, recordType, useFreeMarker, pagination));
     lines.push('<p style="font-size: 8pt; color: #888888; text-align: center;">Page <pagenumber/> of <totalpages/></p>');
     lines.push('</macro>');
   }
@@ -222,7 +268,7 @@ function buildBfoBody(
   if (header.length > 0) {
     lines.push('<!-- ═══ HEADER ═══ -->');
     lines.push('<div id="header" style="margin-bottom: 12pt;">');
-    header.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push(renderElementsAsBands(header, recordType, useFreeMarker, pagination));
     lines.push('</div>');
     lines.push('');
   }
@@ -231,7 +277,7 @@ function buildBfoBody(
   if (content.length > 0) {
     lines.push('<!-- ═══ CONTENT ═══ -->');
     lines.push('<div id="content">');
-    content.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push(renderElementsAsBands(content, recordType, useFreeMarker, pagination));
     lines.push('</div>');
     lines.push('');
   }
@@ -239,7 +285,7 @@ function buildBfoBody(
   // Table section
   if (tables.length > 0) {
     lines.push('<!-- ═══ TABLE ═══ -->');
-    tables.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push(renderElementsAsBands(tables, recordType, useFreeMarker, pagination));
     lines.push('');
   }
 
@@ -247,7 +293,7 @@ function buildBfoBody(
   if (summary.length > 0) {
     lines.push('<!-- ═══ SUMMARY ═══ -->');
     lines.push('<div id="summary" style="margin-top: 12pt;">');
-    summary.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push(renderElementsAsBands(summary, recordType, useFreeMarker, pagination));
     lines.push('</div>');
     lines.push('');
   }
@@ -256,7 +302,7 @@ function buildBfoBody(
   if (footer.length > 0) {
     lines.push('<!-- ═══ FOOTER ═══ -->');
     lines.push('<div id="footer" style="margin-top: 12pt;">');
-    footer.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push(renderElementsAsBands(footer, recordType, useFreeMarker, pagination));
     lines.push('</div>');
     lines.push('');
   }
@@ -264,7 +310,7 @@ function buildBfoBody(
   // Watermark section
   if (watermark.length > 0) {
     lines.push('<!-- ═══ WATERMARK ═══ -->');
-    watermark.forEach((el) => lines.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+    lines.push(renderElementsAsBands(watermark, recordType, useFreeMarker, pagination));
     lines.push('');
   }
 
