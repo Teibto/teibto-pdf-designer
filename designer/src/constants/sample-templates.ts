@@ -9,6 +9,7 @@ import type { DocumentTemplate } from '../models/template';
 import type { CanvasElement, TextElement, LineElement, TableElement, ShapeElement } from '../models/element';
 import { createDefaultPage } from '../models/page';
 import { createDefaultPagination } from '../models/template';
+import { elementsToBands } from '../services/band-layout.service';
 
 function makeId(): string {
   return nanoid(10);
@@ -224,6 +225,12 @@ function createInvoiceTemplate(): DocumentTemplate {
 
 /** Get all built-in sample templates */
 export function getSampleTemplates(): DocumentTemplate[] {
+  // Each sample is authored as a band structure (#47 3b): the band layout is
+  // derived once from the element positions via the proven migration, so a sample
+  // renders identically through either path but now carries an explicit `bands`
+  // the band editor loads directly (no regenerate-on-entry bridge). Element ids
+  // are random (nanoid), so bands must be computed from these very elements — not
+  // hardcoded — to keep the id references valid.
   return [
     createInvoiceTemplate(),
     createTaxInvoiceTemplate(),
@@ -231,7 +238,7 @@ export function getSampleTemplates(): DocumentTemplate[] {
     createQuotationTemplate(),
     createDeliveryNoteTemplate(),
     createReceiptTemplate(),
-  ];
+  ].map((tpl) => ({ ...tpl, bands: elementsToBands(tpl.elements) }));
 }
 
 /** Get a single sample template by ID */

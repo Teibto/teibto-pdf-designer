@@ -5,6 +5,7 @@
  * @author Wichit Wongta
  */
 import type { CanvasElement } from './element';
+import type { Band } from './bands';
 import type { PageConfig } from './page';
 
 export interface PaginationConfig {
@@ -81,6 +82,13 @@ export interface DocumentTemplate {
   pagination: PaginationConfig;
   /** Canvas elements */
   elements: CanvasElement[];
+  /**
+   * Band layout structure (#13/#47). Optional during the transition: sample
+   * templates carry it; legacy element-only templates omit it and regenerate it
+   * from elements on load (elementsToBands). Bands reference elements by id and
+   * hold the row/column widths — the layout source once the free canvas retires.
+   */
+  bands?: Band[];
   /** Bound JSON data (optional) */
   jsonData?: Record<string, unknown> | null;
 }
