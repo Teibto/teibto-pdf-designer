@@ -49,6 +49,10 @@ jobs:
         run: npx --yes markdownlint-cli2 "docs/**/*.md" "README.md" "CLAUDE.md" || true
         # เริ่มแบบ non-blocking (|| true) — เอาออกเมื่อทีมเก็บ lint เดิมหมดแล้ว
 
+      # 4) Template pack — well-formed XML + กับดัก BFO/FreeMarker (#10)
+      - name: Validate templates
+        run: bash scripts/validate-templates.sh
+
       # ==================== STACK: Node (designer/) ====================
       # monorepo: แอปหลักอยู่ designer/ — ไม่มี package.json ที่ root
       - name: Node — lint + test (designer/)
