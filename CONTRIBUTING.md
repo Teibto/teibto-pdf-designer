@@ -10,7 +10,7 @@
 4. **QA** — designer: `npm test` + E2E ที่เกี่ยว · engine/templates: render ผ่าน `N/render` บน sandbox ด้วย sample data สังเคราะห์ แนบหลักฐาน (screenshot PDF) ใน PR
 5. **PR** — เข้า `main` ผ่าน PR template + reviewer ≥ 1 · doc ที่กระทบไปกับ PR เดียวกับโค้ด · รัน `bash scripts/secret-scan.sh` ก่อน push
 6. **Squash** — squash merge เท่านั้น (ปิด merge commit/rebase ที่ระดับ repo แล้ว) · branch ถูกลบอัตโนมัติหลัง merge
-7. **Deploy** — งานที่ merge แล้วแต่ยังไม่ deploy เข้า account ลูกค้า ต้องมี Issue ติด label `deployment` พร้อม checklist (upload → hash-verify → script record/params → verify run)
+7. **Deploy** — งานที่ merge แล้วแต่ยังไม่ deploy เข้า account ลูกค้า ต้องมี Issue ติด label `deployment` พร้อม checklist; deploy ด้วย `scripts/deploy.sh` (SDF หลาย account คำสั่งเดียว) แล้ว verify version ต่อ account ผ่าน `?action=version` — ดู `engine/DEPLOYMENT.md`
 8. **Release** — tag `vMAJOR.MINOR.PATCH` + CHANGELOG entry · MAJOR bump เมื่อ template schema หรือ custom record schema เปลี่ยนแบบ breaking
 
 ## กติกาเฉพาะ repo

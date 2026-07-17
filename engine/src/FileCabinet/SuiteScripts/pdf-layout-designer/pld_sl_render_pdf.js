@@ -53,6 +53,8 @@ define([
           return saveTemplate(context);
         case 'get':
           return getTemplate(context);
+        case 'version':
+          return getVersion(context);
         default:
           return renderPdf(context);
       }
@@ -186,6 +188,28 @@ define([
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
     context.response.setHeader({ name: 'Content-Disposition', value: 'inline; filename="preview.pdf"' });
     context.response.writeFile({ file: pdfFile, isInline: true });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // VERSION — which package version is deployed on this account (#11)
+  // ═══════════════════════════════════════════════════
+
+  /**
+   * Serve the deploy stamp so any account can report its deployed version.
+   * deploy.sh writes pld_version.txt (version + git sha + UTC) into this same
+   * File Cabinet folder before each deploy — the stamp travels with the package.
+   */
+  var VERSION_FILE_PATH = '/SuiteScripts/pdf-layout-designer/pld_version.txt';
+
+  function getVersion(context) {
+    var payload;
+    try {
+      payload = file.load({ id: VERSION_FILE_PATH }).getContents();
+    } catch (e) {
+      payload = JSON.stringify({ version: 'unknown', error: 'no deploy stamp: ' + (e.message || e) });
+    }
+    context.response.setHeader({ name: 'Content-Type', value: 'application/json; charset=utf-8' });
+    context.response.write(payload);
   }
 
   // ═══════════════════════════════════════════════════

@@ -51,6 +51,50 @@
 
 ---
 
+## Deploy ด้วย SDF — หลาย account ด้วยคำสั่งเดียว (#11)
+
+engine/ เป็น SDF project (`src/manifest.xml`, `src/Objects/`, `src/FileCabinet/`) — custom record
+และ script record/deployment ทั้งหมดสร้างอัตโนมัติผ่าน SDF **ไม่ต้องคลิกตาม Step 1–4 ด้านล่าง**
+(Step 1–5 เก็บไว้เป็น reference อธิบายว่าแต่ละ object คืออะไร)
+
+**ตั้งค่าครั้งเดียว:**
+```bash
+suitecloud account:manageauth --list          # ดู authid ที่มี (ต้อง account:setup ต่อ account ก่อน)
+cp engine/deploy-targets.txt.example engine/deploy-targets.txt
+# แก้ deploy-targets.txt ใส่ authid ของ sandbox ที่จะ deploy (หนึ่ง authid ต่อบรรทัด)
+```
+
+> `engine/deploy-targets.txt` และ `engine/project.json` **gitignore ไว้** — authid เป็นค่าเฉพาะเครื่อง
+> + ข้อมูลอ่อนไหว (โดยเฉพาะ authid ลูกค้า) ห้าม commit
+
+**Deploy:**
+```bash
+scripts/deploy.sh                    # deploy ทุก authid ใน deploy-targets.txt (ทีละตัว)
+scripts/deploy.sh --dryrun           # preview ก่อน ไม่ deploy จริง
+scripts/deploy.sh acc1-sb1 acc2-sb1  # เจาะจง authid (แทน targets file)
+```
+
+`deploy.sh` วนทีละ account: stamp version → เขียน `defaultAuthId` ใหม่ → `suitecloud project:deploy`
+→ สรุปผล PASS/FAIL ต่อ account (account ที่พังไม่ทำให้ตัวอื่นหยุด) → คืน `project.json` เป็นค่าเดิมเสมอ
+
+> `project:deploy` ไม่มี flag `--authid` — มันอ่าน `defaultAuthId` จาก `project.json` เท่านั้น
+> นี่คือเหตุผลที่ต้อง loop เขียน `project.json` ใหม่ต่อ account
+
+### Version stamp — ตรวจได้ว่า account ไหนรัน version อะไร
+
+`engine/VERSION` เป็น source of truth. ทุกครั้งที่ `deploy.sh` รัน มัน stamp
+`version + git short sha (+dirty ถ้า working tree ไม่ clean) + UTC` ลงไฟล์
+`pld_version.txt` ใน File Cabinet (ไฟล์นี้เป็น build artifact — gitignore ไว้ generate ใหม่ทุก deploy)
+
+ตรวจ version ที่ deploy ไปบน account:
+```
+GET  scriptlet.nl?script=customscript_pld_render&deploy=customdeploy_pld_render&action=version
+→ {"version":"0.3.0-dev","sha":"35da24b","built":"2026-07-17T04:21:54Z"}
+```
+หรือเปิดไฟล์ `SuiteScripts/pdf-layout-designer/pld_version.txt` ตรง ๆ ใน File Cabinet
+
+---
+
 ## Step 1: สร้าง Custom Record
 
 **Customization > Lists, Records & Fields > Record Types > New**

@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- Multi-account deploy pipeline `scripts/deploy.sh` — deploy SDF engine เข้าหลาย sandbox ด้วยคำสั่งเดียว (วน authid จาก `engine/deploy-targets.txt` เขียน `defaultAuthId` ต่อ account เพราะ `project:deploy` ไม่มี `--authid`, สรุปผล PASS/FAIL ต่อ account, คืน `project.json` เสมอ) + version stamp (`engine/VERSION` + git sha + UTC → `pld_version.txt` ใน File Cabinet) ตรวจได้จาก account ผ่าน `?action=version` — พิสูจน์สดบน Teibto SB2 (deploy จริง + endpoint คืน stamp ตรง) (#11)
 - Master templates อีก 5 ฟอร์มครบชุด Standard Template Pack: `invoice`, `purchase-order`, `delivery-note`, `receipt`, `quotation` ใน `templates/master/` + sample สังเคราะห์ต่อฟอร์มใน `templates/samples/` — โครง/CSS/macro/font pattern เดียวกับ `tax-invoice.xml` ทุกไฟล์ ทั้ง 5 ฟอร์ม render จริงผ่านบน Teibto SB2 (#8)
 - Template validator `scripts/validate-templates.sh` + step ใน quality-gate CI — จับกับดัก BFO/FreeMarker ตั้งแต่ PR: XML ไม่ well-formed, C-ternary (#1), binding ไม่ null-safe (#2), font ที่ไม่ผ่าน config layer (#32), CSS ที่ BFO เมินเงียบ (object-fit/text-overflow/@page/counter), `<div>` ระดับ body (#10), sample JSON parse ไม่ได้ — รัน local ได้ `bash scripts/validate-templates.sh` (#10)
 - ESLint flat config `designer/eslint.config.js` (typescript-eslint) + script `lint` — quality-gate รัน `npm run lint` กลับมาแล้ว (จับ bug เป็น error, noise เชิงสไตล์เป็น warn); แก้ 3 error เดิม (`{}` type, `@ts-ignore` stale 2 จุด) (#17)

@@ -24,6 +24,10 @@ credentials*.json
 # NetSuite CLI auth (authid เป็นค่าเฉพาะเครื่อง)
 project.json
 
+# Multi-account deploy — authid ลูกค้าเป็นข้อมูลอ่อนไหว + stamp เป็น build artifact (#11)
+engine/deploy-targets.txt
+engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/pld_version.txt
+
 # OS / editor
 .DS_Store
 Thumbs.db
