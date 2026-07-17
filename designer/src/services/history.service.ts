@@ -13,6 +13,7 @@
  */
 import type { AppStore } from '../state/store';
 import type { CanvasElement } from '../models/element';
+import type { Band } from '../models/bands';
 import type { Middleware, DispatchRecipe } from '../state/middleware';
 import { getActionTag, NON_UNDOABLE_ACTIONS } from '../state/middleware';
 
@@ -31,6 +32,8 @@ const MAX_MEMORY_BYTES = 20 * 1024 * 1024;
 
 interface HistorySnapshot {
   elements: CanvasElement[];
+  /** Band structure (#47 cutover): band edits are undoable like element edits. */
+  bands: Band[];
   selectedId: string | null;
   timestamp: number;
   /** Approximate byte size of this snapshot */
@@ -102,10 +105,12 @@ export class HistoryService {
   private _pushSnapshot(): void {
     const state = this._store.state;
     const stripped = stripHeavyData(state.elements);
-    const estimatedSize = estimateSize(stripped);
+    const bands = structuredClone(state.bands);
+    const estimatedSize = estimateSize(stripped) + estimateBandsSize(bands);
 
     const snapshot: HistorySnapshot = {
       elements: stripped,
+      bands,
       selectedId: state.selectedId,
       timestamp: Date.now(),
       estimatedSize,
@@ -163,11 +168,13 @@ export class HistoryService {
   private _createSnapshot(): HistorySnapshot {
     const state = this._store.state;
     const stripped = stripHeavyData(state.elements);
+    const bands = structuredClone(state.bands);
     return {
       elements: stripped,
+      bands,
       selectedId: state.selectedId,
       timestamp: Date.now(),
-      estimatedSize: estimateSize(stripped),
+      estimatedSize: estimateSize(stripped) + estimateBandsSize(bands),
     };
   }
 
@@ -193,6 +200,7 @@ export class HistoryService {
 
       this._store.dispatch((draft) => {
         draft.elements = restored as any;
+        draft.bands = structuredClone(snapshot.bands);
         draft.selectedId = snapshot.selectedId;
       });
     } finally {
@@ -261,4 +269,11 @@ function estimateSize(elements: CanvasElement[]): number {
     }
   }
   return size;
+}
+
+/** Rough byte-size estimate for a band structure (ids + widths only, no heavy data). */
+function estimateBandsSize(bands: readonly Band[]): number {
+  let cols = 0;
+  for (const b of bands) for (const r of b.rows) cols += r.columns.length;
+  return cols * 80;
 }
