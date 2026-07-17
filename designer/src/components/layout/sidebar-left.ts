@@ -19,7 +19,6 @@ import { setPageSize, setOrientation } from '../../state/actions';
 // ─── Import panel components ───
 import '../panels/layers-panel';
 import '../panels/json-editor';
-import '../panels/grid-panel';
 import '../panels/pagination-panel';
 
 type TabId = 'elements' | 'layers' | 'data' | 'settings';
@@ -344,9 +343,6 @@ export class PldSidebarLeft extends LitElement {
 
   private _renderSettingsTab() {
     return html`
-      <div class="panel-section">
-        <pld-grid-panel></pld-grid-panel>
-      </div>
       <div class="panel-section">
         <pld-pagination-panel></pld-pagination-panel>
       </div>

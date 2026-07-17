@@ -14,7 +14,6 @@ import { ELEMENT_ROLES } from '../../constants/roles';
 import { openImagePicker, clearElementImage } from '../../services/image.service';
 import { autoDetectColumnsFromStore } from '../../services/column-detect.service';
 import { showToast } from '../shared/toast-notification';
-import '../panels/alignment-panel';
 
 @customElement('pld-sidebar-right')
 export class PldSidebarRight extends LitElement {
@@ -22,7 +21,6 @@ export class PldSidebarRight extends LitElement {
   private store!: AppStore;
 
   @state() private selected: CanvasElement | null = null;
-  @state() private multiSelectCount = 0;
 
   static styles = css`
     :host {
@@ -229,13 +227,11 @@ export class PldSidebarRight extends LitElement {
     // Read current state immediately
     const s = this.store.state;
     this.selected = s.elements.find((el) => el.id === s.selectedId) ?? null;
-    this.multiSelectCount = s.multiSelect.length;
 
     // Listen for future changes
     this._stateHandler = (e: Event) => {
       const st = (e as StateChangedEvent).state;
       this.selected = st.elements.find((el) => el.id === st.selectedId) ?? null;
-      this.multiSelectCount = st.multiSelect.length;
     };
     this.store.addEventListener('state-changed', this._stateHandler);
   }
@@ -255,9 +251,6 @@ export class PldSidebarRight extends LitElement {
           <div class="empty-icon">◇</div>
           <div>Select an element<br />to edit its properties</div>
         </div>
-        ${this.multiSelectCount >= 2 ? html`
-          <pld-alignment-panel .selectedCount=${this.multiSelectCount}></pld-alignment-panel>
-        ` : nothing}
       `;
     }
 
@@ -357,11 +350,6 @@ export class PldSidebarRight extends LitElement {
           <button class="action-btn danger" @click=${this._delete}>✕ Delete</button>
         </div>
       </div>
-
-      <!-- Alignment (when multi-selected) -->
-      ${this.multiSelectCount >= 2 ? html`
-        <pld-alignment-panel .selectedCount=${this.multiSelectCount}></pld-alignment-panel>
-      ` : nothing}
     `;
   }
 
