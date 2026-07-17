@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { exportBfoXml, renderBandsBody, type BfoExportOptions } from '../../src/services/bfo-export.service';
+import { elementsToBands } from '../../src/services/band-layout.service';
 import type { AppState } from '../../src/state/app-state';
 import { createDefaultPage } from '../../src/models/page';
 import { createDefaultPagination } from '../../src/models/template';
@@ -13,6 +14,7 @@ import type { TextElement, TableElement, ShapeElement, LineElement, ImageElement
 function createMockState(elements: any[]): AppState {
   return {
     elements,
+    bands: [],
     selectedId: null,
     multiSelect: [],
     zoom: 100,
@@ -667,5 +669,64 @@ describe('renderBandsBody (#47 band-mode export path)', () => {
     const html = renderBandsBody(twoColBand(50, 50), [elements[1]]); // 'A' missing
     expect(html).toContain('width: 50%'); // structure still renders
     expect(html).not.toContain('>A<');
+  });
+});
+
+// ═══════════════════════════════════════
+// BAND-SOURCE EXPORT (#47 3a) — exportBfoXml({ useBands: true }) renders state.bands
+// ═══════════════════════════════════════
+
+describe('exportBfoXml useBands (#47 cutover 3a)', () => {
+  // header (repeats), two side-by-side content elements, a table, a footer.
+  const sampleEls = () => [
+    makeText({ id: 'h', type: 'header', role: 'header', content: 'Co', x: 0, y: 0, w: 400, h: 30 }),
+    makeText({ id: 'c1', role: 'content', content: 'Left', x: 0, y: 60, w: 200, h: 30 }),
+    makeText({ id: 'c2', role: 'content', content: 'Right', x: 220, y: 62, w: 200, h: 30 }),
+    makeTable({ id: 't', role: 'table', x: 0, y: 120, w: 500, h: 200 }),
+    makeText({ id: 'f', type: 'text', role: 'footer', content: 'Page', x: 0, y: 700, w: 400, h: 20 }),
+  ];
+
+  it('an UNEDITED band export is byte-identical to the element path (parity)', () => {
+    const els = sampleEls();
+    const state = createMockState(els);
+    state.bands = elementsToBands(els); // fresh migration, no edits
+    expect(exportBfoXml(state, { useBands: true })).toBe(exportBfoXml(state, { useBands: false }));
+  });
+
+  it('a column-width edit reaches the PDF only via the band path', () => {
+    const els = sampleEls();
+    const state = createMockState(els);
+    state.bands = elementsToBands(els);
+    // content band row0 has 2 columns (c1|c2) — force widths to 25/75
+    const contentBand = state.bands.find((b) => b.role === 'content')!;
+    contentBand.rows[0].columns[0].widthPct = 25;
+    contentBand.rows[0].columns[1].widthPct = 75;
+
+    const band = exportBfoXml(state, { useBands: true });
+    const elem = exportBfoXml(state, { useBands: false });
+    expect(band).toContain('width: 25%');
+    expect(band).toContain('width: 75%');
+    expect(elem).not.toContain('width: 25%'); // element path re-derives from x/y (≈50/50)
+  });
+
+  it('a property edit reaches the band output via id resolution (model B)', () => {
+    const els = sampleEls();
+    const state = createMockState(els);
+    state.bands = elementsToBands(els);
+    // edit the element in the shared pool — band holds only its id
+    (state.elements.find((e) => e.id === 'c1') as any).content = 'EDITED_LEFT';
+    expect(exportBfoXml(state, { useBands: true })).toContain('EDITED_LEFT');
+  });
+
+  it('header/footer bands still go to the macrolist, not the body', () => {
+    const els = sampleEls();
+    const state = createMockState(els);
+    state.bands = elementsToBands(els);
+    const xml = exportBfoXml(state, { useBands: true });
+    expect(xml).toContain('<macro id="nlheader">');
+    expect(xml).toContain('<macro id="nlfooter">');
+    expect(xml).toContain('header="nlheader"');
+    // the header content must not also appear inside a body <div id="header">
+    expect(xml).not.toContain('<div id="header"');
   });
 });

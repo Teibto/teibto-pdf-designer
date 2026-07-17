@@ -18,6 +18,7 @@ import type {
   ImageElement,
   BarcodeElement,
   ListElement,
+  ElementRoleType,
 } from '../models/element';
 import { escapeXml, sanitizeColor, sanitizeNumericCss } from './validation.service';
 import { elementsToBands } from './band-layout.service';
@@ -41,6 +42,16 @@ export interface BfoExportOptions {
    * URL must be the full form with the h= token and _xt=.ttf suffix.
    */
   thaiFontUrls?: { regular: string; bold?: string };
+  /**
+   * Render from the stored band structure (`state.bands`) instead of re-deriving
+   * bands from element x/y (#47 cutover slice 3a). When true, each role section is
+   * emitted via `renderBand(storedBand)` so the consultant's band edits (column
+   * split/merge, width, cross-cell moves) reach the PDF. Element properties are
+   * still resolved from `state.elements` by id (model B). An UNEDITED band export
+   * is byte-identical to the element path — edits are the only divergence.
+   * Default false → the element path, unchanged.
+   */
+  useBands?: boolean;
 }
 
 /**
@@ -54,6 +65,7 @@ export function exportBfoXml(
     useFreeMarker = true,
     includePageHeaders = true,
     thaiFontUrls,
+    useBands = false,
   } = options;
 
   // The FreeMarker data-source alias is a fixed contract with the render engine:
@@ -66,6 +78,13 @@ export function exportBfoXml(
 
   const { page, elements } = state;
 
+  // Band source (#47 3a): render stored bands via renderBand instead of
+  // re-deriving from x/y. Element roles equal their band's role, so header/footer
+  // detection, roleHeight and body attrs are identical either way — only the inner
+  // render of each role section switches. byId resolves element properties (model B).
+  const bands = useBands ? state.bands : undefined;
+  const byId = useBands ? new Map(elements.map((e) => [e.id, e])) : undefined;
+
   // Repeating header/footer must be BFO macros — NetSuite's BFO engine does
   // not support CSS @page margin boxes or counter(page)/counter(pages).
   const headerElements = includePageHeaders ? elements.filter((e) => e.role === 'header') : [];
@@ -73,7 +92,7 @@ export function exportBfoXml(
   const useMacros = headerElements.length > 0 || footerElements.length > 0;
 
   const macrolist = useMacros
-    ? buildMacrolist(headerElements, footerElements, recordType, useFreeMarker, state.pagination)
+    ? buildMacrolist(headerElements, footerElements, recordType, useFreeMarker, state.pagination, bands, byId)
     : '';
 
   const fontLink = buildFontLink(thaiFontUrls);
@@ -82,7 +101,7 @@ export function exportBfoXml(
   const css = buildBfoCss(!!thaiFontUrls);
 
   // Build body HTML (header/footer live in macros when useMacros)
-  const bodyHtml = buildBfoBody(elements, recordType, useFreeMarker, state.pagination, useMacros);
+  const bodyHtml = buildBfoBody(elements, recordType, useFreeMarker, state.pagination, useMacros, bands, byId);
 
   const bodyAttrs = buildBodyAttrs(page, headerElements, footerElements);
 
@@ -217,6 +236,28 @@ function renderElementsAsBands(
     .join('\n');
 }
 
+/**
+ * Render one role's section (#47 3a). With a band source, emit the stored band
+ * for that role via renderBand (honors the consultant's edits); otherwise derive
+ * bands from element x/y (the legacy element path). Same output when the stored
+ * band is an unedited migration of the same elements.
+ */
+function renderRoleSection(
+  role: ElementRoleType,
+  els: CanvasElement[],
+  recordType: string,
+  useFreeMarker: boolean,
+  pagination: PaginationConfig | undefined,
+  bands?: Band[],
+  byId?: Map<string, CanvasElement>,
+): string {
+  if (bands && byId) {
+    const band = bands.find((b) => b.role === role);
+    return band ? renderBand(band, byId, recordType, useFreeMarker, pagination) : '';
+  }
+  return renderElementsAsBands(els, recordType, useFreeMarker, pagination);
+}
+
 /** Build <macrolist> with nlheader/nlfooter macros for repeat-on-every-page content */
 function buildMacrolist(
   headerElements: CanvasElement[],
@@ -224,19 +265,21 @@ function buildMacrolist(
   recordType: string,
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
+  bands?: Band[],
+  byId?: Map<string, CanvasElement>,
 ): string {
   const lines: string[] = [];
   lines.push('<macrolist>');
 
   if (headerElements.length > 0) {
     lines.push('<macro id="nlheader">');
-    lines.push(renderElementsAsBands(headerElements, recordType, useFreeMarker, pagination));
+    lines.push(renderRoleSection('header', headerElements, recordType, useFreeMarker, pagination, bands, byId));
     lines.push('</macro>');
   }
 
   if (footerElements.length > 0) {
     lines.push('<macro id="nlfooter">');
-    lines.push(renderElementsAsBands(footerElements, recordType, useFreeMarker, pagination));
+    lines.push(renderRoleSection('footer', footerElements, recordType, useFreeMarker, pagination, bands, byId));
     lines.push('<p style="font-size: 8pt; color: #888888; text-align: center;">Page <pagenumber/> of <totalpages/></p>');
     lines.push('</macro>');
   }
@@ -278,6 +321,8 @@ function buildBfoBody(
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
   headerFooterInMacros = false,
+  bands?: Band[],
+  byId?: Map<string, CanvasElement>,
 ): string {
   const lines: string[] = [];
 
@@ -289,11 +334,14 @@ function buildBfoBody(
   const footer = headerFooterInMacros ? [] : elements.filter((e) => e.role === 'footer');
   const watermark = elements.filter((e) => e.role === 'watermark');
 
+  const section = (role: ElementRoleType, els: CanvasElement[]) =>
+    renderRoleSection(role, els, recordType, useFreeMarker, pagination, bands, byId);
+
   // Header section
   if (header.length > 0) {
     lines.push('<!-- ═══ HEADER ═══ -->');
     lines.push('<div id="header" style="margin-bottom: 12pt;">');
-    lines.push(renderElementsAsBands(header, recordType, useFreeMarker, pagination));
+    lines.push(section('header', header));
     lines.push('</div>');
     lines.push('');
   }
@@ -302,7 +350,7 @@ function buildBfoBody(
   if (content.length > 0) {
     lines.push('<!-- ═══ CONTENT ═══ -->');
     lines.push('<div id="content">');
-    lines.push(renderElementsAsBands(content, recordType, useFreeMarker, pagination));
+    lines.push(section('content', content));
     lines.push('</div>');
     lines.push('');
   }
@@ -310,7 +358,7 @@ function buildBfoBody(
   // Table section
   if (tables.length > 0) {
     lines.push('<!-- ═══ TABLE ═══ -->');
-    lines.push(renderElementsAsBands(tables, recordType, useFreeMarker, pagination));
+    lines.push(section('table', tables));
     lines.push('');
   }
 
@@ -318,7 +366,7 @@ function buildBfoBody(
   if (summary.length > 0) {
     lines.push('<!-- ═══ SUMMARY ═══ -->');
     lines.push('<div id="summary" style="margin-top: 12pt;">');
-    lines.push(renderElementsAsBands(summary, recordType, useFreeMarker, pagination));
+    lines.push(section('summary', summary));
     lines.push('</div>');
     lines.push('');
   }
@@ -327,7 +375,7 @@ function buildBfoBody(
   if (footer.length > 0) {
     lines.push('<!-- ═══ FOOTER ═══ -->');
     lines.push('<div id="footer" style="margin-top: 12pt;">');
-    lines.push(renderElementsAsBands(footer, recordType, useFreeMarker, pagination));
+    lines.push(section('footer', footer));
     lines.push('</div>');
     lines.push('');
   }
@@ -335,7 +383,7 @@ function buildBfoBody(
   // Watermark section
   if (watermark.length > 0) {
     lines.push('<!-- ═══ WATERMARK ═══ -->');
-    lines.push(renderElementsAsBands(watermark, recordType, useFreeMarker, pagination));
+    lines.push(section('watermark', watermark));
     lines.push('');
   }
 
