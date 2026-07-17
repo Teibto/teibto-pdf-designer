@@ -29,6 +29,7 @@ import {
   splitColumn,
   mergeColumn,
   moveElementToCell,
+  selectElement,
 } from '../../state/actions';
 import { ELEMENT_ROLES } from '../../constants/roles';
 
@@ -73,7 +74,8 @@ export class PldBandView extends LitElement {
     button:disabled { opacity: .35; cursor: default; }
     button.wide { width: auto; padding: 0 8px; height: 20px; font-size: 11px; }
     .cell-w button { width: 16px; height: 16px; }
-    .chip { font-size: 11px; color: var(--color-text, #e8e9f0); background: var(--color-bg-hover, #222430); border-radius: 4px; padding: 2px 6px; cursor: grab; }
+    .chip { font-size: 11px; color: var(--color-text, #e8e9f0); background: var(--color-bg-hover, #222430); border-radius: 4px; padding: 2px 6px; cursor: grab; border: 1px solid transparent; }
+    .chip.sel { border-color: var(--band-color, #4f6ef7); background: color-mix(in srgb, var(--band-color) 22%, transparent); }
     .chip[dragging] { opacity: .4; }
     .chip .t { color: var(--color-text-dim, #8a8ca0); font-family: var(--font-mono, monospace); font-size: 10px; }
     .empty { color: var(--color-text-dim, #8a8ca0); font-size: 13px; text-align: center; padding: 40px; }
@@ -81,7 +83,8 @@ export class PldBandView extends LitElement {
 
   render() {
     void this._tick;
-    const bands = this.store.state.bands;
+    const { bands, elements, selectedId } = this.store.state;
+    const byId = new Map(elements.map((e) => [e.id, e]));
     if (bands.length === 0) return html`<div class="empty">ยังไม่มี element — กด Sample หรือวางของบน canvas ก่อน</div>`;
 
     return html`
@@ -119,13 +122,18 @@ export class PldBandView extends LitElement {
                             ${ci > 0 ? html`<button title="รวมกับคอลัมน์ซ้าย" @click=${() => mergeColumn(this.store, bi, ri, ci)}>⇤</button>` : nothing}
                             <button title="แยกคอลัมน์" @click=${() => splitColumn(this.store, bi, ri, ci)}>⇥</button>
                           </span>
-                          ${col.elements.length
-                            ? col.elements.map((el) => html`
-                                <span class="chip" draggable="true"
-                                  @dragstart=${(e: DragEvent) => this._onDragStart(e, el.id)}
-                                  @dragend=${(e: DragEvent) => this._onDragEnd(e)}>
-                                  ${el.name || el.type} <span class="t">${el.type}</span>
-                                </span>`)
+                          ${col.elementIds.length
+                            ? col.elementIds.map((id) => {
+                                const el = byId.get(id);
+                                if (!el) return nothing;
+                                return html`
+                                  <span class="chip ${selectedId === el.id ? 'sel' : ''}" draggable="true"
+                                    @click=${() => selectElement(this.store, el.id)}
+                                    @dragstart=${(e: DragEvent) => this._onDragStart(e, el.id)}
+                                    @dragend=${(e: DragEvent) => this._onDragEnd(e)}>
+                                    ${el.name || el.type} <span class="t">${el.type}</span>
+                                  </span>`;
+                              })
                             : nothing}
                         </div>
                       `)}

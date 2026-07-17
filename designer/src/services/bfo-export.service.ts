@@ -158,21 +158,28 @@ function roleHeight(els: CanvasElement[], minHeight: number): number {
  */
 function renderBand(
   band: Band,
+  byId: Map<string, CanvasElement>,
   recordType: string,
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
 ): string {
+  const cellHtml = (col: { elementIds: string[] }, out: string[]) => {
+    for (const id of col.elementIds) {
+      const el = byId.get(id);
+      if (el) out.push(elementToHtml(el, recordType, useFreeMarker, pagination));
+    }
+  };
+
   const out: string[] = [];
   for (const row of band.rows) {
     if (row.columns.length <= 1) {
-      const col = row.columns[0];
-      if (col) col.elements.forEach((el) => out.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+      if (row.columns[0]) cellHtml(row.columns[0], out);
       continue;
     }
     out.push('<table style="width: 100%; border-collapse: collapse;"><tr>');
     for (const col of row.columns) {
       out.push(`<td style="width: ${col.widthPct}%; vertical-align: top;">`);
-      col.elements.forEach((el) => out.push(elementToHtml(el, recordType, useFreeMarker, pagination)));
+      cellHtml(col, out);
       out.push('</td>');
     }
     out.push('</tr></table>');
@@ -188,11 +195,13 @@ function renderBand(
  */
 export function renderBandsBody(
   bands: Band[],
+  elements: CanvasElement[],
   recordType = 'record',
   useFreeMarker = true,
   pagination?: PaginationConfig,
 ): string {
-  return bands.map((band) => renderBand(band, recordType, useFreeMarker, pagination)).join('\n');
+  const byId = new Map(elements.map((e) => [e.id, e]));
+  return bands.map((band) => renderBand(band, byId, recordType, useFreeMarker, pagination)).join('\n');
 }
 
 /** Render a single-role element group via the band model (row/column layout). */
@@ -202,8 +211,9 @@ function renderElementsAsBands(
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
 ): string {
+  const byId = new Map(els.map((e) => [e.id, e]));
   return elementsToBands(els)
-    .map((band) => renderBand(band, recordType, useFreeMarker, pagination))
+    .map((band) => renderBand(band, byId, recordType, useFreeMarker, pagination))
     .join('\n');
 }
 

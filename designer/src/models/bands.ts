@@ -14,15 +14,20 @@
  * @author Wichit Wongta
  * @since 2026-07-17
  */
-import type { CanvasElement, ElementRoleType } from './element';
+import type { ElementRoleType } from './element';
 
 /** One cell in a row — a percentage-width column holding stacked elements. */
 export interface BandColumn {
   id: string;
   /** Column width as a percent of the row (columns in a row sum to 100). */
   widthPct: number;
-  /** Elements stacked top-to-bottom inside this cell. */
-  elements: CanvasElement[];
+  /**
+   * Ids of the elements stacked top-to-bottom in this cell (#49 model B).
+   * Bands hold only structure + id references; element properties live on the
+   * shared `state.elements`, so the existing property panel edits reach band
+   * mode for free. Resolve an id → element via `state.elements` at read time.
+   */
+  elementIds: string[];
 }
 
 /** A horizontal row inside a band — one or more columns. */

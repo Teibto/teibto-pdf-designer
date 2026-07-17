@@ -834,7 +834,7 @@ export function addBandRow(store: AppStore, bandIdx: number, atIdx?: number): vo
   store.dispatch(tagAction((draft) => {
     const band = draft.bands[bandIdx];
     if (!band) return;
-    const row = { id: nanoid(8), columns: [{ id: nanoid(8), widthPct: 100, elements: [] }] };
+    const row = { id: nanoid(8), columns: [{ id: nanoid(8), widthPct: 100, elementIds: [] }] };
     const at = atIdx == null ? band.rows.length : Math.max(0, Math.min(atIdx, band.rows.length));
     band.rows.splice(at, 0, row);
   }, { name: 'addBandRow', undoable: false }));
@@ -870,7 +870,7 @@ export function splitColumn(store: AppStore, bandIdx: number, rowIdx: number, co
     const left = Math.max(1, Math.ceil(col.widthPct / 2));
     const right = col.widthPct - left;
     col.widthPct = left;
-    row.columns.splice(colIdx + 1, 0, { id: nanoid(8), widthPct: right, elements: [] });
+    row.columns.splice(colIdx + 1, 0, { id: nanoid(8), widthPct: right, elementIds: [] });
   }, { name: 'splitColumn', undoable: false }));
 }
 
@@ -881,7 +881,7 @@ export function mergeColumn(store: AppStore, bandIdx: number, rowIdx: number, co
     if (!row || colIdx <= 0 || colIdx >= row.columns.length) return;
     const prev = row.columns[colIdx - 1];
     const cur = row.columns[colIdx];
-    prev.elements.push(...cur.elements);
+    prev.elementIds.push(...cur.elementIds);
     prev.widthPct += cur.widthPct;
     row.columns.splice(colIdx, 1);
   }, { name: 'mergeColumn', undoable: false }));
@@ -905,13 +905,13 @@ export function moveElementToCell(
     const target = band?.rows[rowIdx]?.columns[colIdx];
     if (!band || !target) return;
 
-    // Locate + detach the element from its source cell (this band only).
+    // Locate + detach the element id from its source cell (this band only).
     for (const row of band.rows) {
       for (const col of row.columns) {
-        const i = col.elements.findIndex((e) => e.id === elId);
+        const i = col.elementIds.indexOf(elId);
         if (i >= 0) {
-          const [el] = col.elements.splice(i, 1);
-          target.elements.push(el);
+          col.elementIds.splice(i, 1);
+          target.elementIds.push(elId);
           return;
         }
       }
