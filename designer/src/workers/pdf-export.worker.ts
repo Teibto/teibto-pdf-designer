@@ -16,9 +16,7 @@ let _jsPDF: any = null;
 
 async function loadJsPDF() {
   if (!_jsPDF) {
-    // @ts-ignore — dynamic import in worker context
     const mod = await import('jspdf');
-    // @ts-ignore
     await import('jspdf-autotable');
     _jsPDF = mod.jsPDF;
   }

@@ -15,7 +15,7 @@ import tailwindStyles from '../styles/tailwind.css?inline';
 // Create a shared CSSStyleSheet from Tailwind
 const tailwindSheet = unsafeCSS(tailwindStyles);
 
-type Constructor<T = {}> = new (...args: any[]) => T;
+type Constructor<T = object> = new (...args: any[]) => T;
 
 /**
  * Mixin that injects Tailwind CSS into a Lit component's Shadow DOM.

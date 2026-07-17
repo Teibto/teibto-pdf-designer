@@ -7,6 +7,7 @@
 ### Added
 - Master templates อีก 5 ฟอร์มครบชุด Standard Template Pack: `invoice`, `purchase-order`, `delivery-note`, `receipt`, `quotation` ใน `templates/master/` + sample สังเคราะห์ต่อฟอร์มใน `templates/samples/` — โครง/CSS/macro/font pattern เดียวกับ `tax-invoice.xml` ทุกไฟล์ ทั้ง 5 ฟอร์ม render จริงผ่านบน Teibto SB2 (#8)
 - Template validator `scripts/validate-templates.sh` + step ใน quality-gate CI — จับกับดัก BFO/FreeMarker ตั้งแต่ PR: XML ไม่ well-formed, C-ternary (#1), binding ไม่ null-safe (#2), font ที่ไม่ผ่าน config layer (#32), CSS ที่ BFO เมินเงียบ (object-fit/text-overflow/@page/counter), `<div>` ระดับ body (#10), sample JSON parse ไม่ได้ — รัน local ได้ `bash scripts/validate-templates.sh` (#10)
+- ESLint flat config `designer/eslint.config.js` (typescript-eslint) + script `lint` — quality-gate รัน `npm run lint` กลับมาแล้ว (จับ bug เป็น error, noise เชิงสไตล์เป็น warn); แก้ 3 error เดิม (`{}` type, `@ts-ignore` stale 2 จุด) (#17)
 
 ### Fixed
 - วรรณยุกต์/สระไทยลอยหลุดจากฐานในทุก PDF (เห็นชัดบนฐานเตี้ย เช่น น้ำ ค่า) — เปลี่ยนฟอนต์ฝังจาก `THSarabunNew` เป็น `THSarabunPSK`. BFO ของ NetSuite ไม่ apply GPOS mark positioning; THSarabunNew พึ่ง GPOS ดึง mark ลง THSarabunPSK วาง mark ถูกใน glyph outline เอง. แก้ที่ไฟล์ฟอนต์ bundled (`engine/src/.../fonts/`) + DEPLOYMENT.md; template ไม่แตะ (อ้าง `${company.fontRegular/fontBold}` จาก config อยู่แล้ว) — พิสูจน์ด้วย render จริงบน SB2 (#32)
