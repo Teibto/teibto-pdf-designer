@@ -38,6 +38,27 @@ export class PldBfoExportModal extends LitElement {
   @state() private useFreeMarker = true;
   @state() private includePageHeaders = true;
   @state() private xmlPreview = '';
+  // Save this as the default template for its record type, so the Print button
+  // (which loads the rectype default, no tplid) picks it up. Default on: a template
+  // designed from a record is almost always the one Print should use (#70).
+  @state() private setAsDefault = true;
+
+  connectedCallback() {
+    super.connectedCallback();
+    // Default the record type to the record the designer was opened from
+    // (?rectype=… on the Suitelet URL) instead of a fixed 'transaction', so a
+    // Save-to-NetSuite from an invoice is saved as an invoice template (#70).
+    const ctxRectype = getNsContext()?.recordType;
+    if (ctxRectype) this.recordType = ctxRectype;
+  }
+
+  /** Record-type options, including the record's own type if it isn't in the preset list. */
+  private get recordTypeOptions(): { value: string; label: string }[] {
+    if (this.recordType && !RECORD_TYPES.some((rt) => rt.value === this.recordType)) {
+      return [{ value: this.recordType, label: this.recordType }, ...RECORD_TYPES];
+    }
+    return RECORD_TYPES;
+  }
 
   static styles = css`
     .config-section {
@@ -248,13 +269,13 @@ export class PldBfoExportModal extends LitElement {
             <div class="config-row">
               <div class="config-field">
                 <label>NetSuite Record Type</label>
-                <select .value=${this.recordType}
+                <select
                   @change=${(e: Event) => {
                     this.recordType = (e.target as HTMLSelectElement).value;
                     this._generatePreview();
                   }}>
-                  ${RECORD_TYPES.map((rt) => html`
-                    <option value=${rt.value}>${rt.label}</option>
+                  ${this.recordTypeOptions.map((rt) => html`
+                    <option value=${rt.value} ?selected=${rt.value === this.recordType}>${rt.label}</option>
                   `)}
                 </select>
               </div>
@@ -275,6 +296,13 @@ export class PldBfoExportModal extends LitElement {
                     this._generatePreview();
                   }} />
                 Include Page Header/Footer CSS
+              </label>
+              <label class="check-item">
+                <input type="checkbox" .checked=${this.setAsDefault}
+                  @change=${(e: Event) => {
+                    this.setAsDefault = (e.target as HTMLInputElement).checked;
+                  }} />
+                Set as default template for this record type
               </label>
             </div>
           </div>
@@ -372,10 +400,11 @@ export class PldBfoExportModal extends LitElement {
         data: designerJson,
         xml: this.xmlPreview,
         rectype: this.recordType,
-        isDefault: false,
+        isDefault: this.setAsDefault,
       });
 
-      showToast(`Template saved to NetSuite (ID: ${result.id})`, 'success');
+      const defNote = this.setAsDefault ? ` — default for ${this.recordType}` : '';
+      showToast(`Template saved to NetSuite (ID: ${result.id})${defNote}`, 'success');
     } catch (err) {
       showToast(`Failed to save: ${(err as Error).message}`, 'error');
     }
