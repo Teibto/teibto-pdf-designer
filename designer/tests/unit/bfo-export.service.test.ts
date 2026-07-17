@@ -670,6 +670,22 @@ describe('renderBandsBody (#47 band-mode export path)', () => {
     expect(html).toContain('width: 50%'); // structure still renders
     expect(html).not.toContain('>A<');
   });
+
+  it('text in a MULTI-column cell drops its fixed el.w (fills the cell, #47 3a)', () => {
+    // elements A/B default to el.w=200 (makeText); in a 2-col row the <td width%>
+    // governs, so the fixed 200pt width must NOT be emitted or it overflows.
+    const html = renderBandsBody(twoColBand(20, 80), elements);
+    expect(html).toContain('width: 20%');   // the cell width is honored
+    expect(html).not.toContain('width: 200pt'); // the element's own width is dropped
+  });
+
+  it('text in a SINGLE-column row keeps its el.w (no cell to fill)', () => {
+    const oneCol = [{
+      role: 'content' as const,
+      rows: [{ id: 'r0', columns: [{ id: 'c0', widthPct: 100, elementIds: ['A'] }] }],
+    }];
+    expect(renderBandsBody(oneCol, elements)).toContain('width: 200pt');
+  });
 });
 
 // ═══════════════════════════════════════

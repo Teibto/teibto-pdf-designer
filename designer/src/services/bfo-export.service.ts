@@ -182,23 +182,27 @@ function renderBand(
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
 ): string {
-  const cellHtml = (col: { elementIds: string[] }, out: string[]) => {
+  // inCell = element sits in a multi-column <td width="%">, whose width already
+  // governs the column. A text element must then fill the cell, not carry its own
+  // fixed el.w — otherwise an edited/narrow band column can't shrink the element
+  // and it overflows (verified on SB2, #47 3a). Single-column rows keep el.w.
+  const cellHtml = (col: { elementIds: string[] }, out: string[], inCell: boolean) => {
     for (const id of col.elementIds) {
       const el = byId.get(id);
-      if (el) out.push(elementToHtml(el, recordType, useFreeMarker, pagination));
+      if (el) out.push(elementToHtml(el, recordType, useFreeMarker, pagination, inCell));
     }
   };
 
   const out: string[] = [];
   for (const row of band.rows) {
     if (row.columns.length <= 1) {
-      if (row.columns[0]) cellHtml(row.columns[0], out);
+      if (row.columns[0]) cellHtml(row.columns[0], out, false);
       continue;
     }
     out.push('<table style="width: 100%; border-collapse: collapse;"><tr>');
     for (const col of row.columns) {
       out.push(`<td style="width: ${col.widthPct}%; vertical-align: top;">`);
-      cellHtml(col, out);
+      cellHtml(col, out, true);
       out.push('</td>');
     }
     out.push('</tr></table>');
@@ -396,11 +400,12 @@ function elementToHtml(
   recordType: string,
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
+  inCell = false,
 ): string {
   switch (el.type) {
     case 'text':
     case 'header':
-      return textToHtml(el as TextElement, recordType, useFreeMarker);
+      return textToHtml(el as TextElement, recordType, useFreeMarker, inCell);
     case 'image':
       return imageToHtml(el as ImageElement, recordType, useFreeMarker);
     case 'table':
@@ -418,13 +423,15 @@ function elementToHtml(
   }
 }
 
-function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean): string {
+function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean, inCell = false): string {
   const style = [
     `font-size: ${sanitizeNumericCss(el.fontSize, 'pt', 1, 200)}`,
     `font-weight: ${el.fontWeight === 'bold' ? 'bold' : 'normal'}`,
     `color: ${sanitizeColor(el.color)}`,
     `text-align: ${['left', 'center', 'right'].includes(el.textAlign) ? el.textAlign : 'left'}`,
-    `width: ${sanitizeNumericCss(el.w, 'pt', 0, 5000)}`,
+    // In a multi-column cell the <td width%> governs the width; a fixed el.w would
+    // overflow an edited/narrow column, so the text fills the cell instead (#47 3a).
+    ...(inCell ? [] : [`width: ${sanitizeNumericCss(el.w, 'pt', 0, 5000)}`]),
   ].join('; ');
 
   let content = escapeXml(el.content);
