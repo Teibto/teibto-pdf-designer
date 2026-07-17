@@ -24,6 +24,11 @@ define(['N/query', 'N/record', './pld_lib_company_config'], function (query, rec
   function money(v) {
     return num(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+  // BUILTIN.DF(entity) prepends the entity id ("02901 ชื่อลูกค้า") — customer-facing
+  // documents want just the name, so drop a leading numeric id token.
+  function cleanName(v) {
+    return String(v == null ? '' : v).replace(/^\d+\s+/, '').trim();
+  }
 
   /**
    * Build the curated invoice object from a transaction id via SuiteQL.
@@ -48,6 +53,8 @@ define(['N/query', 'N/record', './pld_lib_company_config'], function (query, rec
 
     // transactionline stores invoice amounts/qty GL-signed (negative for income
     // charge lines) — negate for customer-facing display (charges positive).
+    // Skip pure-noise rows (qty 0 AND amount 0) that clutter the printed invoice
+    // (placeholder/empty item lines) — real charges and discounts (amount <> 0) stay.
     var lines = many(
       "SELECT COALESCE(memo, BUILTIN.DF(item)) AS description, " +
       "  -quantity AS quantity, " +
@@ -55,6 +62,7 @@ define(['N/query', 'N/record', './pld_lib_company_config'], function (query, rec
       "  -netamount AS amount " +
       "FROM transactionline " +
       "WHERE transaction = ? AND mainline = 'F' AND taxline = 'F' AND item IS NOT NULL " +
+      "  AND (netamount <> 0 OR quantity <> 0) " +
       "ORDER BY linesequencenumber",
       [id]
     );
@@ -74,9 +82,15 @@ define(['N/query', 'N/record', './pld_lib_company_config'], function (query, rec
     var subtotal = num(rec.getValue({ fieldId: 'subtotal' }));
     var tax = num(rec.getValue({ fieldId: 'taxtotal' }));
 
+    // Billing address: the formatted address text lives on the record body field
+    // (billaddress) — read via the record already loaded (N/record hybrid), avoiding
+    // the multi-table SuiteQL address model.
+    var billAddress = '';
+    try { billAddress = rec.getValue({ fieldId: 'billaddress' }) || ''; } catch (e) { billAddress = ''; }
+
     return {
       company: companyConfig.load(),
-      customer: { name: hdr.customer_name || '', address: '' },
+      customer: { name: cleanName(hdr.customer_name), address: billAddress },
       document: { number: hdr.tranid || '', date: hdr.trandate || '' },
       totals: { subtotal: money(subtotal), tax: money(tax), total: money(total) },
       items: items

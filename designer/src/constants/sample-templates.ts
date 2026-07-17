@@ -18,24 +18,24 @@ function makeId(): string {
 /** Create Invoice template — multi-page with word-counting pagination */
 function createInvoiceTemplate(): DocumentTemplate {
   const elements: CanvasElement[] = [
-    // Company Logo Placeholder
-    {
-      id: makeId(), type: 'shape', name: 'logo_bg', role: 'header',
-      x: 30, y: 30, w: 120, h: 60, zIndex: 0,
-      bgColor: '#4f6ef7', borderRadius: 8, opacity: 1,
-      locked: false, visible: true,
-    } as ShapeElement,
+    // Company name + address (left block). No placeholder logo box: the fake
+    // shape overflowed its band column and covered the company name (only "( SB2)"
+    // showed). A real logo is added as an image bound to company.logo when needed.
     {
       id: makeId(), type: 'header', name: 'company_name', role: 'header',
-      x: 160, y: 30, w: 180, h: 28, zIndex: 1,
-      content: '{{company.name}}', fontSize: 14, fontWeight: 'bold',
+      x: 30, y: 30, w: 330, h: 24, zIndex: 1,
+      content: '{{company.name}}', fontSize: 15, fontWeight: 'bold',
       color: '#111111', textAlign: 'left',
       binding: 'company.name',
       locked: false, visible: true,
     } as TextElement,
     {
+      // y below doc_title's bottom (y30+h32=62) so the band migration keeps the
+      // header as two rows — [company_name | INVOICE] then [company_address | doc#] —
+      // giving the company name a wide (~64%) cell instead of a cramped 30% column
+      // that wrapped the Thai name down to "( SB2)" (see band-layout.service groupIntoRows).
       id: makeId(), type: 'text', name: 'company_address', role: 'header',
-      x: 160, y: 55, w: 180, h: 36, zIndex: 2,
+      x: 30, y: 64, w: 330, h: 40, zIndex: 2,
       content: '{{company.address}}', fontSize: 9, fontWeight: 'normal',
       color: '#666666', textAlign: 'left',
       binding: 'company.address',
@@ -74,10 +74,18 @@ function createInvoiceTemplate(): DocumentTemplate {
     } as TextElement,
     {
       id: makeId(), type: 'text', name: 'customer_name', role: 'content',
-      x: 30, y: 142, w: 250, h: 18, zIndex: 7,
+      x: 30, y: 142, w: 320, h: 18, zIndex: 7,
       content: '{{customer.name}}', fontSize: 12, fontWeight: 'bold',
       color: '#111111', textAlign: 'left',
       binding: 'customer.name',
+      locked: false, visible: true,
+    } as TextElement,
+    {
+      id: makeId(), type: 'text', name: 'customer_address', role: 'content',
+      x: 30, y: 162, w: 320, h: 40, zIndex: 8,
+      content: '{{customer.address}}', fontSize: 9, fontWeight: 'normal',
+      color: '#555555', textAlign: 'left',
+      binding: 'customer.address',
       locked: false, visible: true,
     } as TextElement,
     // Date Info
@@ -114,33 +122,57 @@ function createInvoiceTemplate(): DocumentTemplate {
       alternateRowColor: '#f8f9fc',
       locked: false, visible: true,
     } as TableElement,
-    // Summary
+    // Summary — label + value as SEPARATE elements. A single element that carries
+    // both a literal prefix and a binding loses the prefix on export (the binding
+    // replaces the whole content — bfo-export.service), so labels are their own
+    // bindingless elements, matching the Date / Bill To pattern.
     {
-      id: makeId(), type: 'text', name: 'subtotal', role: 'summary',
-      x: 380, y: 460, w: 185, h: 18, zIndex: 11,
-      content: 'Subtotal: {{totals.subtotal}}', fontSize: 11, fontWeight: 'normal',
+      id: makeId(), type: 'text', name: 'subtotal_label', role: 'summary',
+      x: 360, y: 460, w: 110, h: 18, zIndex: 11,
+      content: 'Subtotal', fontSize: 11, fontWeight: 'normal',
+      color: '#333333', textAlign: 'right',
+      locked: false, visible: true,
+    } as TextElement,
+    {
+      id: makeId(), type: 'text', name: 'subtotal_value', role: 'summary',
+      x: 475, y: 460, w: 90, h: 18, zIndex: 11,
+      content: '{{totals.subtotal}}', fontSize: 11, fontWeight: 'normal',
       color: '#333333', textAlign: 'right',
       binding: 'totals.subtotal',
       locked: false, visible: true,
     } as TextElement,
     {
-      id: makeId(), type: 'text', name: 'tax', role: 'summary',
-      x: 380, y: 480, w: 185, h: 18, zIndex: 12,
-      content: 'VAT 7%: {{totals.tax}}', fontSize: 11, fontWeight: 'normal',
+      id: makeId(), type: 'text', name: 'tax_label', role: 'summary',
+      x: 360, y: 482, w: 110, h: 18, zIndex: 12,
+      content: 'VAT 7%', fontSize: 11, fontWeight: 'normal',
+      color: '#333333', textAlign: 'right',
+      locked: false, visible: true,
+    } as TextElement,
+    {
+      id: makeId(), type: 'text', name: 'tax_value', role: 'summary',
+      x: 475, y: 482, w: 90, h: 18, zIndex: 12,
+      content: '{{totals.tax}}', fontSize: 11, fontWeight: 'normal',
       color: '#333333', textAlign: 'right',
       binding: 'totals.tax',
       locked: false, visible: true,
     } as TextElement,
     {
       id: makeId(), type: 'line', name: 'total_line', role: 'summary',
-      x: 380, y: 500, w: 185, h: 4, zIndex: 13,
+      x: 360, y: 504, w: 205, h: 4, zIndex: 13,
       lineColor: '#4f6ef7', lineWidth: 2, lineStyle: 'solid',
       locked: false, visible: true,
     } as LineElement,
     {
-      id: makeId(), type: 'text', name: 'total', role: 'summary',
-      x: 380, y: 510, w: 185, h: 24, zIndex: 14,
-      content: 'Total: {{totals.total}}', fontSize: 14, fontWeight: 'bold',
+      id: makeId(), type: 'text', name: 'total_label', role: 'summary',
+      x: 360, y: 512, w: 110, h: 24, zIndex: 14,
+      content: 'Total', fontSize: 14, fontWeight: 'bold',
+      color: '#4f6ef7', textAlign: 'right',
+      locked: false, visible: true,
+    } as TextElement,
+    {
+      id: makeId(), type: 'text', name: 'total_value', role: 'summary',
+      x: 475, y: 512, w: 90, h: 24, zIndex: 14,
+      content: '{{totals.total}}', fontSize: 14, fontWeight: 'bold',
       color: '#4f6ef7', textAlign: 'right',
       binding: 'totals.total',
       locked: false, visible: true,

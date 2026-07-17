@@ -106,7 +106,15 @@ define([
     }
 
     // ─── 2. Render (record + company + context) ───
-    var out = renderXmlWithRecord(tplXml, recType, recId);
+    // Invoices bind the curated schema (company/customer/document/totals/items)
+    // built from SuiteQL — the SAME data source as live Preview (preview-live),
+    // so Print == Preview. Without this, Print binds the raw record and the
+    // designer templates (${record.customer.name} etc.) render empty (#67 GAP #1).
+    var curated = (recType === 'invoice')
+      ? invoiceData.buildInvoiceData(recId)
+      : null;
+
+    var out = renderXmlWithRecord(tplXml, recType, recId, curated);
 
     // ─── 3. Set filename from tranid ───
     var tranId = '';
