@@ -7,6 +7,9 @@
 ### Added
 - Master templates อีก 5 ฟอร์มครบชุด Standard Template Pack: `invoice`, `purchase-order`, `delivery-note`, `receipt`, `quotation` ใน `templates/master/` + sample สังเคราะห์ต่อฟอร์มใน `templates/samples/` — โครง/CSS/macro/font pattern เดียวกับ `tax-invoice.xml` ทุกไฟล์ ทั้ง 5 ฟอร์ม render จริงผ่านบน Teibto SB2 (#8)
 
+### Fixed
+- วรรณยุกต์/สระไทยลอยหลุดจากฐานในทุก PDF (เห็นชัดบนฐานเตี้ย เช่น น้ำ ค่า) — เปลี่ยนฟอนต์ฝังจาก `THSarabunNew` เป็น `THSarabunPSK`. BFO ของ NetSuite ไม่ apply GPOS mark positioning; THSarabunNew พึ่ง GPOS ดึง mark ลง THSarabunPSK วาง mark ถูกใน glyph outline เอง. แก้ที่ไฟล์ฟอนต์ bundled (`engine/src/.../fonts/`) + DEPLOYMENT.md; template ไม่แตะ (อ้าง `${company.fontRegular/fontBold}` จาก config อยู่แล้ว) — พิสูจน์ด้วย render จริงบน SB2 (#32)
+
 ## [0.2.0] - 2026-07-17
 
 Phase 1 (render-correct engine) จบครบ + master template แรกของ Standard Template Pack

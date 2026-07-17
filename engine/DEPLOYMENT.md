@@ -171,12 +171,14 @@ SuiteScripts/
 > ค่า config มี `&` ดิบ ไม่ escape = BFO parse พังหลัง FreeMarker แทนค่า
 
 **ฟอนต์ไทย (บังคับสำหรับเอกสารภาษาไทย — ไม่ embed = ตัวอักษรไทยหายเงียบ):**
-1. ไฟล์ font อยู่ที่ `engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/fonts/` (SDF deploy ให้อัตโนมัติ)
+1. ไฟล์ font อยู่ที่ `engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/fonts/` (SDF deploy ให้อัตโนมัติ) — **`THSarabunPSK-Regular.ttf` / `THSarabunPSK-Bold.ttf`**
 2. เปิดไฟล์ทั้งสองใน File Cabinet → ติ๊ก **Available Without Login** → Save
 3. copy **URL เต็ม** จากหน้าไฟล์ (ต้องมี `h=` token และลงท้าย `_xt=.ttf` — token ออกใหม่ทุกครั้งที่ save ไฟล์)
    มาใส่ Thai Font Regular/Bold URL บน config record (และ script params ของ Designer ข้างบน)
 4. Template pack อ้าง `${company.fontRegular}` อยู่แล้ว — ไม่ต้องแก้ template
 
+> ⚠️ **ต้องใช้ THSarabunPSK เท่านั้น — ห้าม THSarabunNew (#32).** BFO ของ NetSuite **ไม่ apply GPOS mark positioning**; THSarabunNew ออกแบบให้วรรณยุกต์/สระ (่ ้ ั ิ ี ึ ื ุ ู) พึ่ง GPOS ดึงลง → บน BFO mark ลอยหลุดจากฐาน (เห็นชัดบนฐานเตี้ย เช่น น้ำ ค่า). THSarabunPSK วาง mark ถูกใน glyph outline เอง จึง render ถูกโดยไม่พึ่ง GPOS (พิสูจน์ด้วย render จริงบน SB2 2026-07-17 + ตรงกับ Suitelet PFTS ที่ใช้อยู่). หมายเหตุ: template ยังใช้ label `font-family: THSarabunNew` เป็น BFO font-family identifier เฉย ๆ — ตัวฟอนต์ที่ embed จริงมาจาก URL ใน config (ต้องชี้ไป THSarabunPSK)
+>
 > ⚠️ พิสูจน์แล้วบน SB2 (2026-07-17): font-family ที่ไม่ embed — รวมถึง `NotoSansThai` — ทำให้ **glyph ไทยถูก drop เงียบ ๆ** ใน PDF (ไม่ error) — เอกสารไทยทุกใบต้องตั้ง font URL บน config เสมอ
 
 ---
@@ -338,7 +340,8 @@ ${record.trandate?string["dd/MM/yyyy"]} ← Date format
 | Designer โหลดช้า | JS bundle ใหญ่ | ปกติโหลดครั้งแรกช้า, ครั้งต่อไป cache |
 | Template save fail | Custom Record ไม่มี / field ผิด | ตรวจ field IDs ตรงกับ script |
 | CSS ไม่ทำงานใน PDF | BFO ไม่รองรับ CSS บางอย่าง | ดู [BFO CSS Reference](https://www.netsuite.com/portal/developers/resources/apis/suitescript/ss-reference.shtml) |
-| ภาษาไทยไม่แสดง | BFO ฝั่ง server ไม่มีฟอนต์ระบบไทย (Tahoma/Sarabun ใช้ไม่ได้) | ตั้ง `custscript_pld_font_regular/bold` (ดู §ฟอนต์ไทย) หรือใช้ `font-family: NotoSansThai` (built-in) |
+| ภาษาไทยไม่แสดง | BFO ฝั่ง server ไม่มีฟอนต์ระบบไทย (Tahoma ใช้ไม่ได้) | ตั้ง `custscript_pld_font_regular/bold` ชี้ไป THSarabunPSK (ดู §ฟอนต์ไทย) |
+| วรรณยุกต์/สระไทยลอยหลุดจากฐาน (เห็นชัดบน น้ำ ค่า ก้าว) | ใช้ฟอนต์ที่พึ่ง GPOS (เช่น THSarabunNew/NotoSansThai) — BFO ไม่ apply GPOS | เปลี่ยนเป็น **THSarabunPSK** (mark วางถูกใน outline เอง) — ดู §ฟอนต์ไทย (#32) |
 
 ---
 
@@ -347,5 +350,5 @@ ${record.trandate?string["dd/MM/yyyy"]} ← Date format
 - **Default Template**: set checkbox `Is Default` เพื่อใช้เป็น template อัตโนมัติเมื่อกด Print PDF (ไม่ต้องเลือก)
 - **Multiple Templates**: ถ้ามีหลาย template สำหรับ record type เดียวกัน, UE จะแสดง dropdown ให้เลือก
 - **Governance**: N/render.create() ใช้ ~10 units, โหลด record ~5 units, รวม ~20 units/call
-- **Thai**: ใช้ `Tahoma` หรือ `THSarabunNew` (upload font to File Cabinet ถ้าจำเป็น)
+- **Thai**: ต้องใช้ `THSarabunPSK` (embed จาก File Cabinet) — **ห้าม THSarabunNew** เพราะ BFO ไม่ apply GPOS แล้ววรรณยุกต์ลอย (#32); `Tahoma` ไม่มีบน BFO ฝั่ง server
 - **Logo**: upload logo ไปที่ File Cabinet แล้วใส่ URL ใน Script Parameter `custscript_pld_company_logo`
