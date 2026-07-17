@@ -30,11 +30,13 @@ import {
   mergeColumn,
   moveElementToCell,
   addElementToCell,
+  addElementToNewBand,
   removeBandElement,
   selectElement,
 } from '../../state/actions';
 import { ELEMENT_ROLES } from '../../constants/roles';
-import type { ElementType } from '../../models/element';
+import { BAND_ORDER, type Band } from '../../models/bands';
+import type { ElementType, ElementRoleType, CanvasElement } from '../../models/element';
 
 @customElement('pld-band-view')
 export class PldBandView extends LitElement {
@@ -84,23 +86,55 @@ export class PldBandView extends LitElement {
     .chip .del:hover { color: #e74c8b; background: var(--color-bg-deep, #0a0b10); }
     .chip .t { color: var(--color-text-dim, #8a8ca0); font-family: var(--font-mono, monospace); font-size: 10px; }
     .empty { color: var(--color-text-dim, #8a8ca0); font-size: 13px; text-align: center; padding: 40px; }
+    .empty-slot { border-style: dashed; opacity: .7; }
+    .empty-slot.drop { opacity: 1; border-style: solid; background: color-mix(in srgb, var(--band-color) 10%, transparent); }
+    .empty-slot .slot-hint { padding: 12px; text-align: center; font-size: 11px; color: var(--color-text-dim, #8a8ca0); }
   `;
 
   render() {
     void this._tick;
     const { bands, elements, selectedId } = this.store.state;
     const byId = new Map(elements.map((e) => [e.id, e]));
-    if (bands.length === 0) return html`<div class="empty">ยังไม่มี element — กด Sample หรือวางของบน canvas ก่อน</div>`;
 
+    // Always show all six role slots (BAND_ORDER): a populated band renders its
+    // rows/cells; an empty role is a drop-zone so a blank template (or an unused
+    // role) can receive its first element without a free canvas (#47 cutover).
     return html`
       <div class="doc">
         <div class="toolbar">
-          <button class="wide" title="สร้าง bands ใหม่จาก canvas (ทับ layout ปัจจุบัน)"
-            @click=${() => regenerateBands(this.store)}>↻ re-sync จาก canvas</button>
+          ${elements.length
+            ? html`<button class="wide" title="สร้าง bands ใหม่จาก canvas (ทับ layout ปัจจุบัน)"
+                @click=${() => regenerateBands(this.store)}>↻ re-sync จาก canvas</button>`
+            : nothing}
         </div>
-        ${bands.map((band, bi) => {
-          const role = ELEMENT_ROLES[band.role];
-          return html`
+        ${BAND_ORDER.map((roleType) => {
+          const bi = bands.findIndex((b) => b.role === roleType);
+          return bi >= 0
+            ? this._renderBand(bands[bi], bi, byId, selectedId)
+            : this._renderEmptyRole(roleType);
+        })}
+      </div>
+    `;
+  }
+
+  /** Render an empty role slot as a compact drop-zone for a palette element. */
+  private _renderEmptyRole(roleType: ElementRoleType) {
+    const role = ELEMENT_ROLES[roleType];
+    return html`
+      <div class="band empty-slot" style="--band-color: ${role.color};"
+        @dragover=${(e: DragEvent) => this._onDragOver(e)}
+        @dragleave=${(e: DragEvent) => this._onDragLeave(e)}
+        @drop=${(e: DragEvent) => this._onEmptyDrop(e, roleType)}>
+        <div class="band-head">${role.label} <span style="opacity:.7;font-weight:400;">· ว่าง</span></div>
+        <div class="slot-hint">ลาก element มาวางที่นี่เพื่อเริ่ม</div>
+      </div>
+    `;
+  }
+
+  /** Render a populated band with its rows, cells and tools. */
+  private _renderBand(band: Band, bi: number, byId: Map<string, CanvasElement>, selectedId: string | null) {
+    const role = ELEMENT_ROLES[band.role];
+    return html`
             <div class="band" style="--band-color: ${role.color};">
               <div class="band-head">
                 ${role.label} <span style="opacity:.7;font-weight:400;">· ${band.rows.length} row</span>
@@ -154,9 +188,6 @@ export class PldBandView extends LitElement {
                 `)}
               </div>
             </div>
-          `;
-        })}
-      </div>
     `;
   }
 
@@ -190,6 +221,17 @@ export class PldBandView extends LitElement {
       this.store.dispatch((d) => { d.dragType = null; });
     } else if (this._dragElId) {
       moveElementToCell(this.store, this._dragElId, bi, ri, ci);
+    }
+    this._dragElId = null;
+  }
+  /** Drop onto an empty role slot: only a palette add applies (creates the band). */
+  private _onEmptyDrop(e: DragEvent, role: ElementRoleType) {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).classList.remove('drop');
+    const type = this.store.state.dragType;
+    if (type) {
+      addElementToNewBand(this.store, type as ElementType, role);
+      this.store.dispatch((d) => { d.dragType = null; });
     }
     this._dragElId = null;
   }
