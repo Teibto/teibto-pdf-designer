@@ -28,6 +28,10 @@ project.json
 engine/deploy-targets.txt
 engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/pld_version.txt
 
+# Staged SPA bundle — build artifact, deploy.sh สร้างใหม่ทุกครั้งจาก designer/ (#39)
+engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/dist/
+designer/.deploy-build.log
+
 # OS / editor
 .DS_Store
 Thumbs.db

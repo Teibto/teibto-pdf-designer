@@ -9,7 +9,6 @@
  * @author Wichit Wongta
  */
 define([
-  'N/ui/serverWidget',
   'N/file',
   'N/runtime',
   'N/url',
@@ -17,18 +16,14 @@ define([
   'N/record',
   'N/log',
   './pld_lib_company_config'
-], function (serverWidget, file, runtime, url, search, record, log, companyConfig) {
+], function (file, runtime, url, search, record, log, companyConfig) {
 
   /**
-   * File Cabinet folder ID where the built app files live.
-   * Update this after uploading the dist/ folder.
+   * File Cabinet path of the built SPA bundle. deploy.sh (#39) stages
+   * designer/dist-netsuite here, so the Suitelet serves it by PATH — no
+   * per-account internal IDs to hardcode (paths are identical on every account).
    */
-  const APP_FOLDER_ID = 0; // ← TODO: ใส่ Folder ID หลัง upload
-
-  /**
-   * Alternative: direct file IDs if known
-   */
-  const INDEX_FILE_ID = 0; // ← TODO: ใส่ File ID ของ index.html
+  const DIST_PATH = '/SuiteScripts/pdf-layout-designer/dist';
 
   /**
    * @param {Object} context
@@ -75,59 +70,54 @@ define([
   // ═══════════════════════════════════════
 
   /**
-   * Serve the SPA as an inline HTML page.
-   * Approach A: Load index.html from File Cabinet
-   * Approach B: Build the HTML with serverWidget
+   * Serve the built SPA — load its index.html from File Cabinet by path, rewrite
+   * asset refs to File Cabinet URLs, and inject NetSuite globals (#39).
    */
   function serveApp(context) {
     try {
-      // ─── Approach A: Serve index.html from File Cabinet ───
-      if (INDEX_FILE_ID > 0) {
-        const indexFile = file.load({ id: INDEX_FILE_ID });
-        let htmlContent = indexFile.getContents();
+      // Serve the built SPA from File Cabinet BY PATH (#39) — no per-account IDs.
+      var indexHtml = file.load({ id: DIST_PATH + '/index.html' }).getContents();
 
-        // Inject NetSuite context + render Suitelet URL as global variables
-        const nsContext = buildNsContext(context);
-        const injection = '<script>window.__NS_CONTEXT__ = ' + JSON.stringify(nsContext) + ';'
-          + 'window.__NS_RENDER_URL__ = ' + JSON.stringify(getRenderUrl()) + ';</script>';
-        htmlContent = htmlContent.replace('</head>', injection + '\n</head>');
+      // Resolve File Cabinet URLs of the two direct assets by path. .url is cheap
+      // (metadata) — do NOT getContents() the ~2MB bundle. Module scripts are
+      // MIME-strict: NetSuite serves a JS content-type only when the URL carries
+      // _xt=.js, else the <script type="module"> is rejected and the app never
+      // upgrades (#39).
+      var jsUrl  = withJsExt(file.load({ id: DIST_PATH + '/assets/pld-app.js' }).url);
+      var cssUrl = file.load({ id: DIST_PATH + '/assets/pld-app.css' }).url;
 
-        context.response.write(htmlContent);
-        return;
-      }
+      // Rewrite the build's relative refs (base './') to absolute File Cabinet URLs
+      indexHtml = indexHtml
+        .replace('./assets/pld-app.js', jsUrl)
+        .replace('./assets/pld-app.css', cssUrl);
 
-      // ─── Approach B: Use serverWidget inline HTML ───
-      const form = serverWidget.createForm({
-        title: 'PDF Layout Designer',
-        hideNavBar: true,
-      });
-
-      const htmlField = form.addField({
-        id: 'custpage_app',
-        type: serverWidget.FieldType.INLINEHTML,
-        label: 'App',
-      });
-
-      const nsContext = buildNsContext(context);
-      const suiteletUrl = url.resolveScript({
+      // Inject globals the app reads: __NS_CONTEXT__ (record + fonts), this
+      // designer Suitelet's own URL (load-record / save-template callbacks), and
+      // the render Suitelet URL (server preview + Print, #12).
+      var nsContext = buildNsContext(context);
+      var suiteletUrl = url.resolveScript({
         scriptId: runtime.getCurrentScript().id,
         deploymentId: runtime.getCurrentScript().deploymentId,
         returnExternalUrl: false,
       });
+      var injection = '<script>'
+        + 'window.__NS_CONTEXT__ = ' + JSON.stringify(nsContext) + ';'
+        + 'window.__NS_SUITELET_URL__ = ' + JSON.stringify(suiteletUrl) + ';'
+        + 'window.__NS_RENDER_URL__ = ' + JSON.stringify(getRenderUrl()) + ';'
+        + '</script>';
+      indexHtml = indexHtml.replace('</head>', injection + '\n</head>');
 
-      // If APP_FOLDER_ID is set, build asset URLs from File Cabinet
-      let appBaseUrl = '';
-      if (APP_FOLDER_ID > 0) {
-        appBaseUrl = getFileCabinetUrl(APP_FOLDER_ID);
-      }
-
-      htmlField.defaultValue = buildInlineHtml(nsContext, suiteletUrl, appBaseUrl, getRenderUrl());
-      context.response.writePage(form);
-
+      context.response.write(indexHtml);
     } catch (e) {
       log.error({ title: 'serveApp', details: e });
-      context.response.write('<h2>Error loading PDF Layout Designer</h2><p>' + e.message + '</p>');
+      context.response.write('<h2>Error loading PDF Layout Designer</h2><p>' + (e.message || e) + '</p>');
     }
+  }
+
+  /** Ensure a File Cabinet media URL is served with a JS content-type (#39). */
+  function withJsExt(u) {
+    if (u.indexOf('_xt=') !== -1) return u;
+    return u + (u.indexOf('?') === -1 ? '?' : '&') + '_xt=.js';
   }
 
   // ═══════════════════════════════════════
@@ -398,12 +388,6 @@ define([
   // HELPERS
   // ═══════════════════════════════════════
 
-  function getFileCabinetUrl(folderId) {
-    // Build URL to File Cabinet folder for static assets
-    // This depends on your account's File Cabinet structure
-    return '/site/hosting/scriptlet.nl?folder=' + folderId;
-  }
-
   function getBodyFields(recType) {
     const common = [
       'tranid', 'trandate', 'status', 'subsidiary', 'department',
@@ -448,44 +432,6 @@ define([
     };
 
     return typeFields[recType] || common;
-  }
-
-  /**
-   * Build inline HTML when not using File Cabinet index.html
-   */
-  function buildInlineHtml(nsContext, suiteletUrl, appBaseUrl, renderUrl) {
-    return [
-      '<!DOCTYPE html>',
-      '<html lang="th">',
-      '<head>',
-      '  <meta charset="UTF-8">',
-      '  <meta name="viewport" content="width=device-width, initial-scale=1.0">',
-      '  <title>PDF Layout Designer</title>',
-      '  <script>',
-      '    window.__NS_CONTEXT__ = ' + JSON.stringify(nsContext) + ';',
-      '    window.__NS_SUITELET_URL__ = "' + suiteletUrl + '";',
-      '    window.__NS_RENDER_URL__ = ' + JSON.stringify(renderUrl || '') + ';',
-      '  </script>',
-      '  <style>',
-      '    body { margin: 0; padding: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }',
-      '    .ns-loading { display: flex; align-items: center; justify-content: center; height: 100vh; background: #13141f; color: #8a8ca0; font-size: 14px; flex-direction: column; gap: 16px; }',
-      '    .ns-loading .spinner { width: 40px; height: 40px; border: 3px solid #2d2e3f; border-top-color: #4f6ef7; border-radius: 50%; animation: spin 0.8s linear infinite; }',
-      '    @keyframes spin { to { transform: rotate(360deg); } }',
-      '  </style>',
-      appBaseUrl ? '  <script type="module" src="' + appBaseUrl + '/assets/index.js"></script>' : '',
-      appBaseUrl ? '  <link rel="stylesheet" href="' + appBaseUrl + '/assets/index.css">' : '',
-      '</head>',
-      '<body>',
-      '  <div id="app">',
-      '    <div class="ns-loading">',
-      '      <div class="spinner"></div>',
-      '      <span>Loading PDF Layout Designer...</span>',
-      '    </div>',
-      '  </div>',
-      '  <pld-app-shell></pld-app-shell>',
-      '</body>',
-      '</html>',
-    ].join('\n');
   }
 
   return { onRequest: onRequest };

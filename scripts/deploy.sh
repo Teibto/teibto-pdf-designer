@@ -24,13 +24,18 @@ VERSION_FILE="${ENGINE_DIR}/VERSION"
 TARGETS_FILE="${ENGINE_DIR}/deploy-targets.txt"
 APP_DIR="${ENGINE_DIR}/src/FileCabinet/SuiteScripts/pdf-layout-designer"
 STAMP_FILE="${APP_DIR}/pld_version.txt"
+DESIGNER_DIR="${REPO_ROOT}/designer"
+DIST_SRC="${DESIGNER_DIR}/dist-netsuite"      # vite --mode netsuite output
+DIST_DEST="${APP_DIR}/dist"                   # File Cabinet path served by pld_sl_designer.js
 
 # --- 0) parse args -----------------------------------------------------------
 DRYRUN=0
+NO_BUILD=0
 AUTHIDS=()
 for arg in "$@"; do
   case "$arg" in
     --dryrun) DRYRUN=1 ;;
+    --no-build) NO_BUILD=1 ;;   # reuse existing designer/dist-netsuite (เร็ว ตอน iterate)
     -*) echo "ERROR: unknown option '$arg'" >&2; exit 2 ;;
     *) AUTHIDS+=("$arg") ;;
   esac
@@ -67,6 +72,24 @@ BUILT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 mkdir -p "${APP_DIR}"
 printf '{"version":"%s","sha":"%s%s","built":"%s"}\n' \
   "${VERSION}" "${SHA}" "${DIRTY}" "${BUILT}" > "${STAMP_FILE}"
+
+# --- 1b) build + stage designer SPA bundle เข้า File Cabinet path (#39) --------
+# pld_sl_designer.js serve dist/ จาก File Cabinet ด้วย path — bundle ต้องอยู่ใน deploy scope
+# (ทำครั้งเดียวก่อน loop; dist/ เป็น build artifact — gitignore, สร้างใหม่ทุก deploy)
+if [ "${NO_BUILD}" -eq 1 ]; then
+  echo "▶ --no-build: ใช้ ${DIST_SRC} เดิม"
+  [ -d "${DIST_SRC}" ] || { echo "ERROR: --no-build แต่ไม่มี ${DIST_SRC} — รัน build ก่อน" >&2; exit 1; }
+else
+  echo "▶ building designer SPA (npm run build:netsuite)…"
+  command -v npm >/dev/null 2>&1 || { echo "ERROR: ต้องมี npm เพื่อ build designer bundle (หรือใช้ --no-build)" >&2; exit 1; }
+  ( cd "${DESIGNER_DIR}" && npm run build:netsuite ) > "${DESIGNER_DIR}/.deploy-build.log" 2>&1 \
+    || { echo "ERROR: designer build ล้มเหลว — ดู ${DESIGNER_DIR}/.deploy-build.log" >&2; tail -8 "${DESIGNER_DIR}/.deploy-build.log" >&2; exit 1; }
+fi
+[ -f "${DIST_SRC}/index.html" ] || { echo "ERROR: ไม่พบ ${DIST_SRC}/index.html หลัง build" >&2; exit 1; }
+rm -rf "${DIST_DEST}"
+mkdir -p "${DIST_DEST}"
+cp -r "${DIST_SRC}/." "${DIST_DEST}/"
+echo "▶ staged SPA → ${DIST_DEST} ($(find "${DIST_DEST}" -type f | wc -l | tr -d ' ') files)"
 
 echo "════════════════════════════════════════════════════════════"
 echo " PLD deploy  ·  version ${VERSION}  ·  sha ${SHA}${DIRTY}  ·  ${BUILT}"
