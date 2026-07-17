@@ -53,8 +53,10 @@ define(['N/query', 'N/record', './pld_lib_company_config'], function (query, rec
 
     // transactionline stores invoice amounts/qty GL-signed (negative for income
     // charge lines) — negate for customer-facing display (charges positive).
-    // Skip pure-noise rows (qty 0 AND amount 0) that clutter the printed invoice
-    // (placeholder/empty item lines) — real charges and discounts (amount <> 0) stay.
+    // Show only real charge/discount lines: exclude the pseudo-item line types
+    // (Subtotal/Description/Markup carry no sellable amount) and drop zero-amount
+    // rows (empty/placeholder lines). Real discounts have a non-zero amount and stay;
+    // the printed totals come from the record body fields, not this list.
     var lines = many(
       "SELECT COALESCE(memo, BUILTIN.DF(item)) AS description, " +
       "  -quantity AS quantity, " +
@@ -62,7 +64,8 @@ define(['N/query', 'N/record', './pld_lib_company_config'], function (query, rec
       "  -netamount AS amount " +
       "FROM transactionline " +
       "WHERE transaction = ? AND mainline = 'F' AND taxline = 'F' AND item IS NOT NULL " +
-      "  AND (netamount <> 0 OR quantity <> 0) " +
+      "  AND itemtype NOT IN ('Subtotal', 'Description', 'Markup') " +
+      "  AND netamount <> 0 " +
       "ORDER BY linesequencenumber",
       [id]
     );
