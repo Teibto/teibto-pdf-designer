@@ -188,7 +188,6 @@ export class PldHeader extends LitElement {
         <button class="btn btn-sm" @click=${this._onSave}>💾 Save</button>
         <button class="btn btn-sm" @click=${this._onExportJson}>⟨/⟩ JSON</button>
         <button class="btn btn-sm" @click=${this._onSample}>★ Sample</button>
-        <button class="btn btn-sm btn-success" @click=${this._onExportPdf}>📄 PDF</button>
         <button class="btn btn-sm btn-bfo" @click=${this._onExportBfo}>🔶 NetSuite BFO</button>
         <button class="btn btn-sm btn-primary" @click=${this._onPreview}>▶ Preview</button>
       </div>
@@ -206,7 +205,6 @@ export class PldHeader extends LitElement {
   private _onSave()      { this._emit('pld-save-template'); }
   private _onExportJson(){ this._emit('pld-show-export-json'); }
   private _onSample()    { this._emit('pld-load-sample'); }
-  private _onExportPdf() { this._emit('pld-export-pdf'); }
   private _onExportBfo() { this._emit('pld-show-bfo-export'); }
   private _onPreview()   { this._emit('pld-show-preview'); }
 }

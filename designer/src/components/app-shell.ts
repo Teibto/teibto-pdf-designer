@@ -14,7 +14,6 @@ import { HistoryService } from '../services/history.service';
 import { registerKeyboardShortcuts } from '../services/keyboard.service';
 import { applyPagination, clearPaginationCache } from '../services/pagination.service';
 import { saveTemplate } from '../services/template.service';
-import { exportPdf, exportPdfViaWorker } from '../services/pdf-export.service';
 import { showToast } from './shared/toast-notification';
 import { getSampleTemplates } from '../constants/sample-templates';
 import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext } from '../services/netsuite-adapter.service';
@@ -144,7 +143,6 @@ export class PldAppShell extends LitElement {
     this.addEventListener('pld-save-template', () => this._saveTemplate());
     this.addEventListener('pld-show-export-json', () => this._exportJson());
     this.addEventListener('pld-load-sample', () => this._loadSample());
-    this.addEventListener('pld-export-pdf', () => this._exportPdf());
     this.addEventListener('pld-show-bfo-export', () => { this.showBfoExport = true; });
     this.addEventListener('pld-show-preview', () => { this.showPreview = true; });
 
@@ -245,29 +243,6 @@ export class PldAppShell extends LitElement {
     const json = JSON.stringify({ name: template.name, page, pagination, elements, jsonData }, null, 2);
     navigator.clipboard?.writeText(json);
     showToast('Template JSON copied to clipboard!', 'success');
-  }
-
-  private async _exportPdf() {
-    showToast('Generating PDF...', 'info');
-    const filename = `${this.store.state.template.name || 'document'}.pdf`;
-    try {
-      // Use Web Worker for off-main-thread rendering (non-blocking UI)
-      await exportPdfViaWorker(this.store.state, {
-        filename,
-        openInNewTab: true,
-        onProgress: (pct) => {
-          if (pct === 100) showToast('PDF exported!', 'success');
-        },
-      });
-    } catch {
-      // Fallback to main thread export if worker fails
-      try {
-        await exportPdf(this.store.state, { filename, openInNewTab: true });
-        showToast('PDF exported!', 'success');
-      } catch (err) {
-        showToast(`PDF export failed: ${err}`, 'error');
-      }
-    }
   }
 
   private _loadSample() {
