@@ -153,6 +153,10 @@ function buildBfoCss(hasEmbeddedThaiFont: boolean): string {
 
   // Base styles (page size/margins are <body> attributes in BFO, not @page CSS)
   lines.push(`body { font-family: ${fontFamily}; font-size: 10pt; color: #333; }`);
+  // Headings (header-role elements render as <h2>) do NOT inherit the body font in
+  // BFO — its default heading font is Latin-only, so Thai glyphs silently drop (a
+  // header-type "บริษัท …" rendered as "( SB2)"). Force the embedded font on headings.
+  lines.push(`h1, h2, h3, h4, h5, h6 { font-family: ${fontFamily}; }`);
   lines.push(`table { border-collapse: collapse; }`);
   lines.push(`th, td { padding: 4pt 6pt; }`);
 
