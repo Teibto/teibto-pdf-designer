@@ -17,6 +17,8 @@ import { computePagination, finalizePagination } from '../../services/pagination
 import { formatCellValue } from '../../utils/format';
 import { exportPdf } from '../../services/pdf-export.service';
 import { getCachedBarcodeSvg } from '../../services/barcode.service';
+import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
+import { isNetSuiteEnv, getNsContext, renderLivePreview, openRenderedPdf } from '../../services/netsuite-adapter.service';
 import { showToast } from '../shared/toast-notification';
 import '../shared/modal';
 
@@ -31,6 +33,11 @@ export class PldPreviewModal extends LitElement {
   @state() private totalPages = 1;
   @state() private exporting = false;
   @state() private zoom = 90;
+
+  // Server-side preview (#12) — real N/render PDF, only inside NetSuite + record
+  @state() private serverPdfUrl: string | null = null;
+  @state() private serverLoading = false;
+  @state() private serverError = '';
 
   static styles = css`
     .preview-toolbar {
@@ -117,6 +124,50 @@ export class PldPreviewModal extends LitElement {
       opacity: 0.5;
       cursor: default;
       transform: none;
+    }
+
+    /* ─── Server-side preview (#12) ─── */
+    .server-frame {
+      width: 100%;
+      height: 68vh;
+      border: 1px solid var(--color-border, #2a2c3a);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .server-status {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      height: 68vh;
+      color: var(--color-text-dim, #8a8ca0);
+      font-size: 13px;
+    }
+
+    .server-status .spinner {
+      width: 34px;
+      height: 34px;
+      border: 3px solid var(--color-border, #2a2c3a);
+      border-top-color: #4f6ef7;
+      border-radius: 50%;
+      animation: pld-spin 0.8s linear infinite;
+    }
+
+    @keyframes pld-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .server-status.error {
+      color: #f87171;
+      text-align: center;
+      padding: 0 24px;
+    }
+
+    .server-hint {
+      font-size: 11px;
+      color: var(--color-text-dim, #8a8ca0);
     }
 
     /* ─── Page Preview ─── */
@@ -255,18 +306,71 @@ export class PldPreviewModal extends LitElement {
     }
   `;
 
+  /** Server-side preview is only meaningful inside NetSuite with a record loaded. */
+  private get _serverMode(): boolean {
+    return isNetSuiteEnv() && !!getNsContext()?.recordId;
+  }
+
   updated(changed: Map<string, unknown>) {
-    if (changed.has('open') && this.open) {
-      this.previewPage = 1;
-      this.totalPages = this.store.state.totalPages || 1;
+    if (changed.has('open')) {
+      if (this.open) {
+        this.previewPage = 1;
+        this.totalPages = this.store.state.totalPages || 1;
+        if (this._serverMode) this._loadServerPreview();
+      } else {
+        this._clearServerPreview();
+      }
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._clearServerPreview();
+  }
+
+  /**
+   * Render the current (unsaved) design server-side via N/render and show the
+   * real PDF — same engine + record as Print, so preview == print (#12).
+   */
+  private async _loadServerPreview() {
+    const ctx = getNsContext();
+    if (!ctx?.recordId || !ctx?.recordType) return;
+
+    this._clearServerPreview();
+    this.serverLoading = true;
+    this.serverError = '';
+    try {
+      const options: BfoExportOptions = {};
+      if (ctx.fontRegularUrl) {
+        options.thaiFontUrls = { regular: ctx.fontRegularUrl, bold: ctx.fontBoldUrl || undefined };
+      }
+      const xml = exportBfoXml(this.store.state, options);
+      const blob = await renderLivePreview({ xml, rectype: ctx.recordType, recid: ctx.recordId });
+      this.serverPdfUrl = URL.createObjectURL(blob);
+    } catch (err) {
+      this.serverError = err instanceof Error ? err.message : String(err);
+    } finally {
+      this.serverLoading = false;
+    }
+  }
+
+  private _clearServerPreview() {
+    if (this.serverPdfUrl) {
+      URL.revokeObjectURL(this.serverPdfUrl);
+      this.serverPdfUrl = null;
+    }
+  }
+
+  /** Open/download the print PDF from the same render Suitelet. */
+  private _printServer() {
+    const ctx = getNsContext();
+    if (ctx?.recordType && ctx?.recordId) {
+      openRenderedPdf(ctx.recordType, ctx.recordId, undefined, true);
     }
   }
 
   render() {
     if (!this.open) return nothing;
-
-    const state = this.store.state;
-    const scale = this.zoom / 100;
 
     return html`
       <pld-modal
@@ -276,42 +380,73 @@ export class PldPreviewModal extends LitElement {
         @close=${this._close}
       >
         <div slot="body">
-          <!-- Toolbar -->
-          <div class="preview-toolbar">
-            <div class="preview-nav">
-              <button class="nav-btn" ?disabled=${this.previewPage <= 1}
-                @click=${() => this.previewPage--}>‹</button>
-              <span class="page-info">${this.previewPage} / ${this.totalPages}</span>
-              <button class="nav-btn" ?disabled=${this.previewPage >= this.totalPages}
-                @click=${() => this.previewPage++}>›</button>
-            </div>
-
-            <div class="zoom-controls">
-              <button class="nav-btn" @click=${() => this.zoom = Math.max(30, this.zoom - 10)}>−</button>
-              <span class="zoom-label">${this.zoom}%</span>
-              <button class="nav-btn" @click=${() => this.zoom = Math.min(200, this.zoom + 10)}>+</button>
-            </div>
-
-            <button
-              class="export-btn"
-              ?disabled=${this.exporting}
-              @click=${this._exportPdf}
-            >
-              ${this.exporting ? '⟳ Generating...' : '📄 Export PDF'}
-            </button>
-          </div>
-
-          <!-- Preview Page -->
-          <div class="preview-scroll">
-            <div
-              class="page-preview"
-              style="width: ${state.page.width}px; height: ${state.page.height}px; transform: scale(${scale});"
-            >
-              ${this._renderPageElements(state, this.previewPage)}
-            </div>
-          </div>
+          ${this._serverMode ? this._renderServerBody() : this._renderSimBody()}
         </div>
       </pld-modal>
+    `;
+  }
+
+  /** Server-side preview body: real N/render PDF in an iframe (#12). */
+  private _renderServerBody() {
+    return html`
+      <div class="preview-toolbar">
+        <span class="server-hint">Rendered by NetSuite N/render — identical to Print PDF</span>
+        <button class="export-btn" @click=${this._printServer}>📄 Open / Download PDF</button>
+      </div>
+
+      ${this.serverLoading
+        ? html`<div class="server-status"><div class="spinner"></div><span>Rendering PDF…</span></div>`
+        : this.serverError
+          ? html`<div class="server-status error">
+              <span>Render failed: ${this.serverError}</span>
+              <button class="nav-btn" style="width:auto;padding:0 12px;" @click=${this._loadServerPreview}>↻ Retry</button>
+            </div>`
+          : this.serverPdfUrl
+            ? html`<iframe class="server-frame" src=${this.serverPdfUrl} title="PDF Preview"></iframe>`
+            : nothing}
+    `;
+  }
+
+  /** Client-side simulation body (dev / no record) — unchanged legacy preview. */
+  private _renderSimBody() {
+    const state = this.store.state;
+    const scale = this.zoom / 100;
+
+    return html`
+      <!-- Toolbar -->
+      <div class="preview-toolbar">
+        <div class="preview-nav">
+          <button class="nav-btn" ?disabled=${this.previewPage <= 1}
+            @click=${() => this.previewPage--}>‹</button>
+          <span class="page-info">${this.previewPage} / ${this.totalPages}</span>
+          <button class="nav-btn" ?disabled=${this.previewPage >= this.totalPages}
+            @click=${() => this.previewPage++}>›</button>
+        </div>
+
+        <div class="zoom-controls">
+          <button class="nav-btn" @click=${() => this.zoom = Math.max(30, this.zoom - 10)}>−</button>
+          <span class="zoom-label">${this.zoom}%</span>
+          <button class="nav-btn" @click=${() => this.zoom = Math.min(200, this.zoom + 10)}>+</button>
+        </div>
+
+        <button
+          class="export-btn"
+          ?disabled=${this.exporting}
+          @click=${this._exportPdf}
+        >
+          ${this.exporting ? '⟳ Generating...' : '📄 Export PDF'}
+        </button>
+      </div>
+
+      <!-- Preview Page -->
+      <div class="preview-scroll">
+        <div
+          class="page-preview"
+          style="width: ${state.page.width}px; height: ${state.page.height}px; transform: scale(${scale});"
+        >
+          ${this._renderPageElements(state, this.previewPage)}
+        </div>
+      </div>
     `;
   }
 

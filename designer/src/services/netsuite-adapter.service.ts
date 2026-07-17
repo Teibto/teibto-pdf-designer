@@ -253,6 +253,53 @@ export function openPdfPreview(templateId: string): void {
   window.open(url.toString(), '_blank');
 }
 
+/**
+ * Render the CURRENT (unsaved) designer XML server-side and return the PDF blob.
+ * Uses the render Suitelet's `preview-live` action, which binds the XML to the
+ * real record via the SAME N/render path as Print — so preview == print (#12).
+ */
+export async function renderLivePreview(opts: {
+  xml: string;
+  rectype: string;
+  recid: string;
+}): Promise<Blob> {
+  const baseUrl = getRendererUrl();
+  if (!baseUrl) throw new Error('Render Suitelet URL not configured');
+
+  const target = new URL(baseUrl, window.location.origin);
+  target.searchParams.set('action', 'preview-live');
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const response = await fetch(target.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ xml: opts.xml, rectype: opts.rectype, recid: opts.recid }),
+      signal: controller.signal,
+    });
+
+    // The Suitelet returns HTTP 200 with a JSON error body on failure (its
+    // onRequest catch), so a non-PDF content-type means the render failed.
+    const contentType = response.headers.get('Content-Type') || '';
+    if (!response.ok || contentType.indexOf('application/pdf') === -1) {
+      const errText = await response.text().catch(() => '');
+      let message = errText || response.statusText;
+      try { message = JSON.parse(errText).message || message; } catch { /* not JSON */ }
+      throw new Error(`Preview render failed: ${message}`);
+    }
+
+    return await response.blob();
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(`Preview render timeout after ${DEFAULT_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ═══════════════════════════════════════
 // URL BUILDER
 // ═══════════════════════════════════════

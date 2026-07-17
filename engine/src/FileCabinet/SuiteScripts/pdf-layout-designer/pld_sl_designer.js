@@ -86,9 +86,10 @@ define([
         const indexFile = file.load({ id: INDEX_FILE_ID });
         let htmlContent = indexFile.getContents();
 
-        // Inject NetSuite context as global variable
+        // Inject NetSuite context + render Suitelet URL as global variables
         const nsContext = buildNsContext(context);
-        const injection = '<script>window.__NS_CONTEXT__ = ' + JSON.stringify(nsContext) + ';</script>';
+        const injection = '<script>window.__NS_CONTEXT__ = ' + JSON.stringify(nsContext) + ';'
+          + 'window.__NS_RENDER_URL__ = ' + JSON.stringify(getRenderUrl()) + ';</script>';
         htmlContent = htmlContent.replace('</head>', injection + '\n</head>');
 
         context.response.write(htmlContent);
@@ -120,7 +121,7 @@ define([
         appBaseUrl = getFileCabinetUrl(APP_FOLDER_ID);
       }
 
-      htmlField.defaultValue = buildInlineHtml(nsContext, suiteletUrl, appBaseUrl);
+      htmlField.defaultValue = buildInlineHtml(nsContext, suiteletUrl, appBaseUrl, getRenderUrl());
       context.response.writePage(form);
 
     } catch (e) {
@@ -132,6 +133,24 @@ define([
   // ═══════════════════════════════════════
   // NETSUITE CONTEXT
   // ═══════════════════════════════════════
+
+  /**
+   * Resolve the internal URL of the PDF render Suitelet so the designer can
+   * call it for server-side preview (?action=preview-live) and Print (#12).
+   * Degrades to '' if the render script isn't deployed — designer still loads.
+   */
+  function getRenderUrl() {
+    try {
+      return url.resolveScript({
+        scriptId: 'customscript_pld_render',
+        deploymentId: 'customdeploy_pld_render',
+        returnExternalUrl: false,
+      });
+    } catch (e) {
+      log.error({ title: 'getRenderUrl', details: e });
+      return '';
+    }
+  }
 
   function buildNsContext(context) {
     const user = runtime.getCurrentUser();
@@ -434,7 +453,7 @@ define([
   /**
    * Build inline HTML when not using File Cabinet index.html
    */
-  function buildInlineHtml(nsContext, suiteletUrl, appBaseUrl) {
+  function buildInlineHtml(nsContext, suiteletUrl, appBaseUrl, renderUrl) {
     return [
       '<!DOCTYPE html>',
       '<html lang="th">',
@@ -445,6 +464,7 @@ define([
       '  <script>',
       '    window.__NS_CONTEXT__ = ' + JSON.stringify(nsContext) + ';',
       '    window.__NS_SUITELET_URL__ = "' + suiteletUrl + '";',
+      '    window.__NS_RENDER_URL__ = ' + JSON.stringify(renderUrl || '') + ';',
       '  </script>',
       '  <style>',
       '    body { margin: 0; padding: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }',

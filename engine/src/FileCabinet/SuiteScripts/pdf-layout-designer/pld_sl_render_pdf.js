@@ -53,6 +53,8 @@ define([
           return saveTemplate(context);
         case 'get':
           return getTemplate(context);
+        case 'preview-live':
+          return previewLivePdf(context);
         case 'version':
           return getVersion(context);
         default:
@@ -102,31 +104,51 @@ define([
       throw new Error('No template found. Please specify tplid or set a default template for ' + recType);
     }
 
-    // ─── 2. Load Record ───
-    var rec = record.load({
-      type: recType,
-      id: recId
-    });
+    // ─── 2. Render (record + company + context) ───
+    var out = renderXmlWithRecord(tplXml, recType, recId);
 
-    // ─── 3. Build Renderer ───
+    // ─── 3. Set filename from tranid ───
+    var tranId = '';
+    try { tranId = out.rec.getValue({ fieldId: 'tranid' }) || recId; } catch (e) { tranId = recId; }
+    var fileName = recType + '_' + tranId + '.pdf';
+    out.pdfFile.name = fileName;
+
+    // ─── 4. Return PDF ───
+    context.response.setHeader({
+      name: 'Content-Type',
+      value: 'application/pdf'
+    });
+    context.response.setHeader({
+      name: 'Content-Disposition',
+      value: (download ? 'attachment' : 'inline') + '; filename="' + fileName + '"'
+    });
+    context.response.writeFile({ file: out.pdfFile, isInline: !download });
+  }
+
+  /**
+   * Bind BFO XML to a real record and render a PDF — the single binding path
+   * shared by Print (render) and live Preview (preview-live), so a preview of
+   * unsaved designer XML is byte-for-byte the same engine + data sources as
+   * Print (#12). Only the XML source differs: saved template vs POSTed draft.
+   * Returns { pdfFile, rec } (caller names the file).
+   */
+  function renderXmlWithRecord(tplXml, recType, recId) {
+    var rec = record.load({ type: recType, id: recId });
+
     var renderer = render.create();
     renderer.templateContent = tplXml;
 
-    // Add the main record (accessible as "record" in FreeMarker)
-    renderer.addRecord({
-      templateName: 'record',
-      record: rec
-    });
+    // Main record — accessible as "record" in FreeMarker
+    renderer.addRecord({ templateName: 'record', record: rec });
 
-    // ─── 4. Add company info as custom data source ───
-    var companyInfo = loadCompanyInfo();
+    // Company info (custom data source)
     renderer.addCustomDataSource({
       format: render.DataSource.OBJECT,
       alias: 'company',
-      data: companyInfo
+      data: loadCompanyInfo()
     });
 
-    // ─── 5. Add current date/user info ───
+    // Current date/user info
     var currentUser = runtime.getCurrentUser();
     renderer.addCustomDataSource({
       format: render.DataSource.OBJECT,
@@ -139,25 +161,34 @@ define([
       }
     });
 
-    // ─── 6. Render PDF ───
-    var pdfFile = renderer.renderAsPdf();
+    return { pdfFile: renderer.renderAsPdf(), rec: rec };
+  }
 
-    // ─── 7. Set filename ───
-    var tranId = '';
-    try { tranId = rec.getValue({ fieldId: 'tranid' }) || recId; } catch (e) { tranId = recId; }
-    var fileName = recType + '_' + tranId + '.pdf';
-    pdfFile.name = fileName;
+  // ═══════════════════════════════════════════════════
+  // LIVE PREVIEW — render unsaved designer XML against the real record (#12)
+  // ═══════════════════════════════════════════════════
 
-    // ─── 8. Return PDF ───
-    context.response.setHeader({
-      name: 'Content-Type',
-      value: 'application/pdf'
-    });
-    context.response.setHeader({
-      name: 'Content-Disposition',
-      value: (download ? 'attachment' : 'inline') + '; filename="' + fileName + '"'
-    });
-    context.response.writeFile({ file: pdfFile, isInline: !download });
+  /**
+   * Preview the CURRENT (unsaved) designer XML with the same record + data
+   * sources Print uses — guarantees "preview == print". POST body:
+   *   { xml: "<full BFO XML>", rectype: "invoice", recid: "123" }
+   */
+  function previewLivePdf(context) {
+    if (context.request.method !== 'POST') {
+      throw new Error('POST required for preview-live');
+    }
+
+    var body = JSON.parse(context.request.body || '{}');
+    if (!body.xml)     throw new Error('preview-live requires xml (export BFO from the designer)');
+    if (!body.rectype) throw new Error('preview-live requires rectype');
+    if (!body.recid)   throw new Error('preview-live requires recid — open the designer from a record');
+
+    var out = renderXmlWithRecord(body.xml, body.rectype, body.recid);
+    out.pdfFile.name = 'preview.pdf';
+
+    context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
+    context.response.setHeader({ name: 'Content-Disposition', value: 'inline; filename="preview.pdf"' });
+    context.response.writeFile({ file: out.pdfFile, isInline: true });
   }
 
   // ═══════════════════════════════════════════════════

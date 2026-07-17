@@ -358,11 +358,14 @@ describe('edge cases', () => {
     expect(xml).toContain('</body>');
   });
 
-  it('custom recordType in options', () => {
+  it('alias is fixed to "record" — options.recordType no longer changes it (#12)', () => {
     const state = createMockState([makeText({ binding: 'custbody_field' })]);
+    // recordType is deprecated: the alias is a fixed contract with the render
+    // engine (addRecord templateName:'record'), so it stays ${record.*}.
     const xml = exportBfoXml(state, { recordType: 'invoice' });
 
-    expect(xml).toContain('invoice.custbody_field');
+    expect(xml).toContain('record.custbody_field');
+    expect(xml).not.toContain('invoice.custbody_field');
   });
 });
 
@@ -490,21 +493,21 @@ describe('null-safe bindings (#4)', () => {
     const state = createMockState([makeText({ binding: 'custbody_note' })]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain("${transaction.custbody_note!''}");
+    expect(xml).toContain("${record.custbody_note!''}");
   });
 
   it('inline {{path}} content gets null-safe default', () => {
     const state = createMockState([makeText({ content: 'Ref: {{otherrefnum}}' })]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain("${transaction.otherrefnum!''}");
+    expect(xml).toContain("${record.otherrefnum!''}");
   });
 
   it('table loop is null-safe: (record.list)![]', () => {
     const state = createMockState([makeTable()]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain('<#list (transaction.order.lines)![] as lines>');
+    expect(xml).toContain('<#list (record.order.lines)![] as lines>');
   });
 
   it('table cells get null-safe default', () => {
@@ -532,7 +535,7 @@ describe('null-safe bindings (#4)', () => {
     const state = createMockState([img]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain("${transaction.custbody_logo_url!''}");
+    expect(xml).toContain("${record.custbody_logo_url!''}");
     expect(xml).not.toContain('&quot;}');
   });
 
@@ -543,7 +546,7 @@ describe('null-safe bindings (#4)', () => {
     ]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    const all = xml.match(/\$\{(?:transaction|lines)\.[^}]*\}/g) ?? [];
+    const all = xml.match(/\$\{(?:record|lines)\.[^}]*\}/g) ?? [];
     const unsafe = all.filter((m) => !m.includes("!''"));
     expect(unsafe).toEqual([]);
   });
@@ -561,8 +564,8 @@ describe('barcode null-safety (#4)', () => {
     const state = createMockState([makeBarcode({ binding: 'tranid' })]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain("<#if (transaction.tranid!'')?has_content>");
-    expect(xml).toContain("value=\"${transaction.tranid!''}\"");
+    expect(xml).toContain("<#if (record.tranid!'')?has_content>");
+    expect(xml).toContain("value=\"${record.tranid!''}\"");
     expect(xml).toContain('</#if>');
   });
 

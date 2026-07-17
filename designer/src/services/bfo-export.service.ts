@@ -22,7 +22,10 @@ import type {
 import { escapeXml, sanitizeColor, sanitizeNumericCss } from './validation.service';
 
 export interface BfoExportOptions {
-  /** NetSuite record type for variable references */
+  /**
+   * @deprecated No longer sets the FreeMarker alias — that is fixed to `record`
+   * (the render engine's addRecord binding, #12). Retained for API compat.
+   */
   recordType?: string;
   /** Use FreeMarker syntax for data binding */
   useFreeMarker?: boolean;
@@ -46,11 +49,18 @@ export function exportBfoXml(
   options: BfoExportOptions = {},
 ): string {
   const {
-    recordType = 'transaction',
     useFreeMarker = true,
     includePageHeaders = true,
     thaiFontUrls,
   } = options;
+
+  // The FreeMarker data-source alias is a fixed contract with the render engine:
+  // pld_sl_render_pdf.js binds the record via addRecord({templateName:'record'}),
+  // so every binding MUST be ${record.*} to resolve at Print/Preview time (matches
+  // the hand-written master template pack). options.recordType no longer sets the
+  // alias — that mismatch (${transaction.*} vs the 'record' binding) is why designer
+  // templates printed blank and preview never matched print (#12).
+  const recordType = 'record';
 
   const { page, elements } = state;
 
