@@ -6,7 +6,7 @@
  *
  * @author Wichit Wongta
  */
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { provide } from '@lit/context';
 import { AppStore, storeContext } from '../state/store';
@@ -26,6 +26,7 @@ import './layout/app-header';
 import './layout/template-bar';
 import './layout/sidebar-left';
 import './canvas/pdf-canvas';
+import './canvas/band-view';
 import './layout/sidebar-right';
 import './flow/flow-view';
 import './shared/toast-notification';
@@ -48,6 +49,10 @@ export class PldAppShell extends LitElement {
   private _beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
 
   @state() private view: 'design' | 'flow' = 'design';
+
+  // Dev-only band-layout preview (#47 strangler slice 1) — gated to vite dev so it
+  // never ships to consultants on the live SB2 build until the band editor is done.
+  @state() private _bandView = false;
 
   // Modal states
   @state() private showTemplateManager = false;
@@ -193,7 +198,15 @@ export class PldAppShell extends LitElement {
         <pld-sidebar-left></pld-sidebar-left>
 
         <div class="canvas-area ${this.view !== 'design' ? 'hidden' : ''}">
-          <pld-canvas></pld-canvas>
+          ${import.meta.env.DEV
+            ? html`<button
+                style="position:absolute; z-index:50; top:8px; right:8px; padding:4px 10px; font-size:11px; border:1px solid #2a2c3a; border-radius:6px; background:#1a1b25; color:#8a8ca0; cursor:pointer;"
+                @click=${() => (this._bandView = !this._bandView)}
+              >${this._bandView ? '◧ Canvas' : '▦ Bands (dev)'}</button>`
+            : nothing}
+          ${import.meta.env.DEV && this._bandView
+            ? html`<pld-band-view></pld-band-view>`
+            : html`<pld-canvas></pld-canvas>`}
         </div>
 
         ${this.view === 'flow' ? html`<pld-flow-view></pld-flow-view>` : ''}
