@@ -24,8 +24,9 @@ define([
   'N/log',
   'N/xml',
   'N/format',
-  './pld_lib_company_config'
-], function (render, record, search, file, runtime, log, xml, format, companyConfig) {
+  './pld_lib_company_config',
+  './pld_lib_invoice_data'
+], function (render, record, search, file, runtime, log, xml, format, companyConfig, invoiceData) {
 
   // ─── Custom Record Config ───
   const TPL_RECORD_TYPE   = 'customrecord_pld_template';
@@ -132,14 +133,22 @@ define([
    * Print (#12). Only the XML source differs: saved template vs POSTed draft.
    * Returns { pdfFile, rec } (caller names the file).
    */
-  function renderXmlWithRecord(tplXml, recType, recId) {
+  function renderXmlWithRecord(tplXml, recType, recId, curatedData) {
     var rec = record.load({ type: recType, id: recId });
 
     var renderer = render.create();
     renderer.templateContent = tplXml;
 
-    // Main record — accessible as "record" in FreeMarker
-    renderer.addRecord({ templateName: 'record', record: rec });
+    // Main record accessible as "record" in FreeMarker. When the caller supplies a
+    // curated data object (designer schema built via SuiteQL — see pld_lib_invoice_data),
+    // bind THAT as `record` so ${record.customer.name}, ${record.totals.total},
+    // <#list record.items ...> resolve; otherwise bind the raw NetSuite record so the
+    // hand-written master templates (${record.tranid} etc.) render unchanged.
+    if (curatedData) {
+      renderer.addCustomDataSource({ format: render.DataSource.OBJECT, alias: 'record', data: curatedData });
+    } else {
+      renderer.addRecord({ templateName: 'record', record: rec });
+    }
 
     // Company info (custom data source)
     renderer.addCustomDataSource({
@@ -183,7 +192,13 @@ define([
     if (!body.rectype) throw new Error('preview-live requires rectype');
     if (!body.recid)   throw new Error('preview-live requires recid — open the designer from a record');
 
-    var out = renderXmlWithRecord(body.xml, body.rectype, body.recid);
+    // Designer templates bind the curated schema (company/customer/document/totals/
+    // items). For invoices, build that from SuiteQL so preview shows REAL data.
+    var curated = (body.rectype === 'invoice')
+      ? invoiceData.buildInvoiceData(body.recid)
+      : null;
+
+    var out = renderXmlWithRecord(body.xml, body.rectype, body.recid, curated);
     out.pdfFile.name = 'preview.pdf';
 
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
