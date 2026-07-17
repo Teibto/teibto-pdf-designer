@@ -116,6 +116,43 @@ export function normalizeWidths(widths: number[]): number[] {
 }
 
 /**
+ * Set one column to `targetPct` and redistribute the rest of the row so widths
+ * still sum to 100 (#47 band editing). The target is clamped to [5, 95] so no
+ * column collapses; remaining width is shared among the other columns in
+ * proportion to their current widths. Returns new integer widths (sum 100).
+ */
+export function redistributeRowWidths(
+  widths: number[],
+  colIdx: number,
+  targetPct: number,
+): number[] {
+  const n = widths.length;
+  if (n === 0) return [];
+  if (n === 1) return [100];
+
+  const target = Math.max(5, Math.min(95, Math.round(targetPct)));
+  const remaining = 100 - target;
+
+  const otherW = widths.map((w, i) => (i === colIdx ? 0 : Math.max(1, w)));
+  const otherSum = otherW.reduce((s, w) => s + w, 0);
+
+  const raw = widths.map((_w, i) =>
+    i === colIdx ? target : (otherSum > 0 ? (otherW[i] / otherSum) * remaining : remaining / (n - 1)),
+  );
+
+  // integer, keeping the target exact; largest-remainder on the other columns
+  const out = raw.map((r) => Math.floor(r));
+  out[colIdx] = target;
+  let left = 100 - out.reduce((s, v) => s + v, 0);
+  const order = raw
+    .map((r, i) => ({ i, frac: r - Math.floor(r) }))
+    .filter((o) => o.i !== colIdx)
+    .sort((a, b) => b.frac - a.frac);
+  for (let k = 0; k < order.length && left > 0; k++, left--) out[order[k].i] += 1;
+  return out;
+}
+
+/**
  * Flatten bands back to a plain element list (band → row → column → elements),
  * in document order. Read-model for the transition; no element is added or dropped.
  */

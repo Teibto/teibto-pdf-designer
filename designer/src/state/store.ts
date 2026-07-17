@@ -21,6 +21,7 @@ export const storeContext = createContext<AppStore>('pld-store');
 function createInitialState(): AppState {
   return {
     elements: [],
+    bands: [],
     selectedId: null,
     multiSelect: [],
     zoom: 100,
