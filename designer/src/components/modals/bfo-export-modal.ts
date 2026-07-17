@@ -319,6 +319,7 @@ export class PldBfoExportModal extends LitElement {
       recordType: this.recordType,
       useFreeMarker: this.useFreeMarker,
       includePageHeaders: this.includePageHeaders,
+      useBands: true, // band layout is authoritative (#47 cutover)
     };
 
     // Embed Thai font when the hosting Suitelet provides File Cabinet URLs

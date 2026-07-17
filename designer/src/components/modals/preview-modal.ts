@@ -340,7 +340,7 @@ export class PldPreviewModal extends LitElement {
     this.serverLoading = true;
     this.serverError = '';
     try {
-      const options: BfoExportOptions = {};
+      const options: BfoExportOptions = { useBands: true }; // band layout is authoritative (#47 cutover)
       if (ctx.fontRegularUrl) {
         options.thaiFontUrls = { regular: ctx.fontRegularUrl, bold: ctx.fontBoldUrl || undefined };
       }
