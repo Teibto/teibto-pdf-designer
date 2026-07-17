@@ -823,3 +823,98 @@ export function setColumnWidth(
     row.columns.forEach((c, i) => { c.widthPct = widths[i]; });
   }, { name: 'setColumnWidth', undoable: true, batchKey: `bandw-${bandIdx}-${rowIdx}-${colIdx}` }));
 }
+
+// Band structural edits are tagged undoable:false on purpose: the history service
+// snapshots only `elements` + `selectedId`, never `bands`, so recording them would
+// push meaningless element snapshots that undo can't restore. Band mode is a
+// pre-cutover bridge; element undo takes over once bands become derived (slice 3).
+
+/** Insert a new empty row (one full-width empty column) into a band. */
+export function addBandRow(store: AppStore, bandIdx: number, atIdx?: number): void {
+  store.dispatch(tagAction((draft) => {
+    const band = draft.bands[bandIdx];
+    if (!band) return;
+    const row = { id: nanoid(8), columns: [{ id: nanoid(8), widthPct: 100, elements: [] }] };
+    const at = atIdx == null ? band.rows.length : Math.max(0, Math.min(atIdx, band.rows.length));
+    band.rows.splice(at, 0, row);
+  }, { name: 'addBandRow', undoable: false }));
+}
+
+/** Remove a row from a band. */
+export function removeBandRow(store: AppStore, bandIdx: number, rowIdx: number): void {
+  store.dispatch(tagAction((draft) => {
+    const band = draft.bands[bandIdx];
+    if (!band?.rows[rowIdx]) return;
+    band.rows.splice(rowIdx, 1);
+  }, { name: 'removeBandRow', undoable: false }));
+}
+
+/** Move a row up (dir=-1) or down (dir=+1) within its band. */
+export function moveBandRow(store: AppStore, bandIdx: number, rowIdx: number, dir: -1 | 1): void {
+  store.dispatch(tagAction((draft) => {
+    const rows = draft.bands[bandIdx]?.rows;
+    if (!rows) return;
+    const to = rowIdx + dir;
+    if (to < 0 || to >= rows.length) return;
+    const [row] = rows.splice(rowIdx, 1);
+    rows.splice(to, 0, row);
+  }, { name: 'moveBandRow', undoable: false }));
+}
+
+/** Split a column into two — the new empty column shares the original's width. */
+export function splitColumn(store: AppStore, bandIdx: number, rowIdx: number, colIdx: number): void {
+  store.dispatch(tagAction((draft) => {
+    const row = draft.bands[bandIdx]?.rows[rowIdx];
+    const col = row?.columns[colIdx];
+    if (!row || !col) return;
+    const left = Math.max(1, Math.ceil(col.widthPct / 2));
+    const right = col.widthPct - left;
+    col.widthPct = left;
+    row.columns.splice(colIdx + 1, 0, { id: nanoid(8), widthPct: right, elements: [] });
+  }, { name: 'splitColumn', undoable: false }));
+}
+
+/** Merge a column into the previous one — elements concatenate, widths add. */
+export function mergeColumn(store: AppStore, bandIdx: number, rowIdx: number, colIdx: number): void {
+  store.dispatch(tagAction((draft) => {
+    const row = draft.bands[bandIdx]?.rows[rowIdx];
+    if (!row || colIdx <= 0 || colIdx >= row.columns.length) return;
+    const prev = row.columns[colIdx - 1];
+    const cur = row.columns[colIdx];
+    prev.elements.push(...cur.elements);
+    prev.widthPct += cur.widthPct;
+    row.columns.splice(colIdx, 1);
+  }, { name: 'mergeColumn', undoable: false }));
+}
+
+/**
+ * Move an element to another cell WITHIN THE SAME BAND (re-parent only).
+ * Geometry (x/y/w/h) is never touched — position in band mode comes from the
+ * cell, not element coordinates. Cross-band moves change an element's role and
+ * are deferred to the palette work (#49); an id not found in this band is a no-op.
+ */
+export function moveElementToCell(
+  store: AppStore,
+  elId: string,
+  bandIdx: number,
+  rowIdx: number,
+  colIdx: number,
+): void {
+  store.dispatch(tagAction((draft) => {
+    const band = draft.bands[bandIdx];
+    const target = band?.rows[rowIdx]?.columns[colIdx];
+    if (!band || !target) return;
+
+    // Locate + detach the element from its source cell (this band only).
+    for (const row of band.rows) {
+      for (const col of row.columns) {
+        const i = col.elements.findIndex((e) => e.id === elId);
+        if (i >= 0) {
+          const [el] = col.elements.splice(i, 1);
+          target.elements.push(el);
+          return;
+        }
+      }
+    }
+  }, { name: 'moveElementToCell', undoable: false }));
+}
