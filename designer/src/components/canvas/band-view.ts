@@ -29,9 +29,12 @@ import {
   splitColumn,
   mergeColumn,
   moveElementToCell,
+  addElementToCell,
+  removeBandElement,
   selectElement,
 } from '../../state/actions';
 import { ELEMENT_ROLES } from '../../constants/roles';
+import type { ElementType } from '../../models/element';
 
 @customElement('pld-band-view')
 export class PldBandView extends LitElement {
@@ -74,9 +77,11 @@ export class PldBandView extends LitElement {
     button:disabled { opacity: .35; cursor: default; }
     button.wide { width: auto; padding: 0 8px; height: 20px; font-size: 11px; }
     .cell-w button { width: 16px; height: 16px; }
-    .chip { font-size: 11px; color: var(--color-text, #e8e9f0); background: var(--color-bg-hover, #222430); border-radius: 4px; padding: 2px 6px; cursor: grab; border: 1px solid transparent; }
+    .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text, #e8e9f0); background: var(--color-bg-hover, #222430); border-radius: 4px; padding: 2px 4px 2px 6px; cursor: grab; border: 1px solid transparent; }
     .chip.sel { border-color: var(--band-color, #4f6ef7); background: color-mix(in srgb, var(--band-color) 22%, transparent); }
     .chip[dragging] { opacity: .4; }
+    .chip .del { width: 14px; height: 14px; font-size: 9px; border-color: transparent; background: transparent; color: var(--color-text-dim, #8a8ca0); }
+    .chip .del:hover { color: #e74c8b; background: var(--color-bg-deep, #0a0b10); }
     .chip .t { color: var(--color-text-dim, #8a8ca0); font-family: var(--font-mono, monospace); font-size: 10px; }
     .empty { color: var(--color-text-dim, #8a8ca0); font-size: 13px; text-align: center; padding: 40px; }
   `;
@@ -132,6 +137,8 @@ export class PldBandView extends LitElement {
                                     @dragstart=${(e: DragEvent) => this._onDragStart(e, el.id)}
                                     @dragend=${(e: DragEvent) => this._onDragEnd(e)}>
                                     ${el.name || el.type} <span class="t">${el.type}</span>
+                                    <button class="del" title="ลบ element"
+                                      @click=${(e: Event) => { e.stopPropagation(); removeBandElement(this.store, el.id); }}>✕</button>
                                   </span>`;
                               })
                             : nothing}
@@ -174,8 +181,16 @@ export class PldBandView extends LitElement {
   private _onDrop(e: DragEvent, bi: number, ri: number, ci: number) {
     e.preventDefault();
     (e.currentTarget as HTMLElement).classList.remove('drop');
-    const id = this._dragElId ?? e.dataTransfer?.getData('text/plain');
-    if (id) moveElementToCell(this.store, id, bi, ri, ci);
+    // A cell has two drop sources: a palette add (sets store.dragType) and a chip
+    // move (sets this._dragElId). dragType is the robust discriminator — it dodges
+    // HTML5 protected-mode getData and is never set by a chip drag.
+    const type = this.store.state.dragType;
+    if (type) {
+      addElementToCell(this.store, type as ElementType, bi, ri, ci);
+      this.store.dispatch((d) => { d.dragType = null; });
+    } else if (this._dragElId) {
+      moveElementToCell(this.store, this._dragElId, bi, ri, ci);
+    }
     this._dragElId = null;
   }
 }

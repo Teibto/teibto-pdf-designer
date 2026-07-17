@@ -47,6 +47,8 @@ import {
   splitColumn,
   mergeColumn,
   moveElementToCell,
+  addElementToCell,
+  removeBandElement,
 } from '../../src/state/actions';
 
 function createStoreWithElements(count = 3): AppStore {
@@ -732,5 +734,62 @@ describe('moveElementToCell', () => {
     moveElementToCell(store, contentId, 0, 0, 0);
     expect(store.state.bands[1].rows[0].columns[0].elementIds).toContain(contentId);
     expect(store.state.bands[0].rows[0].columns[0].elementIds).not.toContain(contentId);
+  });
+});
+
+describe('addElementToCell', () => {
+  it('adds an element with the BAND role into the target cell and selects it', () => {
+    const store = createStoreWithBands();
+    const before = store.state.elements.length;
+    addElementToCell(store, 'text', 0, 0, 0); // header band, row0, col0
+    expect(store.state.elements).toHaveLength(before + 1);
+    const newId = store.state.selectedId!;
+    const newEl = store.state.elements.find((e) => e.id === newId)!;
+    // text defaults to role 'content' — must be re-roled to the band ('header')
+    expect(newEl.role).toBe('header');
+    expect(store.state.bands[0].rows[0].columns[0].elementIds).toContain(newId);
+  });
+
+  it('the added element survives re-sync (stays in the header band)', () => {
+    const store = createStoreWithBands();
+    addElementToCell(store, 'text', 0, 0, 0);
+    const newId = store.state.selectedId!;
+    regenerateBands(store); // rebuild bands from elements by role
+    const headerBand = store.state.bands.find((b) => b.role === 'header')!;
+    const ids = headerBand.rows.flatMap((r) => r.columns.flatMap((c) => c.elementIds));
+    expect(ids).toContain(newId);
+  });
+
+  it('no-op for a missing cell', () => {
+    const store = createStoreWithBands();
+    const before = store.state.elements.length;
+    addElementToCell(store, 'text', 9, 0, 0);
+    expect(store.state.elements).toHaveLength(before);
+  });
+});
+
+describe('removeBandElement', () => {
+  it('removes the element from both the pool and its band cell', () => {
+    const store = createStoreWithBands();
+    const id = store.state.bands[0].rows[0].columns[0].elementIds[0];
+    removeBandElement(store, id);
+    expect(store.state.elements.find((e) => e.id === id)).toBeUndefined();
+    expect(store.state.bands[0].rows[0].columns[0].elementIds).not.toContain(id);
+  });
+
+  it('clears the selection if the removed element was selected', () => {
+    const store = createStoreWithBands();
+    const id = store.state.bands[0].rows[0].columns[0].elementIds[0];
+    selectElement(store, id);
+    removeBandElement(store, id);
+    expect(store.state.selectedId).toBeNull();
+  });
+
+  it('skips a locked element (mirrors removeElement)', () => {
+    const store = createStoreWithBands();
+    const id = store.state.bands[0].rows[0].columns[0].elementIds[0];
+    toggleLock(store, id);
+    removeBandElement(store, id);
+    expect(store.state.elements.find((e) => e.id === id)).toBeDefined();
   });
 });
