@@ -40,6 +40,13 @@ import {
   alignElements,
   distributeElements,
   snapToGrid,
+  regenerateBands,
+  addBandRow,
+  removeBandRow,
+  moveBandRow,
+  splitColumn,
+  mergeColumn,
+  moveElementToCell,
 } from '../../src/state/actions';
 
 function createStoreWithElements(count = 3): AppStore {
@@ -579,5 +586,151 @@ describe('lock & visibility', () => {
 
     toggleVisibility(store, id);
     expect(store.state.elements[0].visible).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════
+// BAND STRUCTURAL ACTIONS (#47 slice 2b)
+// ═══════════════════════════════════════
+
+/**
+ * Store with bands: a header band whose first row has TWO columns (two header
+ * elements side by side) and a content band with a single-column row.
+ */
+function createStoreWithBands(): AppStore {
+  const store = new AppStore();
+  addElement(store, 'header', 0, 0);   // header row, left column
+  addElement(store, 'header', 420, 0); // header row, right column (same y → same row)
+  addElement(store, 'text', 0, 200);   // content band, own row
+  regenerateBands(store);
+  return store;
+}
+
+function sumWidths(store: AppStore, bandIdx: number, rowIdx: number): number {
+  return store.state.bands[bandIdx].rows[rowIdx].columns.reduce((s, c) => s + c.widthPct, 0);
+}
+
+describe('addBandRow', () => {
+  it('appends an empty single-column row by default', () => {
+    const store = createStoreWithBands();
+    const before = store.state.bands[0].rows.length;
+    addBandRow(store, 0);
+    const rows = store.state.bands[0].rows;
+    expect(rows).toHaveLength(before + 1);
+    expect(rows[rows.length - 1].columns).toHaveLength(1);
+    expect(rows[rows.length - 1].columns[0].widthPct).toBe(100);
+    expect(rows[rows.length - 1].columns[0].elements).toHaveLength(0);
+  });
+
+  it('inserts at the given index', () => {
+    const store = createStoreWithBands();
+    addBandRow(store, 1, 0); // content band, before its only row
+    expect(store.state.bands[1].rows[0].columns[0].elements).toHaveLength(0);
+    expect(store.state.bands[1].rows[1].columns[0].elements).toHaveLength(1);
+  });
+
+  it('no-op for a nonexistent band', () => {
+    const store = createStoreWithBands();
+    addBandRow(store, 99);
+    expect(store.state.bands).toHaveLength(2);
+  });
+});
+
+describe('removeBandRow', () => {
+  it('removes the row at the index', () => {
+    const store = createStoreWithBands();
+    addBandRow(store, 0); // now 2 rows
+    removeBandRow(store, 0, 0);
+    expect(store.state.bands[0].rows).toHaveLength(1);
+  });
+
+  it('no-op for a missing row', () => {
+    const store = createStoreWithBands();
+    removeBandRow(store, 0, 5);
+    expect(store.state.bands[0].rows).toHaveLength(1);
+  });
+});
+
+describe('moveBandRow', () => {
+  it('moves a row down and back up', () => {
+    const store = createStoreWithBands();
+    addBandRow(store, 0); // row1 = empty, appended after original row0
+    const origFirstId = store.state.bands[0].rows[0].id;
+    moveBandRow(store, 0, 0, 1);
+    expect(store.state.bands[0].rows[1].id).toBe(origFirstId);
+    moveBandRow(store, 0, 1, -1);
+    expect(store.state.bands[0].rows[0].id).toBe(origFirstId);
+  });
+
+  it('no-op past the edges', () => {
+    const store = createStoreWithBands();
+    moveBandRow(store, 0, 0, -1); // already at top
+    expect(store.state.bands[0].rows[0].columns).toHaveLength(2);
+  });
+});
+
+describe('splitColumn', () => {
+  it('splits a column into two, preserving the row width sum', () => {
+    const store = createStoreWithBands();
+    // content band: single 100% column
+    splitColumn(store, 1, 0, 0);
+    const cols = store.state.bands[1].rows[0].columns;
+    expect(cols).toHaveLength(2);
+    expect(sumWidths(store, 1, 0)).toBe(100);
+    expect(cols[1].elements).toHaveLength(0); // new column is empty
+    expect(cols[0].elements).toHaveLength(1); // elements stay in the left column
+  });
+
+  it('no-op for a missing column', () => {
+    const store = createStoreWithBands();
+    splitColumn(store, 1, 0, 9);
+    expect(store.state.bands[1].rows[0].columns).toHaveLength(1);
+  });
+});
+
+describe('mergeColumn', () => {
+  it('merges a column into the previous one — widths add, elements concat', () => {
+    const store = createStoreWithBands();
+    // header row starts with 2 columns (one element each)
+    mergeColumn(store, 0, 0, 1);
+    const cols = store.state.bands[0].rows[0].columns;
+    expect(cols).toHaveLength(1);
+    expect(cols[0].widthPct).toBe(100);
+    expect(cols[0].elements).toHaveLength(2);
+  });
+
+  it('no-op when merging the first column', () => {
+    const store = createStoreWithBands();
+    mergeColumn(store, 0, 0, 0);
+    expect(store.state.bands[0].rows[0].columns).toHaveLength(2);
+  });
+});
+
+describe('moveElementToCell', () => {
+  it('re-parents an element to another cell within the band', () => {
+    const store = createStoreWithBands();
+    const rightEl = store.state.bands[0].rows[0].columns[1].elements[0];
+    moveElementToCell(store, rightEl.id, 0, 0, 0); // move right → left cell
+    const cols = store.state.bands[0].rows[0].columns;
+    expect(cols[0].elements.map((e) => e.id)).toContain(rightEl.id);
+    expect(cols[1].elements).toHaveLength(0);
+  });
+
+  it('never touches element geometry', () => {
+    const store = createStoreWithBands();
+    const el = store.state.bands[0].rows[0].columns[1].elements[0];
+    const { x, y, w, h } = el;
+    moveElementToCell(store, el.id, 0, 0, 0);
+    const moved = store.state.bands[0].rows[0].columns[0].elements.find((e) => e.id === el.id)!;
+    expect([moved.x, moved.y, moved.w, moved.h]).toEqual([x, y, w, h]);
+  });
+
+  it('is a no-op for an element in a different band (no cross-band moves)', () => {
+    const store = createStoreWithBands();
+    const contentEl = store.state.bands[1].rows[0].columns[0].elements[0];
+    // Try to move the content element into a header cell → rejected
+    moveElementToCell(store, contentEl.id, 0, 0, 0);
+    expect(store.state.bands[1].rows[0].columns[0].elements.map((e) => e.id)).toContain(contentEl.id);
+    expect(store.state.bands[0].rows[0].columns[0].elements.map((e) => e.id)).not.toContain(contentEl.id);
   });
 });
