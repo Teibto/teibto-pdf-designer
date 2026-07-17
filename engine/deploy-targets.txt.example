@@ -1,0 +1,12 @@
+# deploy-targets.txt — รายชื่อ suitecloud authid ที่ scripts/deploy.sh จะ deploy ไปทีละตัว
+#
+# วิธีใช้: cp deploy-targets.txt.example deploy-targets.txt แล้วใส่ authid จริงของคุณ
+# ไฟล์ตัวจริง (deploy-targets.txt) gitignore ไว้ — authid ลูกค้าเป็นข้อมูลอ่อนไหว ห้าม commit
+#
+# - หนึ่ง authid ต่อบรรทัด · ใช้ authid จาก `suitecloud account:manageauth --list`
+# - บรรทัดว่างและข้อความหลัง # ถูกข้าม
+# - deploy เข้า sandbox เท่านั้น — อย่าใส่ authid ของ production ลูกค้า
+
+teibto-sb2
+# acc2-sb1
+# acc3-sb1
