@@ -19,6 +19,9 @@
 <#-- ═══ จำนวนเงินเป็นตัวอักษรไทย (บาทถ้วน/สตางค์) ═══ -->
 <#assign PLD_DIGITS = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"]>
 <#assign PLD_PLACES = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"]>
+<#-- zero-width space (U+200B) แทรกระหว่างหน่วยอ่าน ให้ BFO เลือกตัดบรรทัดที่ขอบพยางค์
+     แทนกลางคำ (BFO ไม่มี Thai dictionary word-break — สตริงไทยยาวโดนตัดที่ไหนก็ได้, #35) -->
+<#assign PLD_ZWSP = "\x200B">
 
 <#-- อ่านเลข 0..999999 หนึ่งกลุ่ม (กติกา: สิบ ไม่ใช่หนึ่งสิบ · ยี่สิบ · เอ็ด ท้ายเลขที่มากกว่าสิบ
      หรือกลุ่มที่มีหลักล้านนำหน้า เช่น 1000001 = หนึ่งล้านเอ็ด) -->
@@ -30,15 +33,18 @@
     <#local d = str[i..i]?number>
     <#local p = len - i - 1>
     <#if d != 0>
+      <#local unit = "">
       <#if p == 1>
-        <#if d == 1><#local s = s + "สิบ">
-        <#elseif d == 2><#local s = s + "ยี่สิบ">
-        <#else><#local s = s + PLD_DIGITS[d] + "สิบ"></#if>
+        <#if d == 1><#local unit = "สิบ">
+        <#elseif d == 2><#local unit = "ยี่สิบ">
+        <#else><#local unit = PLD_DIGITS[d] + "สิบ"></#if>
       <#elseif p == 0 && d == 1 && (g gt 10 || hasHigher)>
-        <#local s = s + "เอ็ด">
+        <#local unit = "เอ็ด">
       <#else>
-        <#local s = s + PLD_DIGITS[d] + PLD_PLACES[p]>
+        <#local unit = PLD_DIGITS[d] + PLD_PLACES[p]>
       </#if>
+      <#-- คั่นแต่ละหน่วยด้วย ZWSP: จุดตัดบรรทัดที่ปลอดภัย (ไม่กลางพยางค์) #35 -->
+      <#local s = s + (s?length gt 0)?then(PLD_ZWSP, "") + unit>
     </#if>
   </#list>
   <#return s>
@@ -63,14 +69,14 @@
       </#if>
     </#list>
     <#list groups as g>
-      <#local words = words + pldReadGroup(g, (g_index gt 0))>
-      <#if g_has_next><#local words = words + "ล้าน"></#if>
+      <#local words = words + (words?length gt 0)?then(PLD_ZWSP, "") + pldReadGroup(g, (g_index gt 0))>
+      <#if g_has_next><#local words = words + PLD_ZWSP + "ล้าน"></#if>
     </#list>
   </#if>
   <#if satang == 0>
-    <#return words + "บาทถ้วน">
+    <#return words + PLD_ZWSP + "บาทถ้วน">
   <#else>
-    <#return words + "บาท" + pldReadGroup(satang, false) + "สตางค์">
+    <#return words + PLD_ZWSP + "บาท" + PLD_ZWSP + pldReadGroup(satang, false) + PLD_ZWSP + "สตางค์">
   </#if>
 </#function>
 
