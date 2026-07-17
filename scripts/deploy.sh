@@ -81,7 +81,7 @@ if [ -f "${PROJECT_JSON}" ]; then
   HAD_PROJECT_JSON=1
   ORIG_PROJECT_JSON="$(cat "${PROJECT_JSON}")"
 fi
-# shellcheck disable=SC2329  # เรียกผ่าน trap ... EXIT (shellcheck มองไม่เห็น indirect call)
+# shellcheck disable=SC2317,SC2329  # เรียกผ่าน trap ... EXIT — body ไม่ได้ unreachable (shellcheck มองไม่เห็น indirect call)
 restore_project_json() {
   if [ "${HAD_PROJECT_JSON}" -eq 1 ]; then
     printf '%s' "${ORIG_PROJECT_JSON}" > "${PROJECT_JSON}"
