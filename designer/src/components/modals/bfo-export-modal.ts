@@ -361,6 +361,8 @@ export class PldBfoExportModal extends LitElement {
         elements: state.elements,
         page: state.page,
         pagination: state.pagination,
+        // Persist band edits in the record so a re-edit restores them (#47 3b).
+        bands: state.bands.length ? state.bands : undefined,
       });
 
       const result = await saveNsTemplate({
