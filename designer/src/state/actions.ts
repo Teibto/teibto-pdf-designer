@@ -24,6 +24,8 @@ import type { PageSizeName, Orientation } from '../models/page';
 import { resolvePageDimensions } from '../models/page';
 import { validatePropertyUpdate } from '../services/validation.service';
 import { elementsToBands, redistributeRowWidths } from '../services/band-layout.service';
+import { BAND_ORDER } from '../models/bands';
+import type { ElementRoleType } from '../models/element';
 import { tagAction } from './middleware';
 
 // ═══════════════════════════════════════
@@ -944,6 +946,30 @@ export function addElementToCell(
     // undoable:false — the addElement above already pushed the undo snapshot, so a
     // single Ctrl+Z removes the whole "add element to cell" (element + band ref).
   }, { name: 'addElementToCell', undoable: false }));
+}
+
+/**
+ * Add a new element into a brand-new row of a role's band, creating the band if
+ * it doesn't exist yet (#47 cutover empty-state). Lets a consultant start a blank
+ * template — or add to a role that has no band — without a free canvas. The band
+ * is inserted at its BAND_ORDER position so document order stays canonical.
+ */
+export function addElementToNewBand(store: AppStore, type: ElementType, role: ElementRoleType): void {
+  const id = addElement(store, type, 0, 0); // pool + selection (undo point)
+  store.dispatch(tagAction((draft) => {
+    const el = draft.elements.find((e) => e.id === id);
+    if (el) el.role = role;
+
+    let band = draft.bands.find((b) => b.role === role);
+    if (!band) {
+      band = { role, rows: [] };
+      const order = BAND_ORDER.indexOf(role);
+      const at = draft.bands.findIndex((b) => BAND_ORDER.indexOf(b.role) > order);
+      if (at === -1) draft.bands.push(band);
+      else draft.bands.splice(at, 0, band);
+    }
+    band.rows.push({ id: nanoid(8), columns: [{ id: nanoid(8), widthPct: 100, elementIds: [id] }] });
+  }, { name: 'addElementToNewBand', undoable: false })); // addElement pushed the undo point
 }
 
 /** Remove an element from BOTH the shared pool and its band cell (skip if locked). */

@@ -48,6 +48,7 @@ import {
   mergeColumn,
   moveElementToCell,
   addElementToCell,
+  addElementToNewBand,
   removeBandElement,
 } from '../../src/state/actions';
 
@@ -791,5 +792,32 @@ describe('removeBandElement', () => {
     toggleLock(store, id);
     removeBandElement(store, id);
     expect(store.state.elements.find((e) => e.id === id)).toBeDefined();
+  });
+});
+
+describe('addElementToNewBand (empty-state, #47 cutover)', () => {
+  it('creates a role band from a blank template and adds the element', () => {
+    const store = new AppStore(); // no elements, no bands
+    addElementToNewBand(store, 'text', 'content');
+    expect(store.state.bands).toHaveLength(1);
+    expect(store.state.bands[0].role).toBe('content');
+    const id = store.state.selectedId!;
+    expect(store.state.bands[0].rows[0].columns[0].elementIds).toEqual([id]);
+    expect(store.state.elements.find((e) => e.id === id)!.role).toBe('content');
+  });
+
+  it('inserts new bands in BAND_ORDER position', () => {
+    const store = new AppStore();
+    addElementToNewBand(store, 'text', 'footer');
+    addElementToNewBand(store, 'header', 'header'); // header precedes footer
+    expect(store.state.bands.map((b) => b.role)).toEqual(['header', 'footer']);
+  });
+
+  it('appends a row to an existing band instead of duplicating it', () => {
+    const store = new AppStore();
+    addElementToNewBand(store, 'text', 'content');
+    addElementToNewBand(store, 'text', 'content');
+    expect(store.state.bands).toHaveLength(1);
+    expect(store.state.bands[0].rows).toHaveLength(2);
   });
 });
