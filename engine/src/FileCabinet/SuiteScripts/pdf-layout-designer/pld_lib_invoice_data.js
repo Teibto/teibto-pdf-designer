@@ -137,6 +137,27 @@ function (query, record, companyConfig, bahtText) {
 
     var cfg = companyConfig.load();
 
+    // Bordered key/value grids rendered as PLD tables (ShapeElement has no border,
+    // so the doc-info and summary boxes are 2-column tables bound to these arrays).
+    var docInfoRows = [
+      { label: 'Doc No. / เลขที่เอกสาร', value: hdr.tranid || '' },
+      { label: 'Date / วันที่', value: hdr.trandate || '' },
+      { label: 'Due Date / วันครบกำหนดชำระ', value: hdr.duedate || '' },
+      { label: 'Ref.SO / เลขที่การขาย', value: '' },
+      { label: 'Ref.No / เลขที่อ้างอิง', value: hdr.otherrefnum || '' }
+    ];
+    var summaryRows = [
+      { label: 'Total / มูลค่ารวม', value: money(grossTotal) },
+      { label: 'Special Discount / ส่วนลดพิเศษ', value: money(specialDiscount) },
+      { label: 'Advance Receive / หักเงินรับล่วงหน้า', value: money(advanceReceive) },
+      { label: 'Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม', value: money(baseAmount) },
+      { label: 'VAT / ภาษีมูลค่าเพิ่ม ' + vatRatePct + '%', value: money(vat) },
+      { label: 'Grand Total / มูลค่าสุทธิ', value: money(grandTotal) },
+      { label: 'Withholding Tax / ภาษีหัก ณ ที่จ่าย', value: money(wht) },
+      { label: 'Cash Coupon / คูปองส่วนลดเงินสด', value: money(cashCoupon) },
+      { label: 'Customer Paid / ยอดชำระ (บาท)', value: money(customerPaid) }
+    ];
+
     return {
       company: {
         name: cfg.name, nameEn: cfg.nameEn, address: cfg.address, addressEn: cfg.addressEn,
@@ -154,7 +175,8 @@ function (query, record, companyConfig, bahtText) {
         titleTH: 'ใบแจ้งหนี้/ใบกำกับภาษี' + (copyLabelTH ? ' (' + copyLabelTH + ')' : ' (ต้นฉบับ)'),
         titleEN: 'INVOICE/TAX INVOICE' + (copyLabelEN ? ' (' + copyLabelEN + ')' : ' (Original)'),
         copyTH: copyLabelTH || 'ต้นฉบับ',
-        copyEN: copyLabelEN || 'Original'
+        copyEN: copyLabelEN || 'Original',
+        docInfoRows: docInfoRows
       },
       customer: {
         name: cleanName(hdr.customer_name),
@@ -176,6 +198,7 @@ function (query, record, companyConfig, bahtText) {
         cashCoupon: money(cashCoupon),
         customerPaid: money(customerPaid),
         bahtText: bahtText.bahtText(grandTotal),
+        summaryRows: summaryRows,
         // backward-compat (#69)
         subtotal: money(baseAmount),
         tax: money(vat),
