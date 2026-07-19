@@ -1,7 +1,8 @@
 /**
  * Tests: sample-templates.ts band authoring (#47 3b)
  * Every built-in sample carries an explicit `bands` structure that references its
- * own elements and reproduces the migration exactly (same look, band model).
+ * own elements and reproduces the migration exactly (same look, band model) —
+ * except the invoice, whose header/content bands are hand-authored (#73).
  * @author Wichit Wongta
  */
 import { describe, it, expect } from 'vitest';
@@ -35,8 +36,46 @@ describe('sample templates carry band structures (#47 3b)', () => {
   });
 
   it('bands equal the migration of the elements (identical layout)', () => {
-    for (const t of samples) {
+    // Invoice hand-authors header/content (#73) — stacked cells the migration
+    // cannot derive — so it is asserted structurally below instead.
+    for (const t of samples.filter((s) => s.id !== 'tpl-invoice')) {
       expect(t.bands, t.name).toEqual(elementsToBands(t.elements));
+    }
+  });
+
+  it('invoice hand-authors header/content as stacked-cell bands (#73)', () => {
+    const inv = samples.find((s) => s.id === 'tpl-invoice')!;
+    const byName = new Map(inv.elements.map((e) => [e.id, e.name]));
+    const names = (band: { rows: { columns: { elementIds: string[] }[] }[] }) =>
+      band.rows.map((r) => r.columns.map((c) => c.elementIds.map((id) => byName.get(id))));
+
+    const header = inv.bands!.find((b) => b.role === 'header')!;
+    expect(names(header)).toEqual([[
+      ['logo'],
+      ['company_name', 'company_addr', 'company_tel', 'company_taxid', 'company_branch'],
+      ['title_th', 'title_en', 'docinfo_table'],
+    ]]);
+
+    const content = inv.bands!.find((b) => b.role === 'content')!;
+    expect(names(content)).toEqual([
+      [
+        ['cust_label', 'cust_ul', 'cust_name', 'cust_addr', 'cust_taxid', 'cust_branch'],
+        ['ship_label', 'ship_ul', 'ship_addr'],
+      ],
+      [['disclaimer']],
+    ]);
+
+    // every row's widths sum to exactly 100
+    for (const band of [header, content]) {
+      for (const row of band.rows) {
+        expect(row.columns.reduce((s, c) => s + c.widthPct, 0), row.id).toBe(100);
+      }
+    }
+
+    // remaining roles still match the migration
+    const derived = elementsToBands(inv.elements);
+    for (const band of inv.bands!.filter((b) => b.role !== 'header' && b.role !== 'content')) {
+      expect(band, band.role).toEqual(derived.find((d) => d.role === band.role));
     }
   });
 

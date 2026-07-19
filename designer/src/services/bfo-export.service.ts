@@ -190,10 +190,15 @@ function renderBand(
   // governs the column. A text element must then fill the cell, not carry its own
   // fixed el.w — otherwise an edited/narrow band column can't shrink the element
   // and it overflows (verified on SB2, #47 3a). Single-column rows keep el.w.
+  // stacked = the cell holds >1 element (hand-authored bands, #73). BFO's default
+  // <p>/<h2>/<hr> margins then accumulate per element, growing the cell past the
+  // roleHeight bounding box (header macro overflows into the body). Stacked cells
+  // render tight (margin ~0); single-element cells keep the default rhythm.
   const cellHtml = (col: { elementIds: string[] }, out: string[], inCell: boolean) => {
+    const stacked = col.elementIds.length > 1;
     for (const id of col.elementIds) {
       const el = byId.get(id);
-      if (el) out.push(elementToHtml(el, recordType, useFreeMarker, pagination, inCell));
+      if (el) out.push(elementToHtml(el, recordType, useFreeMarker, pagination, inCell, stacked));
     }
   };
 
@@ -405,11 +410,12 @@ function elementToHtml(
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
   inCell = false,
+  stacked = false,
 ): string {
   switch (el.type) {
     case 'text':
     case 'header':
-      return textToHtml(el as TextElement, recordType, useFreeMarker, inCell);
+      return textToHtml(el as TextElement, recordType, useFreeMarker, inCell, stacked);
     case 'image':
       return imageToHtml(el as ImageElement, recordType, useFreeMarker);
     case 'table':
@@ -417,7 +423,7 @@ function elementToHtml(
     case 'shape':
       return shapeToHtml(el as ShapeElement);
     case 'line':
-      return lineToHtml(el as LineElement);
+      return lineToHtml(el as LineElement, stacked);
     case 'barcode':
       return barcodeToHtml(el as BarcodeElement, recordType, useFreeMarker);
     case 'list':
@@ -427,7 +433,7 @@ function elementToHtml(
   }
 }
 
-function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean, inCell = false): string {
+function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean, inCell = false, stacked = false): string {
   const style = [
     `font-size: ${sanitizeNumericCss(el.fontSize, 'pt', 1, 200)}`,
     `font-weight: ${el.fontWeight === 'bold' ? 'bold' : 'normal'}`,
@@ -436,6 +442,9 @@ function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean,
     // In a multi-column cell the <td width%> governs the width; a fixed el.w would
     // overflow an edited/narrow column, so the text fills the cell instead (#47 3a).
     ...(inCell ? [] : [`width: ${sanitizeNumericCss(el.w, 'pt', 0, 5000)}`]),
+    // Stacked cell: default <p>/<h2> margins accumulate per element and overflow
+    // the band's roleHeight box — render tight (see renderBand cellHtml, #73).
+    ...(stacked ? ['margin: 0 0 2pt 0'] : []),
   ].join('; ');
 
   let content = escapeXml(el.content);
@@ -585,8 +594,11 @@ function shapeToHtml(el: ShapeElement): string {
   return `<div style="${style}"></div>`;
 }
 
-function lineToHtml(el: LineElement): string {
-  return `<hr style="border: none; border-top: ${el.lineWidth}pt ${el.lineStyle} ${el.lineColor}; width: ${el.w}pt;" />`;
+function lineToHtml(el: LineElement, stacked = false): string {
+  // Stacked cell: the cell width governs (a fixed el.w can poke past a narrow
+  // column) and default <hr> margins accumulate — fill the cell, tight margins.
+  const size = stacked ? 'width: 100%; margin: 1pt 0;' : `width: ${el.w}pt;`;
+  return `<hr style="border: none; border-top: ${el.lineWidth}pt ${el.lineStyle} ${el.lineColor}; ${size}" />`;
 }
 
 function barcodeToHtml(el: BarcodeElement, recordType: string, useFreeMarker: boolean): string {

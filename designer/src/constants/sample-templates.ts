@@ -6,6 +6,7 @@
  */
 import { nanoid } from 'nanoid';
 import type { DocumentTemplate } from '../models/template';
+import type { Band } from '../models/bands';
 import type { CanvasElement, TextElement, LineElement, TableElement, ShapeElement, ImageElement, TableColumn, ElementRoleType } from '../models/element';
 import { createDefaultPage } from '../models/page';
 import { createDefaultPagination } from '../models/template';
@@ -77,7 +78,10 @@ function createInvoiceTemplate(): DocumentTemplate {
     T('company_branch', 'header', 90, 79, 240, 10, 'Branch / สาขา : {{company.branchCode}}', { size: 7, color: '#555555', binding: 'company.branchCode' }),
     T('title_th', 'header', 338, 20, 233, 16, '{{document.titleTH}}', { size: 12, bold: true, align: 'center', color: '#111111', binding: 'document.titleTH', header: true }),
     T('title_en', 'header', 338, 37, 233, 11, '{{document.titleEN}}', { size: 9, align: 'center', color: '#333333', binding: 'document.titleEN' }),
-    TBL('docinfo_table', 'header', 338, 54, 233, 82, 'document.docInfoRows',
+    // h=100 matches the RENDERED height (5 rows × ~18pt with the global th/td
+    // padding), not a design h — roleHeight derives header-height from this bbox,
+    // and an under-declared h makes the body start on top of the table (#73).
+    TBL('docinfo_table', 'header', 338, 54, 233, 100, 'document.docInfoRows',
       [col('label', '', 143, 'left'), col('value', '', 90, 'left')],
       { headBg: '#ffffff', headFg: '#ffffff', border: '#999999' }),
 
@@ -123,6 +127,53 @@ function createInvoiceTemplate(): DocumentTemplate {
     T('footer_page', 'footer', 400, 830, 171, 10, 'Page', { size: 7, align: 'right', color: '#777777' }),
   ];
 
+  // The header and customer blocks are vertical stacks beside each other, which
+  // the migration cannot express: a tall element (logo h44, docinfo_table h82)
+  // bridges the stacked lines into ONE row of many side-by-side columns
+  // (groupIntoRows rowBottom is a running max), splitting each block across
+  // columns. So these two bands are hand-authored — one column per visual block,
+  // elements stacked top-to-bottom in elementIds (#73). Ids are nanoid-random,
+  // so columns resolve them by element name. Other roles derive correctly.
+  const eid = (name: string): string => {
+    const el = elements.find((e) => e.name === name);
+    if (!el) throw new Error(`invoice template: no element named "${name}"`);
+    return el.id;
+  };
+  const bands: Band[] = elementsToBands(elements).map((band) => {
+    if (band.role === 'header') {
+      return {
+        role: band.role,
+        rows: [{
+          id: 'header-r0',
+          columns: [
+            { id: 'header-r0-c0', widthPct: 12, elementIds: [eid('logo')] },
+            { id: 'header-r0-c1', widthPct: 45, elementIds: ['company_name', 'company_addr', 'company_tel', 'company_taxid', 'company_branch'].map(eid) },
+            { id: 'header-r0-c2', widthPct: 43, elementIds: ['title_th', 'title_en', 'docinfo_table'].map(eid) },
+          ],
+        }],
+      };
+    }
+    if (band.role === 'content') {
+      return {
+        role: band.role,
+        rows: [
+          {
+            id: 'content-r0',
+            columns: [
+              { id: 'content-r0-c0', widthPct: 57, elementIds: ['cust_label', 'cust_ul', 'cust_name', 'cust_addr', 'cust_taxid', 'cust_branch'].map(eid) },
+              { id: 'content-r0-c1', widthPct: 43, elementIds: ['ship_label', 'ship_ul', 'ship_addr'].map(eid) },
+            ],
+          },
+          {
+            id: 'content-r1',
+            columns: [{ id: 'content-r1-c0', widthPct: 100, elementIds: [eid('disclaimer')] }],
+          },
+        ],
+      };
+    }
+    return band;
+  });
+
   return {
     id: 'tpl-invoice',
     name: 'Invoice',
@@ -146,6 +197,7 @@ function createInvoiceTemplate(): DocumentTemplate {
       columnSpanField: '',
     },
     elements,
+    bands,
     jsonData: {
       company: {
         name: 'Teibto Thai Localization', address: 'ห้องเลขที่ 11 แขวงหนองจอก เขตหนองแขม กรุงเทพมหานคร 10600',
@@ -194,7 +246,8 @@ export function getSampleTemplates(): DocumentTemplate[] {
   // renders identically through either path but now carries an explicit `bands`
   // the band editor loads directly (no regenerate-on-entry bridge). Element ids
   // are random (nanoid), so bands must be computed from these very elements — not
-  // hardcoded — to keep the id references valid.
+  // hardcoded — to keep the id references valid. A template that hand-authors its
+  // own bands (invoice, #73 — stacks the migration cannot derive) keeps them.
   return [
     createInvoiceTemplate(),
     createTaxInvoiceTemplate(),
@@ -202,7 +255,7 @@ export function getSampleTemplates(): DocumentTemplate[] {
     createQuotationTemplate(),
     createDeliveryNoteTemplate(),
     createReceiptTemplate(),
-  ].map((tpl) => ({ ...tpl, bands: elementsToBands(tpl.elements) }));
+  ].map((tpl) => ({ ...tpl, bands: tpl.bands ?? elementsToBands(tpl.elements) }));
 }
 
 /** Get a single sample template by ID */
