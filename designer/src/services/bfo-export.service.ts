@@ -604,8 +604,17 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
   // Body (FreeMarker loop)
   lines.push('<tbody>');
 
+  // Fill only the ITEM table (role 'table') — key/value grids bound to arrays
+  // (doc-info role 'header', summary role 'summary') must keep their natural
+  // height or the padding shoves the summary onto a new page (#84).
+  const fillN = pagination?.fillLastPage && el.role === 'table'
+    ? (pagination.rowsPerPage || 0) : 0;
+
   if (useFreeMarker && el.binding) {
     const listVar = el.binding.split('.').pop() || 'item';
+    // Row counter for last-page fill (#84) — NOT ?size: on the JSON data
+    // source ?size prints blank silently (netsuite-bfo-pdf truth table)
+    if (fillN > 0) lines.push('<#assign _rc = 0>');
     // Null-safe list: record without sublist lines renders an empty table, not an error (#4)
     lines.push(`<#list (${recordType}.${el.binding})![] as ${listVar}>`);
 
@@ -650,7 +659,26 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       lines.push('</tr>');
     }
 
+    if (fillN > 0) lines.push('<#assign _rc = _rc + 1>');
     lines.push(`</#list>`);
+
+    // Last-page fill (#84): pad with empty rows so the printed row count is a
+    // multiple of rowsPerPage — the table box keeps a constant height and the
+    // summary block below it stays anchored instead of floating up. An empty
+    // table fills a whole page; an exact multiple gets no padding. Modulo
+    // returns a double in FreeMarker → ?int before the range.
+    if (fillN > 0) {
+      lines.push(`<#assign _fill = (${fillN} - (_rc % ${fillN}))?int>`);
+      lines.push(`<#if _fill == ${fillN} && _rc != 0><#assign _fill = 0></#if>`);
+      lines.push('<#if _fill gt 0><#list 1.._fill as _f>');
+      lines.push('<tr>');
+      visibleCols.forEach((col) => {
+        const style = cellOverflowStyle(col, el.borderColor);
+        lines.push(`  <td style="${style}"><p style="margin: 0;">&#160;</p></td>`);
+      });
+      lines.push('</tr>');
+      lines.push('</#list></#if>');
+    }
   } else {
     lines.push('<tr>');
     visibleCols.forEach((col) => {

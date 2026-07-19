@@ -196,7 +196,9 @@ function createInvoiceTemplate(): DocumentTemplate {
     page: createDefaultPage(),
     pagination: {
       mode: 'height',
-      rowsPerPage: 18,
+      // 14 rows + header band + summary block = exactly one A4 page
+      // (render-tuned on SB2, #84; 18 pushed the summary to page 2)
+      rowsPerPage: 14,
       baseRowHeight: 22,
       lineHeightPx: 12,
       showContinuationHeader: true,
@@ -208,6 +210,8 @@ function createInvoiceTemplate(): DocumentTemplate {
       keepTogetherField: '',
       headerMode: 'all',
       columnSpanField: '',
+      // Anchor the summary block: pad the item table to 18 rows (#84)
+      fillLastPage: true,
     },
     elements,
     bands,

@@ -270,6 +270,13 @@ export class PldPaginationPanel extends LitElement {
         Show continuation header
       </label>
 
+      <label class="check-item"
+        title="Pad the table with empty rows to a multiple of Rows per Page so the summary block stays anchored on the last page (#84)">
+        <input type="checkbox" .checked=${this.config.fillLastPage ?? false}
+          @change=${(e: Event) => this._update('fillLastPage', (e.target as HTMLInputElement).checked)} />
+        Fill last page with empty rows
+      </label>
+
       <!-- Advanced Layout Controls -->
       <div class="divider"></div>
       <div class="section-header" @click=${() => { this._layoutOpen = !this._layoutOpen; }}>
