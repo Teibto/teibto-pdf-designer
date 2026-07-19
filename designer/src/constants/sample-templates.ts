@@ -47,9 +47,9 @@ function createInvoiceTemplate(): DocumentTemplate {
   });
 
   const col = (key: string, label: string, width: number, align: 'left' | 'center' | 'right',
-    o: { wrap?: boolean; bold?: boolean; boldFirst?: boolean } = {}): TableColumn => ({
+    o: { wrap?: boolean; bold?: boolean; boldFirst?: boolean; maxLines?: number } = {}): TableColumn => ({
     key, label, width, align, format: 'text',
-    overflow: o.wrap ? 'wrap' : 'ellipsis', maxLines: o.wrap ? 3 : 1,
+    overflow: o.wrap ? 'wrap' : 'ellipsis', maxLines: o.maxLines ?? (o.wrap ? 3 : 1),
     hidden: false, bold: !!o.bold, uppercase: false,
     ...(o.boldFirst ? { boldFirstLine: true } : {}),
   });
@@ -102,14 +102,21 @@ function createInvoiceTemplate(): DocumentTemplate {
     T('disclaimer', 'content', 24, 236, 547, 30, DISCLAIMER, { size: 6.5, align: 'center', color: '#777777' }),
 
     // ═══ TABLE: line items (7 columns, bilingual headers) ═══
+    // Numeric columns: wrap + maxLines 0 → NO overflow:hidden. BFO ignores both
+    // text-overflow AND word-wrap:break-word (an unbroken number never wraps),
+    // but honors overflow:hidden — so ellipsis/clip (and wrap's maxLines box)
+    // silently LOSES trailing digits (999,999,999,999.99 printed truncated,
+    // #75). Without the hidden box an over-wide value overflows VISIBLY —
+    // wrong but detectable, never silently wrong. Amount widened for headroom
+    // (fits ≈17 chars ≈ tens of billions with satang).
     TBL('items_table', 'table', 24, 272, 547, 300, 'items', [
       col('no', 'No. / ลำดับ', 34, 'center'),
-      col('description', 'Description / รายละเอียด', 214, 'left', { wrap: true, boldFirst: true }),
-      col('quantity', 'Quantity / จำนวน', 55, 'center'),
-      col('unit', 'Unit / หน่วย', 45, 'center'),
-      col('unit_price', 'Unit Price / ราคาต่อหน่วย', 68, 'right'),
-      col('discount', 'Total Discount / ส่วนลด', 62, 'right'),
-      col('amount', 'Amount / จำนวนเงิน (บาท)', 69, 'right', { bold: true }),
+      col('description', 'Description / รายละเอียด', 200, 'left', { wrap: true, boldFirst: true }),
+      col('quantity', 'Quantity / จำนวน', 55, 'center', { wrap: true, maxLines: 0 }),
+      col('unit', 'Unit / หน่วย', 45, 'center', { wrap: true, maxLines: 0 }),
+      col('unit_price', 'Unit Price / ราคาต่อหน่วย', 68, 'right', { wrap: true, maxLines: 0 }),
+      col('discount', 'Total Discount / ส่วนลด', 62, 'right', { wrap: true, maxLines: 0 }),
+      col('amount', 'Amount / จำนวนเงิน (บาท)', 83, 'right', { bold: true, wrap: true, maxLines: 0 }),
     ]),
 
     // ═══ SUMMARY (last page): remark + totals grid + baht text + signatures ═══
