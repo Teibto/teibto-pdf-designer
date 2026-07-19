@@ -30,6 +30,7 @@ function createInitialState(): AppState {
     page: createDefaultPage(),
 
     jsonData: null,
+    copies: null,
     jsonKeys: [],
 
     pagination: createDefaultPagination(),

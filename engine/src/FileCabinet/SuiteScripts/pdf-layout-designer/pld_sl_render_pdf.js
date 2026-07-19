@@ -92,14 +92,10 @@ define([
       throw new Error('Missing required parameters: rectype and recid');
     }
 
-    // ─── 1. Load Template ───
-    var tplXml;
-    if (tplId) {
-      tplXml = loadTemplateXml(tplId);
-    } else {
-      // Find default template for this record type
-      tplXml = findDefaultTemplateXml(recType);
-    }
+    // ─── 1. Load Template (XML + copy set from the record data, #92) ───
+    var tpl = tplId ? loadTemplateXml(tplId) : findDefaultTemplateXml(recType);
+    var tplXml = tpl && tpl.xml;
+    var tplCopies = tpl && tpl.copies;
 
     if (!tplXml) {
       throw new Error('No template found. Please specify tplid or set a default template for ' + recType);
@@ -111,13 +107,15 @@ define([
     // so Print == Preview. Without this, Print binds the raw record and the
     // designer templates (${record.customer.name} etc.) render empty (#67 GAP #1).
     // Invoices also print the statutory copy set (ต้นฉบับ + สำเนา, #15).
-    // #91: every supported type binds curated data; invoice keeps the copy set
+    // #91: every supported type binds curated data. #92: copy set comes from
+    // the template record (data JSON), falling back to the invoice default.
     var out;
-    if (recType === 'invoice') {
-      out = renderInvoiceCopiesPdf(tplXml, recType, recId);
-    } else if (invoiceData.isSupportedType(recType)) {
-      out = renderXmlWithRecord(tplXml, recType, recId,
-        invoiceData.buildTransactionData(recType, recId));
+    if (invoiceData.isSupportedType(recType)) {
+      var copies = resolveCopies(tplCopies, recType);
+      out = copies.length > 1
+        ? renderCopiesPdf(tplXml, recType, recId, copies)
+        : renderXmlWithRecord(tplXml, recType, recId,
+            invoiceData.buildTransactionData(recType, recId, copies[0].th, copies[0].en));
     } else {
       out = renderXmlWithRecord(tplXml, recType, recId, null);
     }
@@ -196,12 +194,34 @@ define([
     return { pdfFile: makeRenderer(tplXml, curatedData, rec).renderAsPdf(), rec: rec };
   }
 
-  // Thai statutory copy set (#15) — every invoice prints ต้นฉบับ then สำเนา,
-  // labels exactly as the PFTS reference COPY array.
+  // Thai statutory copy set (#15) — default for invoices when the template
+  // doesn't define its own copy set (#92).
   var INVOICE_COPIES = [
     { th: 'ต้นฉบับ', en: 'Original' },
     { th: 'สำเนา', en: 'Copy' }
   ];
+
+  /** Validate a template-defined copy set (#92): array of {th|en} → sanitized
+   *  array, or null when absent/invalid (caller falls back to defaults). */
+  function parseCopies(raw) {
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var c = raw[i];
+      if (!c || typeof c !== 'object') return null;
+      var th = typeof c.th === 'string' ? c.th : '';
+      var en = typeof c.en === 'string' ? c.en : '';
+      if (!th && !en) return null;
+      out.push({ th: th || en, en: en || th });
+    }
+    return out;
+  }
+
+  /** Copies for a render (#92): template-defined set, else invoice default,
+   *  else single original. */
+  function resolveCopies(tplCopies, recType) {
+    return tplCopies || (recType === 'invoice' ? INVOICE_COPIES : [{ th: 'ต้นฉบับ', en: 'Original' }]);
+  }
 
   /**
    * Render the invoice once per copy label and combine into ONE PDF via BFO
@@ -210,10 +230,10 @@ define([
    * resolved <pdf> documents render together with render.xmlToPdf.
    * Returns { pdfFile, tranId }.
    */
-  function renderInvoiceCopiesPdf(tplXml, recType, recId) {
+  function renderCopiesPdf(tplXml, recType, recId, copies) {
     var tranId = '';
-    var docs = INVOICE_COPIES.map(function (c) {
-      var curated = invoiceData.buildInvoiceData(recId, c.th, c.en);
+    var docs = copies.map(function (c) {
+      var curated = invoiceData.buildTransactionData(recType, recId, c.th, c.en);
       tranId = tranId || (curated.document && curated.document.number) || '';
       var resolved = makeRenderer(tplXml, curated, null).renderAsString();
       var start = resolved.indexOf('<pdf>');
@@ -260,11 +280,13 @@ define([
     var out;
     if (body.data) {
       out = { pdfFile: makeRenderer(body.xml, body.data, null).renderAsPdf() };
-    } else if (body.rectype === 'invoice') {
-      out = renderInvoiceCopiesPdf(body.xml, body.rectype, body.recid);
     } else if (invoiceData.isSupportedType(body.rectype)) {
-      out = renderXmlWithRecord(body.xml, body.rectype, body.recid,
-        invoiceData.buildTransactionData(body.rectype, body.recid));
+      // #92: unsaved designer state sends its copy set in the body
+      var pvCopies = resolveCopies(parseCopies(body.copies), body.rectype);
+      out = pvCopies.length > 1
+        ? renderCopiesPdf(body.xml, body.rectype, body.recid, pvCopies)
+        : renderXmlWithRecord(body.xml, body.rectype, body.recid,
+            invoiceData.buildTransactionData(body.rectype, body.recid, pvCopies[0].th, pvCopies[0].en));
     } else {
       out = renderXmlWithRecord(body.xml, body.rectype, body.recid, null);
     }
@@ -457,7 +479,13 @@ define([
         'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
     }
 
-    return xmlContent;
+    return { xml: xmlContent, copies: copiesFromDataJson(rec.getValue({ fieldId: TPL_FLD_DATA })) };
+  }
+
+  /** Copy set stored in the designer JSON of a template record (#92) */
+  function copiesFromDataJson(dataJson) {
+    if (!dataJson) return null;
+    try { return parseCopies(JSON.parse(dataJson).copies); } catch (e) { return null; }
   }
 
   /**
@@ -474,7 +502,7 @@ define([
         'AND',
         [TPL_FLD_IS_DEFAULT, 'is', 'T']
       ],
-      columns: [TPL_FLD_XML]
+      columns: [TPL_FLD_XML, TPL_FLD_DATA]
     }).run().getRange({ start: 0, end: 1 });
 
     if (results.length === 0) return null;
@@ -485,7 +513,7 @@ define([
         'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
     }
 
-    return xmlContent;
+    return { xml: xmlContent, copies: copiesFromDataJson(results[0].getValue(TPL_FLD_DATA)) };
   }
 
   /**

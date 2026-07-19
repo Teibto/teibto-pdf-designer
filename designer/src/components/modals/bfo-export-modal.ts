@@ -392,6 +392,8 @@ export class PldBfoExportModal extends LitElement {
         pagination: state.pagination,
         // Persist band edits in the record so a re-edit restores them (#47 3b).
         bands: state.bands.length ? state.bands : undefined,
+        // Copy set (#92) — the render suitelet reads this from the record data
+        copies: state.copies && state.copies.length ? state.copies : undefined,
       });
 
       const result = await saveNsTemplate({
