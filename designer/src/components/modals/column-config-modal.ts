@@ -336,6 +336,17 @@ export class PldColumnConfigModal extends LitElement {
     }
 
     /* ─── Preview ─── */
+    .guard-warning {
+      margin-top: 6px;
+      padding: 6px 8px;
+      font-size: 10px;
+      line-height: 1.5;
+      color: #b45309;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 4px;
+    }
+
     .preview {
       margin-top: 16px;
       overflow-x: auto;
@@ -572,6 +583,13 @@ export class PldColumnConfigModal extends LitElement {
             </div>
           ` : ''}
         </div>
+        ${(col.format === 'currency' || col.format === 'number') && (col.overflow ?? 'ellipsis') !== 'wrap' ? html`
+          <div class="guard-warning">
+            ⚠ ตัวเลขที่กว้างเกินคอลัมน์จะถูกตัดหลักท้ายแบบมองไม่เห็นใน PDF
+            (BFO ไม่รองรับ ellipsis — overflow:hidden ตัดเงียบ) แนะนำใช้ Word Wrap
+            หรือขยายความกว้างคอลัมน์
+          </div>
+        ` : ''}
         <div class="check-row">
           <label class="check-item">
             <input type="checkbox" .checked=${col.bold}
