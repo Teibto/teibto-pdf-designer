@@ -464,8 +464,8 @@ export class PldSidebarRight extends LitElement {
         <label class="field-label">Image URL</label>
         <input class="field-input" type="text" .value=${el.src ?? ''} placeholder="https://..."
           @change=${(e: Event) => this._update('src', (e.target as HTMLInputElement).value)} />
-        <!-- Object Fit -->
-        <label class="field-label">Fit Mode</label>
+        <!-- Object Fit — BFO ignores object-fit (truth table); screen-only (#50) -->
+        <label class="field-label" title="มีผลเฉพาะบนจอออกแบบ — BFO/PDF ไม่รองรับ object-fit (ภาพใน PDF ยืดตามกรอบเสมอ)">Fit Mode (screen only)</label>
         <select class="field-select"
           .value=${el.objectFit}
           @change=${(e: Event) => this._update('objectFit', (e.target as HTMLSelectElement).value)}>
