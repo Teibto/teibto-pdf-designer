@@ -62,6 +62,12 @@ export interface PaginationConfig {
    *  merged cell spanning all visible columns (section headers, subtotals).
    *  Empty string = disabled. */
   columnSpanField: string;
+
+  /** Pad the item table with empty rows so the printed row count is a
+   *  multiple of rowsPerPage — keeps the table box a constant height and
+   *  anchors the summary block on the last page (#84). Requires
+   *  rowsPerPage > 0. Default: false (optional for legacy templates). */
+  fillLastPage?: boolean;
 }
 
 export interface DocumentTemplate {
@@ -109,5 +115,6 @@ export function createDefaultPagination(): PaginationConfig {
     keepTogetherField: '',
     headerMode: 'all',
     columnSpanField: '',
+    fillLastPage: false,
   };
 }

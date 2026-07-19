@@ -540,6 +540,40 @@ describe('column format on export (#77)', () => {
     expect(xml).toContain("<#else>${_cv?string?xml?replace('\\n', '<br/>')}</#if>");
   });
 
+  it('fillLastPage: pads to a multiple of rowsPerPage with empty rows (#84)', () => {
+    const state = createMockState([makeTable()]);
+    state.pagination = { ...createDefaultPagination(), rowsPerPage: 18, fillLastPage: true };
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    // Counter (NOT ?size — blank on the JSON data source), int-cast modulo,
+    // exact-multiple guard, nbsp as numeric entity (&nbsp; breaks XML parse)
+    expect(xml).toContain('<#assign _rc = 0>');
+    expect(xml).toContain('<#assign _rc = _rc + 1>');
+    expect(xml).toContain('<#assign _fill = (18 - (_rc % 18))?int>');
+    expect(xml).toContain('<#if _fill == 18 && _rc != 0><#assign _fill = 0></#if>');
+    expect(xml).toContain('<#if _fill gt 0><#list 1.._fill as _f>');
+    expect(xml).toContain('&#160;');
+    expect(xml).not.toContain('&nbsp;');
+  });
+
+  it('fillLastPage off (default): no filler machinery emitted', () => {
+    const state = createMockState([makeTable()]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).not.toContain('_rc');
+    expect(xml).not.toContain('_fill');
+  });
+
+  it('fillLastPage: only the item table (role table) is padded — key/value grids are not', () => {
+    // doc-info/summary grids are tables bound to arrays too; padding them
+    // shoves the summary onto a new page (found on SB2, #84)
+    const state = createMockState([makeTable({ role: 'summary' })]);
+    state.pagination = { ...createDefaultPagination(), rowsPerPage: 18, fillLastPage: true };
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).not.toContain('_fill');
+  });
+
   it('format also applies in columnSpanField normal rows', () => {
     const table = tableWithFormat('currency');
     const state = createMockState([table]);
