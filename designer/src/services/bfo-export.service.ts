@@ -523,6 +523,59 @@ function cellOverflowStyle(col: TableColumn, borderColor: string): string {
   return parts.join('; ') + ';';
 }
 
+/**
+ * FreeMarker expression for a table cell value, applying col.format (#77).
+ *
+ * N/render's JSON custom data source delivers EVERY value as a string
+ * (verified on SB2 — ?is_number is never true on that path), so numeric
+ * formats regex-test the string (?matches) and coerce with ?number: a raw
+ * numeric string ("1234.5") parses and gets the pattern; an already-formatted
+ * string ("1,234.50" — the curated invoice data) fails the regex and falls
+ * through unchanged, so existing templates render identically. ?is_number
+ * stays as the fast path for real numeric models (addRecord). NOT
+ * <#attempt>+?number: a failing #assign inside #attempt leaves the previous
+ * cell's value in the var and renders it (verified on SB2 — values leak
+ * across cells). Mirrors client-side formatCellValue (utils/format.ts).
+ */
+function cellValueFm(listVar: string, col: TableColumn): string {
+  const passthrough = `\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}`;
+  const fmt = col.format ?? 'text';
+  if (fmt === 'text') return passthrough;
+
+  const assign = `<#assign _cv = (${listVar}.${col.key})!''>`;
+  // Re-derive the passthrough from _cv so the fallback branch stays in sync
+  const fallback = `\${_cv?string?xml?replace('\\n', '<br/>')}`;
+
+  // Numeric formats: number fast path, then string→number coercion (regex
+  // pre-validated so ?number can never throw), then raw passthrough
+  const numeric = (expr: (v: string) => string) =>
+    `${assign}<#if _cv?is_number>${expr('_cv')}` +
+    `<#elseif _cv?is_string && _cv?trim?matches(r"-?[0-9]+(\\.[0-9]+)?")>` +
+    `<#assign _cn = _cv?trim?number>${expr('_cn')}` +
+    `<#else>${fallback}</#if>`;
+
+  switch (fmt) {
+    case 'number':
+      return numeric((v) => `\${${v}?string("#,##0.##")}`);
+    case 'currency':
+      return numeric((v) => `\${${v}?string("#,##0.00")}`);
+    case 'percent':
+      // |v| <= 1 (and non-zero) is a decimal fraction → ×100, else already a
+      // percentage — same heuristic as formatPercent (utils/format.ts).
+      return numeric(
+        (v) =>
+          `<#if ${v} gte -1 && ${v} lte 1 && ${v} != 0>\${(${v} * 100)?string("#,##0.0")}%` +
+          `<#else>\${${v}?string("#,##0.0")}%</#if>`,
+      );
+    case 'date':
+      // Strings can't be date-parsed reliably (→ fallback); only a real date
+      // model (addRecord path) can be reformatted.
+      return `${assign}<#if _cv?is_date>\${_cv?string('dd/MM/yyyy')}<#else>${fallback}</#if>`;
+    default:
+      return passthrough;
+  }
+}
+
 function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolean, pagination?: PaginationConfig): string {
   if (el.columns.length === 0) return `<!-- table ${el.name}: no columns configured -->`;
 
@@ -567,7 +620,7 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       lines.push('<tr>');
       visibleCols.forEach((col) => {
         const style = cellOverflowStyle(col, el.borderColor);
-        lines.push(`  <td style="${style}">\${${listVar}.${col.key}!''}</td>`);
+        lines.push(`  <td style="${style}">${cellValueFm(listVar, col)}</td>`);
       });
       lines.push('</tr>');
       lines.push('</#if>');
@@ -591,7 +644,7 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
             `<#else><b>\${_bfl}</b></#if></p></td>`,
           );
         } else {
-          lines.push(`  <td style="${style}">${pOpen}\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}</p></td>`);
+          lines.push(`  <td style="${style}">${pOpen}${cellValueFm(listVar, col)}</p></td>`);
         }
       });
       lines.push('</tr>');
