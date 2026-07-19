@@ -25,8 +25,8 @@
  * @author Wichit Wongta
  * @since 2026-07-18
  */
-define(['N/query', 'N/record', 'N/format', './pld_lib_company_config', './pld_lib_baht_text'],
-function (query, record, format, companyConfig, bahtText) {
+define(['N/query', 'N/record', 'N/format', './pld_lib_company_config', './pld_lib_baht_text', './pld_lib_thai_wordbreak'],
+function (query, record, format, companyConfig, bahtText, wordbreak) {
 
   function first(sql, params) {
     var rows = query.runSuiteQL({ query: sql, params: params }).asMappedResults();
@@ -194,18 +194,20 @@ function (query, record, format, companyConfig, bahtText) {
         : (prevMemo || l.memo || '');
       var conv = num(l.conv) || 1;
       var memo = l.memo || '';
+      // ZWSP word breaks (#87) on the long Thai fields only — BFO otherwise
+      // breaks Thai anywhere. prevMemo stays raw (lookahead compares data).
       items.push({
         no: items.length + 1,
         code: isItem ? l.item_code : '',
-        name: name,
-        memo: memo,
+        name: wordbreak.breakThai(name),
+        memo: wordbreak.breakThai(memo),
         quantity: isItem && l.quantity != null ? qtyText(num(l.quantity) / conv) : '',
         unit: isItem ? (l.unit_name || '') : '',
         unit_price: isItem ? moneyOrBlank(l.unit_price) : '',
         discount: '',
         amount: moneyOrBlank(l.amount),
         // backward-compat (#69 simple template); \n renders via the table cell <br/>
-        description: name + (memo ? '\n' + memo : '')
+        description: wordbreak.breakThai(name + (memo ? '\n' + memo : ''))
       });
       prevMemo = memo;
     });
@@ -255,12 +257,12 @@ function (query, record, format, companyConfig, bahtText) {
         docInfoRows: docInfoRows
       },
       customer: {
-        name: cleanName(hdr.customer_name),
-        address: billAddr,
+        name: wordbreak.breakThai(cleanName(hdr.customer_name)),
+        address: wordbreak.breakThai(billAddr),
         taxId: custTaxId || '',
         branch: branchText(custBranch)
       },
-      shipTo: { address: shipAddr },
+      shipTo: { address: wordbreak.breakThai(shipAddr) },
       totals: {
         // Thai statutory 9-row breakdown
         gross: money(grossTotal),

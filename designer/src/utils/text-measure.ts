@@ -109,6 +109,10 @@ const LATIN_WIDE = new Set([
  * Zero-width Thai combining marks return 0.
  */
 function charWidthFactor(code: number): number {
+  // Zero-width space (U+200B) — the engine inserts these as Thai word-break
+  // opportunities (#87); they occupy no width
+  if (code === 0x200b) return 0;
+
   // Thai range (U+0E00–U+0E7F)
   if (code >= 0x0e00 && code <= 0x0e7f) {
     // Zero-width combining marks: สระบน/ล่าง, วรรณยุกต์, การันต์ ฯลฯ
