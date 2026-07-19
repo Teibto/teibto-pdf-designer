@@ -190,10 +190,15 @@ function renderBand(
   // governs the column. A text element must then fill the cell, not carry its own
   // fixed el.w — otherwise an edited/narrow band column can't shrink the element
   // and it overflows (verified on SB2, #47 3a). Single-column rows keep el.w.
+  // stacked = the cell holds >1 element (hand-authored bands, #73). BFO's default
+  // <p>/<h2>/<hr> margins then accumulate per element, growing the cell past the
+  // roleHeight bounding box (header macro overflows into the body). Stacked cells
+  // render tight (margin ~0); single-element cells keep the default rhythm.
   const cellHtml = (col: { elementIds: string[] }, out: string[], inCell: boolean) => {
+    const stacked = col.elementIds.length > 1;
     for (const id of col.elementIds) {
       const el = byId.get(id);
-      if (el) out.push(elementToHtml(el, recordType, useFreeMarker, pagination, inCell));
+      if (el) out.push(elementToHtml(el, recordType, useFreeMarker, pagination, inCell, stacked));
     }
   };
 
@@ -405,11 +410,12 @@ function elementToHtml(
   useFreeMarker: boolean,
   pagination?: PaginationConfig,
   inCell = false,
+  stacked = false,
 ): string {
   switch (el.type) {
     case 'text':
     case 'header':
-      return textToHtml(el as TextElement, recordType, useFreeMarker, inCell);
+      return textToHtml(el as TextElement, recordType, useFreeMarker, inCell, stacked);
     case 'image':
       return imageToHtml(el as ImageElement, recordType, useFreeMarker);
     case 'table':
@@ -417,7 +423,7 @@ function elementToHtml(
     case 'shape':
       return shapeToHtml(el as ShapeElement);
     case 'line':
-      return lineToHtml(el as LineElement);
+      return lineToHtml(el as LineElement, stacked);
     case 'barcode':
       return barcodeToHtml(el as BarcodeElement, recordType, useFreeMarker);
     case 'list':
@@ -427,7 +433,7 @@ function elementToHtml(
   }
 }
 
-function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean, inCell = false): string {
+function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean, inCell = false, stacked = false): string {
   const style = [
     `font-size: ${sanitizeNumericCss(el.fontSize, 'pt', 1, 200)}`,
     `font-weight: ${el.fontWeight === 'bold' ? 'bold' : 'normal'}`,
@@ -436,6 +442,11 @@ function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean,
     // In a multi-column cell the <td width%> governs the width; a fixed el.w would
     // overflow an edited/narrow column, so the text fills the cell instead (#47 3a).
     ...(inCell ? [] : [`width: ${sanitizeNumericCss(el.w, 'pt', 0, 5000)}`]),
+    // Stacked cell: default <p>/<h2> margins accumulate per element and overflow
+    // the band's roleHeight box — render tight; width 100% because BFO
+    // shrink-fits a stacked <h2>/<p> to its text, which defeats
+    // text-align: center (title rendered flush-left, #73).
+    ...(stacked ? ['margin: 0 0 2pt 0', 'width: 100%'] : []),
   ].join('; ');
 
   let content = escapeXml(el.content);
@@ -464,7 +475,15 @@ function imageToHtml(el: ImageElement, recordType: string, useFreeMarker: boolea
     ? convertBindingToFreeMarker(el.binding, recordType)
     : escapeXml(el.src || '');
 
-  return `<img src="${src}" style="width: ${el.w}pt; height: ${el.h}pt; object-fit: ${el.objectFit};" />`;
+  const img = `<img src="${src}" style="width: ${el.w}pt; height: ${el.h}pt; object-fit: ${el.objectFit};" />`;
+  if (el.binding && useFreeMarker) {
+    // An empty bound URL (e.g. company.logo not configured) renders BFO's
+    // broken-image box — skip the img entirely instead (#73). NOT ?has_content:
+    // N/render's JSON data source reports has_content=true for a 0-length
+    // string (verified on SB2), so test the length.
+    return `<#if (${recordType}.${el.binding}!'')?length != 0>${img}</#if>`;
+  }
+  return img;
 }
 
 /**
@@ -513,15 +532,21 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
 
   lines.push(`<table style="width: ${el.w}pt; border: 0.5pt solid ${el.borderColor};">`);
 
-  // Header
-  lines.push('<thead>');
-  lines.push('<tr>');
-  visibleCols.forEach((col) => {
-    const style = `background-color: ${sanitizeColor(el.headerBgColor)}; color: ${sanitizeColor(el.headerTextColor)}; text-align: ${col.align}; font-weight: bold; padding: 4pt 6pt; border: 0.5pt solid ${sanitizeColor(el.borderColor)}; width: ${col.width}pt;`;
-    lines.push(`  <th style="${style}">${escapeXml(col.label)}</th>`);
-  });
-  lines.push('</tr>');
-  lines.push('</thead>');
+  // Header — skipped entirely when no column has a label (bordered key/value
+  // grids like doc-info/summary would otherwise print a stray empty row, #73).
+  if (visibleCols.some((c) => c.label !== '')) {
+    lines.push('<thead>');
+    lines.push('<tr>');
+    visibleCols.forEach((col) => {
+      const style = `background-color: ${sanitizeColor(el.headerBgColor)}; color: ${sanitizeColor(el.headerTextColor)}; text-align: ${col.align}; font-weight: bold; padding: 4pt 6pt; border: 0.5pt solid ${sanitizeColor(el.borderColor)}; width: ${col.width}pt;`;
+      // Wrapped in a block <p> with its own alignment: BFO justifies bare text
+      // that wraps inside a th/td (letter-spacing stretch, "A m o u n t") and
+      // th text-align does not stop it (#73; netsuite-bfo-pdf truth table).
+      lines.push(`  <th style="${style}"><p style="margin: 0; text-align: ${col.align};">${escapeXml(col.label)}</p></th>`);
+    });
+    lines.push('</tr>');
+    lines.push('</thead>');
+  }
 
   // Body (FreeMarker loop)
   lines.push('<tbody>');
@@ -550,7 +575,20 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       lines.push('<tr>');
       visibleCols.forEach((col) => {
         const style = cellOverflowStyle(col, el.borderColor);
-        lines.push(`  <td style="${style}">\${${listVar}.${col.key}!''}</td>`);
+        // ?xml first (a raw & in data — "Discount & FOC" — breaks the BFO parse),
+        // then \n → <br/> so multi-line cells (item code + memo) print as lines.
+        // ?string keeps numeric values (legacy templates) safe for ?xml (#73).
+        if (col.boldFirstLine) {
+          // First line bold (item name), remaining lines (memo) regular — the
+          // reference scans by bold item names (#73).
+          lines.push(
+            `  <td style="${style}"><#assign _bfl = (${listVar}.${col.key}!'')?string?xml>` +
+            `<#if _bfl?index_of('\\n') != -1><b>\${_bfl?keep_before('\\n')}</b><br/>\${_bfl?keep_after('\\n')?replace('\\n', '<br/>')}` +
+            `<#else><b>\${_bfl}</b></#if></td>`,
+          );
+        } else {
+          lines.push(`  <td style="${style}">\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}</td>`);
+        }
       });
       lines.push('</tr>');
     }
@@ -585,8 +623,11 @@ function shapeToHtml(el: ShapeElement): string {
   return `<div style="${style}"></div>`;
 }
 
-function lineToHtml(el: LineElement): string {
-  return `<hr style="border: none; border-top: ${el.lineWidth}pt ${el.lineStyle} ${el.lineColor}; width: ${el.w}pt;" />`;
+function lineToHtml(el: LineElement, stacked = false): string {
+  // Stacked cell: the cell width governs (a fixed el.w can poke past a narrow
+  // column) and default <hr> margins accumulate — fill the cell, tight margins.
+  const size = stacked ? 'width: 100%; margin: 1pt 0;' : `width: ${el.w}pt;`;
+  return `<hr style="border: none; border-top: ${el.lineWidth}pt ${el.lineStyle} ${el.lineColor}; ${size}" />`;
 }
 
 function barcodeToHtml(el: BarcodeElement, recordType: string, useFreeMarker: boolean): string {

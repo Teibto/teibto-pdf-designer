@@ -6,7 +6,8 @@
  */
 import { nanoid } from 'nanoid';
 import type { DocumentTemplate } from '../models/template';
-import type { CanvasElement, TextElement, LineElement, TableElement, ShapeElement } from '../models/element';
+import type { Band } from '../models/bands';
+import type { CanvasElement, TextElement, LineElement, TableElement, ShapeElement, ImageElement, TableColumn, ElementRoleType } from '../models/element';
 import { createDefaultPage } from '../models/page';
 import { createDefaultPagination } from '../models/template';
 import { elementsToBands } from '../services/band-layout.service';
@@ -15,183 +16,169 @@ function makeId(): string {
   return nanoid(10);
 }
 
-/** Create Invoice template — multi-page with word-counting pagination */
+/**
+ * Create Invoice template — Thai statutory tax invoice (ใบแจ้งหนี้/ใบกำกับภาษี),
+ * modelled on the Teibto Thai Localization reference (PFTS_Invoice). Binds the full
+ * curated schema from pld_lib_invoice_data (#73). Bordered key/value grids (doc-info,
+ * summary) are TableElements bound to arrays because ShapeElement has no border.
+ */
 function createInvoiceTemplate(): DocumentTemplate {
+  const DISCLAIMER =
+    'เอกสารฉบับนี้ออกโดยผู้มีอำนาจซึ่งได้รับการอนุมัติผ่านระบบงานของบริษัทฯ ไม่จำเป็นต้องมีลายเซ็นผู้อนุมัติลงนาม / ' +
+    'ห้ามโอนสิทธิเรียกร้อง / โปรดระบุเลขที่งานในเอกสารที่เกี่ยวข้อง เพื่อความสะดวกในการตรวจรับและชำระเงิน / ' +
+    'This document is issued and approved electronically by authorized person via internal system. ' +
+    'Authorized signature is not required. / No assignment of rights and obligations. / Please refer PO number in related documents.';
+
+  // ── typed element factories (keep 35+ elements readable) ──
+  const T = (
+    name: string, role: ElementRoleType, x: number, y: number, w: number, h: number,
+    content: string,
+    o: { size?: number; bold?: boolean; color?: string; align?: 'left' | 'center' | 'right'; binding?: string; header?: boolean } = {},
+  ): TextElement => ({
+    id: makeId(), type: o.header ? 'header' : 'text', name, role, x, y, w, h, zIndex: 0,
+    content, fontSize: o.size ?? 8, fontWeight: o.bold ? 'bold' : 'normal',
+    color: o.color ?? '#222222', textAlign: o.align ?? 'left',
+    ...(o.binding ? { binding: o.binding } : {}), locked: false, visible: true,
+  });
+
+  const LN = (name: string, role: ElementRoleType, x: number, y: number, w: number, color = '#999999', lw = 0.5): LineElement => ({
+    id: makeId(), type: 'line', name, role, x, y, w, h: 2, zIndex: 0,
+    lineColor: color, lineWidth: lw, lineStyle: 'solid', locked: false, visible: true,
+  });
+
+  const col = (key: string, label: string, width: number, align: 'left' | 'center' | 'right',
+    o: { wrap?: boolean; bold?: boolean; boldFirst?: boolean } = {}): TableColumn => ({
+    key, label, width, align, format: 'text',
+    overflow: o.wrap ? 'wrap' : 'ellipsis', maxLines: o.wrap ? 3 : 1,
+    hidden: false, bold: !!o.bold, uppercase: false,
+    ...(o.boldFirst ? { boldFirstLine: true } : {}),
+  });
+
+  const TBL = (
+    name: string, role: ElementRoleType, x: number, y: number, w: number, h: number,
+    binding: string, columns: TableColumn[],
+    o: { headBg?: string; headFg?: string; border?: string } = {},
+  ): TableElement => ({
+    id: makeId(), type: 'table', name, role, x, y, w, h, zIndex: 0, binding, columns,
+    headerBgColor: o.headBg ?? '#e9eaee', headerTextColor: o.headFg ?? '#111111',
+    borderColor: o.border ?? '#999999', alternateRowColor: '#ffffff',
+    locked: false, visible: true,
+  });
+
   const elements: CanvasElement[] = [
-    // Company name + address (left block). No placeholder logo box: the fake
-    // shape overflowed its band column and covered the company name (only "( SB2)"
-    // showed). A real logo is added as an image bound to company.logo when needed.
+    // ═══ HEADER (repeats every page): logo + company + title + doc-info ═══
     {
-      id: makeId(), type: 'header', name: 'company_name', role: 'header',
-      x: 30, y: 30, w: 330, h: 24, zIndex: 1,
-      content: '{{company.name}}', fontSize: 15, fontWeight: 'bold',
-      color: '#111111', textAlign: 'left',
-      binding: 'company.name',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      // y below doc_title's bottom (y30+h32=62) so the band migration keeps the
-      // header as two rows — [company_name | INVOICE] then [company_address | doc#] —
-      // giving the company name a wide (~64%) cell instead of a cramped 30% column
-      // that wrapped the Thai name down to "( SB2)" (see band-layout.service groupIntoRows).
-      id: makeId(), type: 'text', name: 'company_address', role: 'header',
-      x: 30, y: 64, w: 330, h: 40, zIndex: 2,
-      content: '{{company.address}}', fontSize: 9, fontWeight: 'normal',
-      color: '#666666', textAlign: 'left',
-      binding: 'company.address',
-      locked: false, visible: true,
-    } as TextElement,
-    // Document Title
-    {
-      id: makeId(), type: 'header', name: 'doc_title', role: 'header',
-      x: 350, y: 30, w: 215, h: 32, zIndex: 3,
-      content: 'INVOICE', fontSize: 24, fontWeight: 'bold',
-      color: '#4f6ef7', textAlign: 'right',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'text', name: 'doc_number', role: 'header',
-      x: 350, y: 62, w: 215, h: 18, zIndex: 4,
-      content: '#{{document.number}}', fontSize: 12, fontWeight: 'normal',
-      color: '#333333', textAlign: 'right',
-      binding: 'document.number',
-      locked: false, visible: true,
-    } as TextElement,
-    // Separator
-    {
-      id: makeId(), type: 'line', name: 'header_line', role: 'header',
-      x: 30, y: 105, w: 535, h: 4, zIndex: 5,
-      lineColor: '#e0e0e0', lineWidth: 1, lineStyle: 'solid',
-      locked: false, visible: true,
-    } as LineElement,
-    // Customer Info
-    {
-      id: makeId(), type: 'text', name: 'bill_to_label', role: 'content',
-      x: 30, y: 125, w: 100, h: 16, zIndex: 6,
-      content: 'Bill To:', fontSize: 10, fontWeight: 'bold',
-      color: '#666666', textAlign: 'left',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'text', name: 'customer_name', role: 'content',
-      x: 30, y: 142, w: 320, h: 18, zIndex: 7,
-      content: '{{customer.name}}', fontSize: 12, fontWeight: 'bold',
-      color: '#111111', textAlign: 'left',
-      binding: 'customer.name',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'text', name: 'customer_address', role: 'content',
-      x: 30, y: 162, w: 320, h: 40, zIndex: 8,
-      content: '{{customer.address}}', fontSize: 9, fontWeight: 'normal',
-      color: '#555555', textAlign: 'left',
-      binding: 'customer.address',
-      locked: false, visible: true,
-    } as TextElement,
-    // Date Info
-    {
-      id: makeId(), type: 'text', name: 'date_label', role: 'content',
-      x: 380, y: 125, w: 80, h: 16, zIndex: 8,
-      content: 'Date:', fontSize: 10, fontWeight: 'normal',
-      color: '#666666', textAlign: 'right',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'text', name: 'date_value', role: 'content',
-      x: 465, y: 125, w: 100, h: 16, zIndex: 9,
-      content: '{{document.date}}', fontSize: 10, fontWeight: 'normal',
-      color: '#333333', textAlign: 'right',
-      binding: 'document.date',
-      locked: false, visible: true,
-    } as TextElement,
-    // Items Table
-    {
-      id: makeId(), type: 'table', name: 'items_table', role: 'table',
-      x: 30, y: 190, w: 535, h: 250, zIndex: 10,
-      binding: 'items',
-      columns: [
-        { key: 'index', label: '#', width: 30, align: 'center', format: 'text', overflow: 'ellipsis', maxLines: 1, hidden: false, bold: false, uppercase: false, isIndex: true },
-        { key: 'description', label: 'Description', width: 220, align: 'left', format: 'text', overflow: 'wrap', maxLines: 4, hidden: false, bold: false, uppercase: false },
-        { key: 'quantity', label: 'Qty', width: 60, align: 'center', format: 'number', overflow: 'ellipsis', maxLines: 1, hidden: false, bold: false, uppercase: false },
-        { key: 'unit_price', label: 'Unit Price', width: 100, align: 'right', format: 'currency', overflow: 'ellipsis', maxLines: 1, hidden: false, bold: false, uppercase: false },
-        { key: 'amount', label: 'Amount', width: 100, align: 'right', format: 'currency', overflow: 'ellipsis', maxLines: 1, hidden: false, bold: true, uppercase: false },
-      ],
-      headerBgColor: '#4f6ef7',
-      headerTextColor: '#ffffff',
-      borderColor: '#e0e0e0',
-      alternateRowColor: '#f8f9fc',
-      locked: false, visible: true,
-    } as TableElement,
-    // Summary — label + value as SEPARATE elements. A single element that carries
-    // both a literal prefix and a binding loses the prefix on export (the binding
-    // replaces the whole content — bfo-export.service), so labels are their own
-    // bindingless elements, matching the Date / Bill To pattern.
-    {
-      id: makeId(), type: 'text', name: 'subtotal_label', role: 'summary',
-      x: 360, y: 460, w: 110, h: 18, zIndex: 11,
-      content: 'Subtotal', fontSize: 11, fontWeight: 'normal',
-      color: '#333333', textAlign: 'right',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'text', name: 'subtotal_value', role: 'summary',
-      x: 475, y: 460, w: 90, h: 18, zIndex: 11,
-      content: '{{totals.subtotal}}', fontSize: 11, fontWeight: 'normal',
-      color: '#333333', textAlign: 'right',
-      binding: 'totals.subtotal',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'text', name: 'tax_label', role: 'summary',
-      x: 360, y: 482, w: 110, h: 18, zIndex: 12,
-      content: 'VAT 7%', fontSize: 11, fontWeight: 'normal',
-      color: '#333333', textAlign: 'right',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'text', name: 'tax_value', role: 'summary',
-      x: 475, y: 482, w: 90, h: 18, zIndex: 12,
-      content: '{{totals.tax}}', fontSize: 11, fontWeight: 'normal',
-      color: '#333333', textAlign: 'right',
-      binding: 'totals.tax',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'line', name: 'total_line', role: 'summary',
-      x: 360, y: 504, w: 205, h: 4, zIndex: 13,
-      lineColor: '#4f6ef7', lineWidth: 2, lineStyle: 'solid',
-      locked: false, visible: true,
-    } as LineElement,
-    {
-      id: makeId(), type: 'text', name: 'total_label', role: 'summary',
-      x: 360, y: 512, w: 110, h: 24, zIndex: 14,
-      content: 'Total', fontSize: 14, fontWeight: 'bold',
-      color: '#4f6ef7', textAlign: 'right',
-      locked: false, visible: true,
-    } as TextElement,
-    {
-      id: makeId(), type: 'text', name: 'total_value', role: 'summary',
-      x: 475, y: 512, w: 90, h: 24, zIndex: 14,
-      content: '{{totals.total}}', fontSize: 14, fontWeight: 'bold',
-      color: '#4f6ef7', textAlign: 'right',
-      binding: 'totals.total',
-      locked: false, visible: true,
-    } as TextElement,
-    // Footer
-    {
-      id: makeId(), type: 'line', name: 'footer_line', role: 'footer',
-      x: 30, y: 780, w: 535, h: 4, zIndex: 15,
-      lineColor: '#e0e0e0', lineWidth: 0.5, lineStyle: 'solid',
-      locked: false, visible: true,
-    } as LineElement,
-    {
-      id: makeId(), type: 'text', name: 'footer_text', role: 'footer',
-      x: 30, y: 790, w: 535, h: 16, zIndex: 16,
-      content: 'Thank you for your business', fontSize: 9, fontWeight: 'normal',
-      color: '#999999', textAlign: 'center',
-      locked: false, visible: true,
-    } as TextElement,
+      id: makeId(), type: 'image', name: 'logo', role: 'header',
+      x: 24, y: 22, w: 58, h: 44, zIndex: 0,
+      binding: 'company.logo', objectFit: 'contain', locked: false, visible: true,
+    } as ImageElement,
+    T('company_name', 'header', 90, 22, 240, 15, '{{company.name}}', { size: 12, bold: true, color: '#111111', binding: 'company.name', header: true }),
+    T('company_addr', 'header', 90, 39, 240, 20, '{{company.address}}', { size: 7, color: '#555555', binding: 'company.address' }),
+    // Labeled lines keep {{...}} in content WITHOUT a binding prop — an element
+    // with BOTH exports as bare ${...} and the label is silently lost (#73;
+    // "binding drops the literal", see teibto-pld-render-verify).
+    T('company_tel', 'header', 90, 59, 240, 10, 'Tel. / โทร : {{company.phone}}', { size: 7, color: '#555555' }),
+    T('company_taxid', 'header', 90, 69, 240, 10, 'Tax ID / เลขประจำตัวผู้เสียภาษี : {{company.taxId}}', { size: 7, color: '#555555' }),
+    T('company_branch', 'header', 90, 79, 240, 10, 'Branch / สาขา : {{company.branchCode}}', { size: 7, color: '#555555' }),
+    T('title_th', 'header', 338, 20, 233, 16, '{{document.titleTH}}', { size: 12, bold: true, align: 'center', color: '#111111', binding: 'document.titleTH', header: true }),
+    T('title_en', 'header', 338, 37, 233, 11, '{{document.titleEN}}', { size: 9, align: 'center', color: '#333333', binding: 'document.titleEN' }),
+    // h=100 matches the RENDERED height (5 rows × ~18pt with the global th/td
+    // padding), not a design h — roleHeight derives header-height from this bbox,
+    // and an under-declared h makes the body start on top of the table (#73).
+    TBL('docinfo_table', 'header', 338, 54, 233, 100, 'document.docInfoRows',
+      [col('label', '', 143, 'left'), col('value', '', 90, 'left')],
+      { headBg: '#ffffff', headFg: '#ffffff', border: '#999999' }),
+
+    // ═══ CONTENT: customer / ship-to / disclaimer ═══
+    T('cust_label', 'content', 24, 146, 300, 11, 'Customer / ชื่อ - ที่อยู่ลูกค้า', { size: 8, bold: true, color: '#111111' }),
+    LN('cust_ul', 'content', 24, 158, 280),
+    T('cust_name', 'content', 24, 162, 300, 12, '{{customer.name}}', { size: 9, bold: true, color: '#111111', binding: 'customer.name' }),
+    T('cust_addr', 'content', 24, 175, 300, 34, '{{customer.address}}', { size: 8, color: '#444444', binding: 'customer.address' }),
+    T('cust_taxid', 'content', 24, 209, 300, 10, 'Tax ID / เลขประจำตัวผู้เสียภาษี : {{customer.taxId}}', { size: 8, color: '#444444' }),
+    T('cust_branch', 'content', 24, 219, 300, 10, 'Branch / สาขา : {{customer.branch}}', { size: 8, color: '#444444' }),
+    T('ship_label', 'content', 338, 146, 233, 11, 'Ship To / ที่อยู่จัดส่งสินค้า', { size: 8, bold: true, color: '#111111' }),
+    LN('ship_ul', 'content', 338, 158, 233),
+    T('ship_addr', 'content', 338, 162, 233, 48, '{{shipTo.address}}', { size: 8, color: '#444444', binding: 'shipTo.address' }),
+    T('disclaimer', 'content', 24, 236, 547, 30, DISCLAIMER, { size: 6.5, align: 'center', color: '#777777' }),
+
+    // ═══ TABLE: line items (7 columns, bilingual headers) ═══
+    TBL('items_table', 'table', 24, 272, 547, 300, 'items', [
+      col('no', 'No. / ลำดับ', 34, 'center'),
+      col('description', 'Description / รายละเอียด', 214, 'left', { wrap: true, boldFirst: true }),
+      col('quantity', 'Quantity / จำนวน', 55, 'center'),
+      col('unit', 'Unit / หน่วย', 45, 'center'),
+      col('unit_price', 'Unit Price / ราคาต่อหน่วย', 68, 'right'),
+      col('discount', 'Total Discount / ส่วนลด', 62, 'right'),
+      col('amount', 'Amount / จำนวนเงิน (บาท)', 69, 'right', { bold: true }),
+    ]),
+
+    // ═══ SUMMARY (last page): remark + totals grid + baht text + signatures ═══
+    T('remark_label', 'summary', 24, 592, 260, 12, 'Remark / หมายเหตุ :', { size: 8, color: '#444444' }),
+    TBL('summary_table', 'summary', 300, 588, 271, 152, 'totals.summaryRows',
+      [col('label', '', 181, 'right'), col('value', '', 90, 'right')],
+      { headBg: '#ffffff', headFg: '#ffffff', border: '#999999' }),
+    T('baht_text', 'summary', 300, 744, 271, 14, '( {{totals.bahtText}} )', { size: 9, align: 'right', color: '#111111' }),
+    LN('sign_sep', 'summary', 24, 772, 547, '#cccccc'),
+    T('sign_created', 'summary', 60, 800, 200, 14, 'Created by / ผู้ออกเอกสาร', { size: 8, align: 'center', color: '#555555' }),
+    T('sign_created_date', 'summary', 40, 786, 240, 12, 'ลงวันที่ {{document.date}}', { size: 8, align: 'center', color: '#555555' }),
+    T('sign_approved', 'summary', 330, 800, 200, 14, 'Approved by / ผู้อนุมัติ', { size: 8, align: 'center', color: '#555555' }),
+    T('sign_approved_date', 'summary', 310, 786, 240, 12, 'ลงวันที่', { size: 8, align: 'center', color: '#555555' }),
+
+    // ═══ FOOTER (repeats every page) ═══
+    LN('footer_line', 'footer', 24, 806, 547, '#cccccc'),
+    T('footer_disclaimer', 'footer', 24, 810, 547, 20, DISCLAIMER, { size: 6, align: 'center', color: '#999999' }),
+    T('footer_created', 'footer', 24, 830, 340, 10, 'ผู้ออกเอกสาร / Created By : {{issuer.createdBy}}', { size: 7, color: '#777777' }),
+    // No page element here — the export appends its own "Page X of Y" line to
+    // the footer macro; a second static one printed a bare "Page" (#73).
+    T('footer_printed', 'footer', 400, 830, 171, 10, 'Printed Date : {{document.printedDate}}', { size: 7, align: 'right', color: '#777777' }),
   ];
+
+  // The header and customer blocks are vertical stacks beside each other, which
+  // the migration cannot express: a tall element (logo h44, docinfo_table h82)
+  // bridges the stacked lines into ONE row of many side-by-side columns
+  // (groupIntoRows rowBottom is a running max), splitting each block across
+  // columns. So these two bands are hand-authored — one column per visual block,
+  // elements stacked top-to-bottom in elementIds (#73). Ids are nanoid-random,
+  // so columns resolve them by element name. Other roles derive correctly.
+  const eid = (name: string): string => {
+    const el = elements.find((e) => e.name === name);
+    if (!el) throw new Error(`invoice template: no element named "${name}"`);
+    return el.id;
+  };
+  const bands: Band[] = elementsToBands(elements).map((band) => {
+    if (band.role === 'header') {
+      return {
+        role: band.role,
+        rows: [{
+          id: 'header-r0',
+          columns: [
+            { id: 'header-r0-c0', widthPct: 12, elementIds: [eid('logo')] },
+            { id: 'header-r0-c1', widthPct: 45, elementIds: ['company_name', 'company_addr', 'company_tel', 'company_taxid', 'company_branch'].map(eid) },
+            { id: 'header-r0-c2', widthPct: 43, elementIds: ['title_th', 'title_en', 'docinfo_table'].map(eid) },
+          ],
+        }],
+      };
+    }
+    if (band.role === 'content') {
+      return {
+        role: band.role,
+        rows: [
+          {
+            id: 'content-r0',
+            columns: [
+              { id: 'content-r0-c0', widthPct: 57, elementIds: ['cust_label', 'cust_ul', 'cust_name', 'cust_addr', 'cust_taxid', 'cust_branch'].map(eid) },
+              { id: 'content-r0-c1', widthPct: 43, elementIds: ['ship_label', 'ship_ul', 'ship_addr'].map(eid) },
+            ],
+          },
+          {
+            id: 'content-r1',
+            columns: [{ id: 'content-r1-c0', widthPct: 100, elementIds: [eid('disclaimer')] }],
+          },
+        ],
+      };
+    }
+    return band;
+  });
 
   return {
     id: 'tpl-invoice',
@@ -202,9 +189,9 @@ function createInvoiceTemplate(): DocumentTemplate {
     page: createDefaultPage(),
     pagination: {
       mode: 'height',
-      rowsPerPage: 10,
-      baseRowHeight: 24,
-      lineHeightPx: 14,
+      rowsPerPage: 18,
+      baseRowHeight: 22,
+      lineHeightPx: 12,
       showContinuationHeader: true,
       orphanWidowMinRows: 2,
       summaryBreak: 'auto',
@@ -216,40 +203,44 @@ function createInvoiceTemplate(): DocumentTemplate {
       columnSpanField: '',
     },
     elements,
+    bands,
     jsonData: {
       company: {
-        name: 'ACME Corporation Co., Ltd.',
-        address: '123 Business Road, Suite 456, Bangkok 10110, Thailand',
+        name: 'Teibto Thai Localization', address: 'ห้องเลขที่ 11 แขวงหนองจอก เขตหนองแขม กรุงเทพมหานคร 10600',
+        phone: '0901234567', taxId: '0987654321000', branchCode: '00002',
       },
-      customer: {
-        name: 'John Doe',
-        address: '789 Customer Avenue, Chiang Mai 50000',
+      document: {
+        titleTH: 'ใบแจ้งหนี้/ใบกำกับภาษี (ต้นฉบับ)', titleEN: 'INVOICE/TAX INVOICE (Original)',
+        printedDate: '17/7/2026 10:59 pm',
+        docInfoRows: [
+          { label: 'Doc No. / เลขที่เอกสาร', value: 'INT-TTL-260700001' },
+          { label: 'Date / วันที่', value: '15/07/2026' },
+          { label: 'Due Date / วันครบกำหนดชำระ', value: '30/07/2026' },
+          { label: 'Ref.SO / เลขที่การขาย', value: '' },
+          { label: 'Ref.No / เลขที่อ้างอิง', value: '' },
+        ],
       },
-      document: { number: 'INV-2025-0001', date: '2025-01-15' },
+      customer: { name: 'บริษัททดสอบระบบซื้อ-ขาย 1', address: '1234 ถนนทดสอบ กรุงเทพมหานคร 10600', taxId: '12345678901234567890', branch: 'สำนักงานใหญ่' },
+      shipTo: { address: '150 อาคารอัมรินทร์พลาซ่า ชั้น 18 ถนนเพลินจิต กรุงเทพมหานคร 10600' },
+      issuer: { createdBy: 'Rakop Teibto' },
       items: [
-        { description: 'Web Application Development - Full-stack development including React frontend, Node.js backend, PostgreSQL database setup, and deployment configuration for production environment', quantity: 1, unit_price: 85000, amount: 85000 },
-        { description: 'UI/UX Design', quantity: 1, unit_price: 25000, amount: 25000 },
-        { description: 'Logo Design & Brand Identity Package - Including primary logo, secondary marks, color palette, typography guidelines, and brand usage manual', quantity: 1, unit_price: 35000, amount: 35000 },
-        { description: 'SSL Certificate (1 Year)', quantity: 1, unit_price: 2500, amount: 2500 },
-        { description: 'Cloud Server Hosting - AWS EC2 instance with auto-scaling, load balancer, CloudFront CDN, and 24/7 monitoring with automated failover support', quantity: 12, unit_price: 3500, amount: 42000 },
-        { description: 'Database Administration', quantity: 6, unit_price: 5000, amount: 30000 },
-        { description: 'API Integration with Third-Party Payment Gateway - Stripe and PayPal integration including webhook handlers, retry logic, reconciliation reporting, and PCI compliance review', quantity: 1, unit_price: 45000, amount: 45000 },
-        { description: 'Mobile Responsive Optimization', quantity: 1, unit_price: 15000, amount: 15000 },
-        { description: 'Search Engine Optimization (SEO) - Technical audit, on-page optimization, meta tag configuration, sitemap generation, structured data markup, and Google Search Console setup', quantity: 1, unit_price: 20000, amount: 20000 },
-        { description: 'Content Management System Training', quantity: 2, unit_price: 8000, amount: 16000 },
-        { description: 'Email Server Configuration', quantity: 1, unit_price: 12000, amount: 12000 },
-        { description: 'Automated Testing Suite - Unit tests, integration tests, and end-to-end testing with Cypress, including CI/CD pipeline configuration and test coverage reporting', quantity: 1, unit_price: 38000, amount: 38000 },
-        { description: 'Performance Optimization & Caching', quantity: 1, unit_price: 18000, amount: 18000 },
-        { description: 'Security Audit and Penetration Testing - Comprehensive vulnerability assessment covering OWASP Top 10, SQL injection testing, XSS prevention, CSRF protection, and detailed remediation report', quantity: 1, unit_price: 55000, amount: 55000 },
-        { description: 'Domain Registration (2 Years)', quantity: 1, unit_price: 1200, amount: 1200 },
-        { description: 'Analytics Dashboard Development - Custom reporting dashboard with real-time data visualization, export capabilities, user behavior tracking, and conversion funnel analysis', quantity: 1, unit_price: 42000, amount: 42000 },
-        { description: 'Technical Documentation', quantity: 1, unit_price: 15000, amount: 15000 },
-        { description: 'Post-Launch Support & Maintenance - 3-month support package including bug fixes, minor feature updates, server monitoring, backup management, and priority response SLA', quantity: 3, unit_price: 12000, amount: 36000 },
+        { no: 1, description: 'PD000002 Product B\ntest B', quantity: 234, unit: 'PCS', unit_price: '616.06', discount: '', amount: '144,158.04' },
+        { no: 2, description: 'PD000001 Product A\ntest a', quantity: 10, unit: 'Pack12', unit_price: '10.20', discount: '', amount: '1,224.00' },
+        { no: 3, description: 'NonDA-F', quantity: 10, unit: 'PCS', unit_price: '10.00', discount: '', amount: '100.00' },
       ],
       totals: {
-        subtotal: '531,700.00',
-        tax: '37,219.00',
-        total: '568,919.00',
+        summaryRows: [
+          { label: 'Total / มูลค่ารวม', value: '147,819.29' },
+          { label: 'Special Discount / ส่วนลดพิเศษ', value: '36,968.99' },
+          { label: 'Advance Receive / หักเงินรับล่วงหน้า', value: '0.00' },
+          { label: 'Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม', value: '110,850.30' },
+          { label: 'VAT / ภาษีมูลค่าเพิ่ม 7.00%', value: '7,759.52' },
+          { label: 'Grand Total / มูลค่าสุทธิ', value: '118,609.82' },
+          { label: 'Withholding Tax / ภาษีหัก ณ ที่จ่าย', value: '0.00' },
+          { label: 'Cash Coupon / คูปองส่วนลดเงินสด', value: '0.00' },
+          { label: 'Customer Paid / ยอดชำระ (บาท)', value: '118,609.82' },
+        ],
+        bahtText: 'หนึ่งแสนหนึ่งหมื่นแปดพันหกร้อยเก้าบาทแปดสิบสองสตางค์',
       },
     },
   };
@@ -262,7 +253,8 @@ export function getSampleTemplates(): DocumentTemplate[] {
   // renders identically through either path but now carries an explicit `bands`
   // the band editor loads directly (no regenerate-on-entry bridge). Element ids
   // are random (nanoid), so bands must be computed from these very elements — not
-  // hardcoded — to keep the id references valid.
+  // hardcoded — to keep the id references valid. A template that hand-authors its
+  // own bands (invoice, #73 — stacks the migration cannot derive) keeps them.
   return [
     createInvoiceTemplate(),
     createTaxInvoiceTemplate(),
@@ -270,7 +262,7 @@ export function getSampleTemplates(): DocumentTemplate[] {
     createQuotationTemplate(),
     createDeliveryNoteTemplate(),
     createReceiptTemplate(),
-  ].map((tpl) => ({ ...tpl, bands: elementsToBands(tpl.elements) }));
+  ].map((tpl) => ({ ...tpl, bands: tpl.bands ?? elementsToBands(tpl.elements) }));
 }
 
 /** Get a single sample template by ID */
