@@ -525,10 +525,17 @@ function cellOverflowStyle(col: TableColumn, borderColor: string): string {
 
 /**
  * FreeMarker expression for a table cell value, applying col.format (#77).
- * Numeric formats only fire when the runtime value is a number — the curated
- * invoice data pre-formats money as strings ("1,234.00"), and those must pass
- * through unchanged so existing templates render identically. Mirrors the
- * client-side formatCellValue semantics (utils/format.ts).
+ *
+ * N/render's JSON custom data source delivers EVERY value as a string
+ * (verified on SB2 — ?is_number is never true on that path), so numeric
+ * formats regex-test the string (?matches) and coerce with ?number: a raw
+ * numeric string ("1234.5") parses and gets the pattern; an already-formatted
+ * string ("1,234.50" — the curated invoice data) fails the regex and falls
+ * through unchanged, so existing templates render identically. ?is_number
+ * stays as the fast path for real numeric models (addRecord). NOT
+ * <#attempt>+?number: a failing #assign inside #attempt leaves the previous
+ * cell's value in the var and renders it (verified on SB2 — values leak
+ * across cells). Mirrors client-side formatCellValue (utils/format.ts).
  */
 function cellValueFm(listVar: string, col: TableColumn): string {
   const passthrough = `\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}`;
@@ -539,23 +546,30 @@ function cellValueFm(listVar: string, col: TableColumn): string {
   // Re-derive the passthrough from _cv so the fallback branch stays in sync
   const fallback = `\${_cv?string?xml?replace('\\n', '<br/>')}`;
 
+  // Numeric formats: number fast path, then string→number coercion (regex
+  // pre-validated so ?number can never throw), then raw passthrough
+  const numeric = (expr: (v: string) => string) =>
+    `${assign}<#if _cv?is_number>${expr('_cv')}` +
+    `<#elseif _cv?is_string && _cv?trim?matches(r"-?[0-9]+(\\.[0-9]+)?")>` +
+    `<#assign _cn = _cv?trim?number>${expr('_cn')}` +
+    `<#else>${fallback}</#if>`;
+
   switch (fmt) {
     case 'number':
-      return `${assign}<#if _cv?is_number>\${_cv?string("#,##0.##")}<#else>${fallback}</#if>`;
+      return numeric((v) => `\${${v}?string("#,##0.##")}`);
     case 'currency':
-      return `${assign}<#if _cv?is_number>\${_cv?string("#,##0.00")}<#else>${fallback}</#if>`;
+      return numeric((v) => `\${${v}?string("#,##0.00")}`);
     case 'percent':
       // |v| <= 1 (and non-zero) is a decimal fraction → ×100, else already a
       // percentage — same heuristic as formatPercent (utils/format.ts).
-      return (
-        `${assign}<#if _cv?is_number>` +
-        `<#if _cv gte -1 && _cv lte 1 && _cv != 0>\${(_cv * 100)?string("#,##0.0")}%` +
-        `<#else>\${_cv?string("#,##0.0")}%</#if>` +
-        `<#else>${fallback}</#if>`
+      return numeric(
+        (v) =>
+          `<#if ${v} gte -1 && ${v} lte 1 && ${v} != 0>\${(${v} * 100)?string("#,##0.0")}%` +
+          `<#else>\${${v}?string("#,##0.0")}%</#if>`,
       );
     case 'date':
-      // JSON data sources deliver dates as strings (→ fallback); only a real
-      // date model (addRecord path) can be reformatted.
+      // Strings can't be date-parsed reliably (→ fallback); only a real date
+      // model (addRecord path) can be reformatted.
       return `${assign}<#if _cv?is_date>\${_cv?string('dd/MM/yyyy')}<#else>${fallback}</#if>`;
     default:
       return passthrough;

@@ -507,26 +507,30 @@ describe('column format on export (#77)', () => {
     expect(xml).not.toContain('<#assign _cv');
   });
 
-  it('currency format: is_number guard + #,##0.00 pattern', () => {
+  it('currency format: number fast path + string coercion + #,##0.00 pattern', () => {
     const xml = exportBfoXml(createMockState([tableWithFormat('currency')]), { useFreeMarker: true });
 
     expect(xml).toContain("<#assign _cv = (lines.val)!''>");
     expect(xml).toContain('<#if _cv?is_number>${_cv?string("#,##0.00")}');
-    // Pre-formatted strings fall through untouched (backward compat)
+    // JSON data source values are strings → regex-gated coercion; formatted
+    // strings ("1,234.50") fail the regex and fall through untouched
+    expect(xml).toContain('<#elseif _cv?is_string && _cv?trim?matches(r"-?[0-9]+(\\.[0-9]+)?")>');
+    expect(xml).toContain('<#assign _cn = _cv?trim?number>${_cn?string("#,##0.00")}');
     expect(xml).toContain("<#else>${_cv?string?xml?replace('\\n', '<br/>')}</#if>");
   });
 
-  it('number format: is_number guard + #,##0.## pattern', () => {
+  it('number format: coercion + #,##0.## pattern', () => {
     const xml = exportBfoXml(createMockState([tableWithFormat('number')]), { useFreeMarker: true });
 
     expect(xml).toContain('<#if _cv?is_number>${_cv?string("#,##0.##")}');
+    expect(xml).toContain('<#assign _cn = _cv?trim?number>${_cn?string("#,##0.##")}');
   });
 
-  it('percent format: fraction ×100 heuristic + % suffix', () => {
+  it('percent format: fraction ×100 heuristic + % suffix, both value paths', () => {
     const xml = exportBfoXml(createMockState([tableWithFormat('percent')]), { useFreeMarker: true });
 
     expect(xml).toContain('<#if _cv gte -1 && _cv lte 1 && _cv != 0>${(_cv * 100)?string("#,##0.0")}%');
-    expect(xml).toContain('<#else>${_cv?string("#,##0.0")}%</#if>');
+    expect(xml).toContain('<#if _cn gte -1 && _cn lte 1 && _cn != 0>${(_cn * 100)?string("#,##0.0")}%');
   });
 
   it('date format: is_date guard, strings pass through', () => {
