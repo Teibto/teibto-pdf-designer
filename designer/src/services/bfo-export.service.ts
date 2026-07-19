@@ -523,6 +523,45 @@ function cellOverflowStyle(col: TableColumn, borderColor: string): string {
   return parts.join('; ') + ';';
 }
 
+/**
+ * FreeMarker expression for a table cell value, applying col.format (#77).
+ * Numeric formats only fire when the runtime value is a number — the curated
+ * invoice data pre-formats money as strings ("1,234.00"), and those must pass
+ * through unchanged so existing templates render identically. Mirrors the
+ * client-side formatCellValue semantics (utils/format.ts).
+ */
+function cellValueFm(listVar: string, col: TableColumn): string {
+  const passthrough = `\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}`;
+  const fmt = col.format ?? 'text';
+  if (fmt === 'text') return passthrough;
+
+  const assign = `<#assign _cv = (${listVar}.${col.key})!''>`;
+  // Re-derive the passthrough from _cv so the fallback branch stays in sync
+  const fallback = `\${_cv?string?xml?replace('\\n', '<br/>')}`;
+
+  switch (fmt) {
+    case 'number':
+      return `${assign}<#if _cv?is_number>\${_cv?string("#,##0.##")}<#else>${fallback}</#if>`;
+    case 'currency':
+      return `${assign}<#if _cv?is_number>\${_cv?string("#,##0.00")}<#else>${fallback}</#if>`;
+    case 'percent':
+      // |v| <= 1 (and non-zero) is a decimal fraction → ×100, else already a
+      // percentage — same heuristic as formatPercent (utils/format.ts).
+      return (
+        `${assign}<#if _cv?is_number>` +
+        `<#if _cv gte -1 && _cv lte 1 && _cv != 0>\${(_cv * 100)?string("#,##0.0")}%` +
+        `<#else>\${_cv?string("#,##0.0")}%</#if>` +
+        `<#else>${fallback}</#if>`
+      );
+    case 'date':
+      // JSON data sources deliver dates as strings (→ fallback); only a real
+      // date model (addRecord path) can be reformatted.
+      return `${assign}<#if _cv?is_date>\${_cv?string('dd/MM/yyyy')}<#else>${fallback}</#if>`;
+    default:
+      return passthrough;
+  }
+}
+
 function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolean, pagination?: PaginationConfig): string {
   if (el.columns.length === 0) return `<!-- table ${el.name}: no columns configured -->`;
 
@@ -567,7 +606,7 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       lines.push('<tr>');
       visibleCols.forEach((col) => {
         const style = cellOverflowStyle(col, el.borderColor);
-        lines.push(`  <td style="${style}">\${${listVar}.${col.key}!''}</td>`);
+        lines.push(`  <td style="${style}">${cellValueFm(listVar, col)}</td>`);
       });
       lines.push('</tr>');
       lines.push('</#if>');
@@ -591,7 +630,7 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
             `<#else><b>\${_bfl}</b></#if></p></td>`,
           );
         } else {
-          lines.push(`  <td style="${style}">${pOpen}\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}</p></td>`);
+          lines.push(`  <td style="${style}">${pOpen}${cellValueFm(listVar, col)}</p></td>`);
         }
       });
       lines.push('</tr>');

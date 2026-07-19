@@ -473,14 +473,76 @@ describe('column overflow in BFO table', () => {
     expect(xml).toContain('</#if>');
   });
 
-  it('columnSpanField empty: no FreeMarker conditional in output', () => {
+  it('columnSpanField empty: no span row in output', () => {
     const table = makeTable();
     const state = createMockState([table]);
     state.pagination = { ...createDefaultPagination(), columnSpanField: '' };
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).not.toContain('<#if');
+    // (#77 format guards emit their own <#if>, so assert on span markers only)
+    expect(xml).not.toContain('?has_content');
     expect(xml).not.toContain('colspan');
+  });
+});
+
+// ═══════════════════════════════════════
+// COLUMN FORMAT ON EXPORT (#77)
+// col.format ต้องถึง PDF จริง — ค่า number ดิบถูก format ใน FreeMarker,
+// ค่า string ที่ pre-format มาแล้ว (curated data) ผ่านตรง ๆ เหมือนเดิม
+// ═══════════════════════════════════════
+
+describe('column format on export (#77)', () => {
+  function tableWithFormat(format: 'text' | 'number' | 'currency' | 'date' | 'percent') {
+    return makeTable({
+      columns: [
+        { key: 'val', label: 'Val', width: 100, align: 'right', format, overflow: 'ellipsis', maxLines: 1, hidden: false, bold: false, uppercase: false },
+      ],
+    });
+  }
+
+  it('text format: plain passthrough, no format guard', () => {
+    const xml = exportBfoXml(createMockState([tableWithFormat('text')]), { useFreeMarker: true });
+
+    expect(xml).toContain("${(lines.val!'')?string?xml?replace('\\n', '<br/>')}");
+    expect(xml).not.toContain('<#assign _cv');
+  });
+
+  it('currency format: is_number guard + #,##0.00 pattern', () => {
+    const xml = exportBfoXml(createMockState([tableWithFormat('currency')]), { useFreeMarker: true });
+
+    expect(xml).toContain("<#assign _cv = (lines.val)!''>");
+    expect(xml).toContain('<#if _cv?is_number>${_cv?string("#,##0.00")}');
+    // Pre-formatted strings fall through untouched (backward compat)
+    expect(xml).toContain("<#else>${_cv?string?xml?replace('\\n', '<br/>')}</#if>");
+  });
+
+  it('number format: is_number guard + #,##0.## pattern', () => {
+    const xml = exportBfoXml(createMockState([tableWithFormat('number')]), { useFreeMarker: true });
+
+    expect(xml).toContain('<#if _cv?is_number>${_cv?string("#,##0.##")}');
+  });
+
+  it('percent format: fraction ×100 heuristic + % suffix', () => {
+    const xml = exportBfoXml(createMockState([tableWithFormat('percent')]), { useFreeMarker: true });
+
+    expect(xml).toContain('<#if _cv gte -1 && _cv lte 1 && _cv != 0>${(_cv * 100)?string("#,##0.0")}%');
+    expect(xml).toContain('<#else>${_cv?string("#,##0.0")}%</#if>');
+  });
+
+  it('date format: is_date guard, strings pass through', () => {
+    const xml = exportBfoXml(createMockState([tableWithFormat('date')]), { useFreeMarker: true });
+
+    expect(xml).toContain("<#if _cv?is_date>${_cv?string('dd/MM/yyyy')}");
+    expect(xml).toContain("<#else>${_cv?string?xml?replace('\\n', '<br/>')}</#if>");
+  });
+
+  it('format also applies in columnSpanField normal rows', () => {
+    const table = tableWithFormat('currency');
+    const state = createMockState([table]);
+    state.pagination = { ...createDefaultPagination(), columnSpanField: 'isSection' };
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain('<#if _cv?is_number>${_cv?string("#,##0.00")}');
   });
 });
 
@@ -517,7 +579,9 @@ describe('null-safe bindings (#4)', () => {
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
     expect(xml).toContain("${(lines.item!'')?string?xml?replace('\\n', '<br/>')}");
-    expect(xml).toContain("${(lines.qty!'')?string?xml?replace('\\n', '<br/>')}");
+    // qty is a 'number' column → format guard (#77), fallback stays null-safe
+    expect(xml).toContain("<#assign _cv = (lines.qty)!''>");
+    expect(xml).toContain("<#else>${_cv?string?xml?replace('\\n', '<br/>')}</#if>");
   });
 
   it('column-span row label gets null-safe default', () => {
