@@ -171,6 +171,27 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       [id]
     );
 
+    // ── Line-level custom fields (#89): custcol_* attached straight onto each
+    //    printed row, so a table column can bind key 'custcol_xxx' directly and
+    //    the column-key picker lists them. SELECT * (names are per-account);
+    //    map by linesequencenumber. Select-type custcols yield internal ids
+    //    (BUILTIN.DF can't wildcard) — text/number/date custcols print as-is.
+    var custcolBySeq = {};
+    try {
+      many(
+        "SELECT * FROM transactionline WHERE transaction = ? AND mainline = 'F' AND taxline = 'F'",
+        [id]
+      ).forEach(function (row) {
+        var cc = {};
+        Object.keys(row).forEach(function (k) {
+          if (k.indexOf('custcol') !== 0) return;
+          var v = row[k];
+          cc[k] = typeof v === 'string' ? wordbreak.breakThai(v) : v;
+        });
+        custcolBySeq[row.linesequencenumber] = cc;
+      });
+    } catch (e) { /* custcol enrichment is best-effort — never break the render */ }
+
     function qtyText(q) {
       return q == null || q === '' ? ''
         : Number(q).toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -196,7 +217,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       var memo = l.memo || '';
       // ZWSP word breaks (#87) on the long Thai fields only — BFO otherwise
       // breaks Thai anywhere. prevMemo stays raw (lookahead compares data).
-      items.push({
+      var row = {
         no: items.length + 1,
         code: isItem ? l.item_code : '',
         name: wordbreak.breakThai(name),
@@ -208,7 +229,12 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         amount: moneyOrBlank(l.amount),
         // backward-compat (#69 simple template); \n renders via the table cell <br/>
         description: wordbreak.breakThai(name + (memo ? '\n' + memo : ''))
-      });
+      };
+      // custcol_* ride on the row itself (#89) — curated keys can't collide
+      // with the custcol prefix
+      var cc = custcolBySeq[l.seq];
+      if (cc) Object.keys(cc).forEach(function (k) { row[k] = cc[k]; });
+      items.push(row);
       prevMemo = memo;
     });
 
