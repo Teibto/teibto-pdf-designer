@@ -13,6 +13,7 @@ import type { CanvasElement, TextElement, ImageElement, ShapeElement, LineElemen
 import { ELEMENT_ROLES } from '../../constants/roles';
 import { openImagePicker, clearElementImage } from '../../services/image.service';
 import { autoDetectColumnsFromStore } from '../../services/column-detect.service';
+import { listBindingPaths } from '../../services/binding.service';
 import { showToast } from '../shared/toast-notification';
 
 @customElement('pld-sidebar-right')
@@ -313,9 +314,14 @@ export class PldSidebarRight extends LitElement {
         <div class="row">
           <div class="field">
             <label>JSON Path</label>
-            <input type="text" placeholder="e.g. company.name"
+            <input type="text" placeholder="e.g. company.name" list="pld-binding-paths"
               .value=${el.binding ?? ''}
               @change=${(e: Event) => this._update('binding', (e.target as HTMLInputElement).value)} />
+            <datalist id="pld-binding-paths">
+              ${listBindingPaths(this.store.state.jsonData).map(
+                (p) => html`<option value=${p}></option>`,
+              )}
+            </datalist>
           </div>
         </div>
         ${el.binding ? html`<div class="binding-tag">📎 {{${el.binding}}}</div>` : nothing}

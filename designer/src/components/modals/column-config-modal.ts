@@ -12,6 +12,7 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
 import type { TableColumn, TableElement } from '../../models/element';
 import { COLUMN_PRESETS, type ColumnPreset } from '../../constants/column-presets';
+import { listRowKeys } from '../../services/binding.service';
 import { showToast } from '../shared/toast-notification';
 import '../shared/modal';
 
@@ -417,6 +418,12 @@ export class PldColumnConfigModal extends LitElement {
     }
   }
 
+  /** Field choices for a column key — keys of the rows in the bound array (#78) */
+  private _rowKeys(): string[] {
+    const el = this.store.state.elements.find((e) => e.id === this.elementId) as TableElement | undefined;
+    return listRowKeys(this.store.state.jsonData, el?.binding);
+  }
+
   render() {
     if (!this.open) return nothing;
 
@@ -503,8 +510,11 @@ export class PldColumnConfigModal extends LitElement {
         <div class="prop-row">
           <div class="prop-field">
             <label>Key (field name)</label>
-            <input type="text" .value=${col.key}
+            <input type="text" .value=${col.key} list="pld-row-keys"
               @change=${(e: Event) => this._updateCol(idx, 'key', (e.target as HTMLInputElement).value)} />
+            <datalist id="pld-row-keys">
+              ${this._rowKeys().map((k) => html`<option value=${k}></option>`)}
+            </datalist>
           </div>
           <div class="prop-field">
             <label>Label (header text)</label>

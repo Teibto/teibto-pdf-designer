@@ -8,6 +8,8 @@ import {
   resolveBinding,
   resolveTemplateString,
   extractBindingPaths,
+  listBindingPaths,
+  listRowKeys,
 } from '../../src/services/binding.service';
 
 describe('getNestedValue', () => {
@@ -121,5 +123,59 @@ describe('extractBindingPaths', () => {
 
   it('trims whitespace in paths', () => {
     expect(extractBindingPaths('{{ path.to.value }}')).toEqual(['path.to.value']);
+  });
+});
+
+describe('listBindingPaths (#78)', () => {
+  const data = {
+    company: { name: 'Acme', address: { line1: 'Bangkok' } },
+    document: { number: 'INV-001', total: 100 },
+    items: [{ code: 'A', amount: 10 }],
+    note: null,
+  };
+
+  it('emits leaf paths through nested objects', () => {
+    const paths = listBindingPaths(data);
+    expect(paths).toContain('company.name');
+    expect(paths).toContain('company.address.line1');
+    expect(paths).toContain('document.number');
+    expect(paths).toContain('document.total');
+  });
+
+  it('emits the array path itself (table binding), not array internals', () => {
+    const paths = listBindingPaths(data);
+    expect(paths).toContain('items');
+    expect(paths.some((p) => p.startsWith('items.'))).toBe(false);
+  });
+
+  it('null leaves are listed, null data returns []', () => {
+    expect(listBindingPaths(data)).toContain('note');
+    expect(listBindingPaths(null)).toEqual([]);
+  });
+});
+
+describe('listRowKeys (#78)', () => {
+  const data = {
+    items: [
+      { code: 'A', amount: 10 },
+      { code: 'B', memo: 'extra' },
+    ],
+    scalars: [1, 2, 3],
+    nested: { lines: [{ qty: 1 }] },
+  };
+
+  it('returns union of keys across rows, first-appearance order', () => {
+    expect(listRowKeys(data, 'items')).toEqual(['code', 'amount', 'memo']);
+  });
+
+  it('resolves nested array paths', () => {
+    expect(listRowKeys(data, 'nested.lines')).toEqual(['qty']);
+  });
+
+  it('returns [] for scalar arrays, missing paths, or no data', () => {
+    expect(listRowKeys(data, 'scalars')).toEqual([]);
+    expect(listRowKeys(data, 'missing')).toEqual([]);
+    expect(listRowKeys(data, undefined)).toEqual([]);
+    expect(listRowKeys(null, 'items')).toEqual([]);
   });
 });
