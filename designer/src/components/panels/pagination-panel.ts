@@ -277,6 +277,16 @@ export class PldPaginationPanel extends LitElement {
         Fill last page with empty rows
       </label>
 
+      <!-- Watermark (#100) -->
+      <div class="divider"></div>
+      <div class="field-row">
+        <div class="field">
+          <label title="ข้อความจาง ๆ กลางหน้า หลัง content ทุกหน้า เช่น สำเนา / ยกเลิก / DRAFT (แนวนอนสีเทา — BFO ไม่รองรับตัวเอียง/หมุน)">Watermark text</label>
+          <input type="text" placeholder="เช่น สำเนา / DRAFT" .value=${this.store.state.page.watermarkText ?? ''}
+            @change=${(e: Event) => this._updatePage('watermarkText', (e.target as HTMLInputElement).value)} />
+        </div>
+      </div>
+
       <!-- Copy set (#92): one PDF section per copy (ต้นฉบับ/สำเนา/...) -->
       <div class="divider"></div>
       <div class="section-title" style="margin-top:8px"><span>🗐</span> Document Copies</div>
@@ -418,6 +428,13 @@ export class PldPaginationPanel extends LitElement {
   private _update(key: keyof PaginationConfig, value: unknown) {
     this.store.dispatch((draft) => {
       (draft.pagination as any)[key] = value;
+      draft.template.isDirty = true;
+    });
+  }
+
+  private _updatePage(key: 'watermarkText', value: string) {
+    this.store.dispatch((draft) => {
+      draft.page[key] = value;
       draft.template.isDirty = true;
     });
   }

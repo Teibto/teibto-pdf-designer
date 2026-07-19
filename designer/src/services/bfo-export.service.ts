@@ -89,10 +89,11 @@ export function exportBfoXml(
   // not support CSS @page margin boxes or counter(page)/counter(pages).
   const headerElements = includePageHeaders ? elements.filter((e) => e.role === 'header') : [];
   const footerElements = includePageHeaders ? elements.filter((e) => e.role === 'footer') : [];
-  const useMacros = headerElements.length > 0 || footerElements.length > 0;
+  const watermarkText = (page.watermarkText ?? '').trim();
+  const useMacros = headerElements.length > 0 || footerElements.length > 0 || watermarkText !== '';
 
   const macrolist = useMacros
-    ? buildMacrolist(headerElements, footerElements, recordType, useFreeMarker, state.pagination, bands, byId)
+    ? buildMacrolist(headerElements, footerElements, recordType, useFreeMarker, state.pagination, bands, byId, watermarkText)
     : '';
 
   const fontLink = buildFontLink(thaiFontUrls);
@@ -103,7 +104,7 @@ export function exportBfoXml(
   // Build body HTML (header/footer live in macros when useMacros)
   const bodyHtml = buildBfoBody(elements, recordType, useFreeMarker, state.pagination, useMacros, bands, byId);
 
-  const bodyAttrs = buildBodyAttrs(page, headerElements, footerElements);
+  const bodyAttrs = buildBodyAttrs(page, headerElements, footerElements, watermarkText);
 
   // Wrap in full BFO template
   return `<?xml version="1.0"?>
@@ -280,9 +281,22 @@ function buildMacrolist(
   pagination?: PaginationConfig,
   bands?: Band[],
   byId?: Map<string, CanvasElement>,
+  watermarkText = '',
 ): string {
   const lines: string[] = [];
   lines.push('<macrolist>');
+
+  // Watermark (#100): background-macro paints behind the page content.
+  // Horizontal faint gray only — BFO errors on transform:rotate and opacity
+  // (probed on SB2 2026-07-20); absolute positioning IS honored.
+  if (watermarkText) {
+    lines.push('<macro id="nlwatermark">');
+    lines.push(
+      `<p style="position: absolute; top: 350pt; left: 0pt; width: 100%; ` +
+      `text-align: center; font-size: 64pt; color: #e8e8e8;">${escapeXml(watermarkText)}</p>`,
+    );
+    lines.push('</macro>');
+  }
 
   if (headerElements.length > 0) {
     lines.push('<macro id="nlheader">');
@@ -306,6 +320,7 @@ function buildBodyAttrs(
   page: AppState['page'],
   headerElements: CanvasElement[],
   footerElements: CanvasElement[],
+  watermarkText = '',
 ): string {
   const attrs: string[] = [];
 
@@ -320,6 +335,10 @@ function buildBodyAttrs(
     attrs.push('footer="nlfooter"');
     // extra room for the appended "Page X of Y" line
     attrs.push(`footer-height="${roleHeight(footerElements, 20) + 14}pt"`);
+  }
+
+  if (watermarkText) {
+    attrs.push('background-macro="nlwatermark"');
   }
 
   attrs.push('padding="0.5in"');

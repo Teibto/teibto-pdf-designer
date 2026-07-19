@@ -13,6 +13,9 @@ export interface PageConfig {
   height: number;  // Resolved height in points
   customWidth: number;
   customHeight: number;
+  /** Watermark text printed faint behind every page (#100). Empty/unset = none.
+   *  Rendered horizontal in light gray — BFO errors on transform/opacity. */
+  watermarkText?: string;
 }
 
 /** Standard page sizes in points (1 pt = 1/72 inch) */
