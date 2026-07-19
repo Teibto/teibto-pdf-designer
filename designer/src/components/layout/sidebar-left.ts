@@ -24,10 +24,10 @@ import '../panels/pagination-panel';
 type TabId = 'elements' | 'layers' | 'data' | 'settings';
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
-  { id: 'elements', icon: '◈', label: 'Elements' },
-  { id: 'layers',   icon: '≡', label: 'Layers' },
-  { id: 'data',     icon: '{}', label: 'Data' },
-  { id: 'settings', icon: '⚙', label: 'Settings' },
+  { id: 'elements', icon: '◈', label: 'องค์ประกอบ' },
+  { id: 'layers',   icon: '≡', label: 'เลเยอร์' },
+  { id: 'data',     icon: '{}', label: 'ข้อมูล' },
+  { id: 'settings', icon: '⚙', label: 'ตั้งค่า' },
 ];
 
 @customElement('pld-sidebar-left')

@@ -275,9 +275,9 @@ export class PldJsonEditor extends LitElement {
         <div class="actions">
           ${getNsContext()?.recordId
             ? html`<button class="small-btn" @click=${this._loadFromRecord}
-                title="Reload data from the NetSuite record">⟳ Record</button>`
+                title="Reload data from the NetSuite record">⟳ โหลดจาก Record</button>`
             : nothing}
-          <button class="small-btn" @click=${this._loadSample} title="Load sample data">★ Sample</button>
+          <button class="small-btn" @click=${this._loadSample} title="Load sample data">★ ตัวอย่าง</button>
           ${this.viewMode === 'json'
             ? html`<button class="small-btn" @click=${this._format} title="Format JSON">{ }</button>`
             : nothing}

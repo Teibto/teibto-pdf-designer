@@ -310,10 +310,10 @@ export class PldSidebarRight extends LitElement {
 
       <!-- Data Binding -->
       <div class="group">
-        <div class="group-title">Data Binding</div>
+        <div class="group-title">ผูกข้อมูล (Data Binding)</div>
         <div class="row">
           <div class="field">
-            <label>JSON Path</label>
+            <label>ฟิลด์ข้อมูล (JSON Path)</label>
             <input type="text" placeholder="e.g. company.name" list="pld-binding-paths"
               .value=${el.binding ?? ''}
               @change=${(e: Event) => this._update('binding', (e.target as HTMLInputElement).value)} />
@@ -327,7 +327,7 @@ export class PldSidebarRight extends LitElement {
         ${el.binding ? html`<div class="binding-tag">📎 {{${el.binding}}}</div>` : nothing}
         <div class="row">
           <div class="field">
-            <label title="Render this element only when the field at this path has a value (#90)">Show only when field has value</label>
+            <label title="แสดง element นี้เฉพาะเมื่อฟิลด์ที่ระบุมีค่า (#90)">แสดงเมื่อฟิลด์มีค่า</label>
             <input type="text" placeholder="e.g. totals.wht" list="pld-binding-paths"
               .value=${el.visibleIf ?? ''}
               @change=${(e: Event) => this._update('visibleIf', (e.target as HTMLInputElement).value)} />
@@ -337,7 +337,7 @@ export class PldSidebarRight extends LitElement {
 
       <!-- Role -->
       <div class="group">
-        <div class="group-title">Page Role</div>
+        <div class="group-title">ส่วนของหน้า (Band)</div>
         <div class="role-selector">
           ${(Object.entries(ELEMENT_ROLES) as [ElementRoleType, typeof ELEMENT_ROLES[ElementRoleType]][]).map(
             ([key, role]) => html`
@@ -358,10 +358,10 @@ export class PldSidebarRight extends LitElement {
 
       <!-- Actions -->
       <div class="group">
-        <div class="group-title">Actions</div>
+        <div class="group-title">การจัดการ</div>
         <div class="actions">
-          <button class="action-btn" @click=${this._duplicate}>⧉ Duplicate</button>
-          <button class="action-btn danger" @click=${this._delete}>✕ Delete</button>
+          <button class="action-btn" @click=${this._duplicate}>⧉ ทำสำเนา</button>
+          <button class="action-btn danger" @click=${this._delete}>✕ ลบ</button>
         </div>
       </div>
     `;
@@ -530,18 +530,18 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">Table</div>
         <div class="row">
           <div class="field">
-            <label>Columns: ${el.columns.length}</label>
+            <label>คอลัมน์: ${el.columns.length}</label>
             <button class="action-btn"
               @click=${() => this.dispatchEvent(new CustomEvent('pld-open-column-config', {
                 detail: { elementId: el.id }, bubbles: true, composed: true,
               }))}>
-              ⚙ Configure Columns
+              ⚙ ตั้งค่าคอลัมน์
             </button>
           </div>
         </div>
         <div class="row">
           <button class="action-btn" style="flex:1" @click=${() => this._autoDetectColumns(el.id)}>
-            🔍 Auto-detect from JSON
+            🔍 ตรวจจับคอลัมน์จากข้อมูล
           </button>
         </div>
         <div class="row">

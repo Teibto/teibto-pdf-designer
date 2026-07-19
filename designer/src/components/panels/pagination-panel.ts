@@ -228,7 +228,7 @@ export class PldPaginationPanel extends LitElement {
 
   render() {
     return html`
-      <div class="section-title"><span>📄</span> Pagination</div>
+      <div class="section-title"><span>📄</span> การแบ่งหน้า (Pagination)</div>
 
       <div class="mode-toggle">
         <button class="mode-btn ${this.config.mode === 'rows' ? 'active' : ''}"
@@ -267,21 +267,21 @@ export class PldPaginationPanel extends LitElement {
       <label class="check-item">
         <input type="checkbox" .checked=${this.config.showContinuationHeader}
           @change=${(e: Event) => this._update('showContinuationHeader', (e.target as HTMLInputElement).checked)} />
-        Show continuation header
+        แสดงหัวตารางซ้ำหน้าถัดไป
       </label>
 
       <label class="check-item"
         title="Pad the table with empty rows to a multiple of Rows per Page so the summary block stays anchored on the last page (#84)">
         <input type="checkbox" .checked=${this.config.fillLastPage ?? false}
           @change=${(e: Event) => this._update('fillLastPage', (e.target as HTMLInputElement).checked)} />
-        Fill last page with empty rows
+        เติมแถวว่างให้เต็มหน้า (summary อยู่ตำแหน่งคงที่)
       </label>
 
       <!-- Watermark (#100) -->
       <div class="divider"></div>
       <div class="field-row">
         <div class="field">
-          <label title="ข้อความจาง ๆ กลางหน้า หลัง content ทุกหน้า เช่น สำเนา / ยกเลิก / DRAFT (แนวนอนสีเทา — BFO ไม่รองรับตัวเอียง/หมุน)">Watermark text</label>
+          <label title="ข้อความจาง ๆ กลางหน้า หลัง content ทุกหน้า เช่น สำเนา / ยกเลิก / DRAFT (แนวนอนสีเทา — BFO ไม่รองรับตัวเอียง/หมุน)">ลายน้ำ (Watermark)</label>
           <input type="text" placeholder="เช่น สำเนา / DRAFT" .value=${this.store.state.page.watermarkText ?? ''}
             @change=${(e: Event) => this._updatePage('watermarkText', (e.target as HTMLInputElement).value)} />
         </div>
@@ -289,7 +289,7 @@ export class PldPaginationPanel extends LitElement {
 
       <!-- Copy set (#92): one PDF section per copy (ต้นฉบับ/สำเนา/...) -->
       <div class="divider"></div>
-      <div class="section-title" style="margin-top:8px"><span>🗐</span> Document Copies</div>
+      <div class="section-title" style="margin-top:8px"><span>🗐</span> ชุดสำเนาเอกสาร</div>
       ${(this.store.state.copies ?? []).map((c, i) => html`
         <div class="field-row">
           <div class="field">
@@ -304,7 +304,7 @@ export class PldPaginationPanel extends LitElement {
         </div>
       `)}
       <div class="field-row">
-        <button class="mode-btn" @click=${this._addCopy}>+ Add copy</button>
+        <button class="mode-btn" @click=${this._addCopy}>+ เพิ่มสำเนา</button>
         ${!(this.store.state.copies ?? []).length
           ? html`<span style="font-size:10px; color: var(--color-text-muted, #5c5e72); align-self:center;">
               default: invoice = ต้นฉบับ+สำเนา, อื่น ๆ = ชุดเดียว</span>`
