@@ -473,7 +473,15 @@ function imageToHtml(el: ImageElement, recordType: string, useFreeMarker: boolea
     ? convertBindingToFreeMarker(el.binding, recordType)
     : escapeXml(el.src || '');
 
-  return `<img src="${src}" style="width: ${el.w}pt; height: ${el.h}pt; object-fit: ${el.objectFit};" />`;
+  const img = `<img src="${src}" style="width: ${el.w}pt; height: ${el.h}pt; object-fit: ${el.objectFit};" />`;
+  if (el.binding && useFreeMarker) {
+    // An empty bound URL (e.g. company.logo not configured) renders BFO's
+    // broken-image box — skip the img entirely instead (#73). NOT ?has_content:
+    // N/render's JSON data source reports has_content=true for a 0-length
+    // string (verified on SB2), so test the length.
+    return `<#if (${recordType}.${el.binding}!'')?length != 0>${img}</#if>`;
+  }
+  return img;
 }
 
 /**
@@ -559,7 +567,10 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       lines.push('<tr>');
       visibleCols.forEach((col) => {
         const style = cellOverflowStyle(col, el.borderColor);
-        lines.push(`  <td style="${style}">\${${listVar}.${col.key}!''}</td>`);
+        // ?xml first (a raw & in data — "Discount & FOC" — breaks the BFO parse),
+        // then \n → <br/> so multi-line cells (item code + memo) print as lines.
+        // ?string keeps numeric values (legacy templates) safe for ?xml (#73).
+        lines.push(`  <td style="${style}">\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}</td>`);
       });
       lines.push('</tr>');
     }

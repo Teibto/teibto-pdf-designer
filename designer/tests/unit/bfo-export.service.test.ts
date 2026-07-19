@@ -512,12 +512,12 @@ describe('null-safe bindings (#4)', () => {
     expect(xml).toContain('<#list (record.order.lines)![] as lines>');
   });
 
-  it('table cells get null-safe default', () => {
+  it('table cells get null-safe default (xml-escaped, \\n → <br/>, #73)', () => {
     const state = createMockState([makeTable()]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain("${lines.item!''}");
-    expect(xml).toContain("${lines.qty!''}");
+    expect(xml).toContain("${(lines.item!'')?string?xml?replace('\\n', '<br/>')}");
+    expect(xml).toContain("${(lines.qty!'')?string?xml?replace('\\n', '<br/>')}");
   });
 
   it('column-span row label gets null-safe default', () => {

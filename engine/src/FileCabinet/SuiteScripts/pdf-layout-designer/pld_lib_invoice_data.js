@@ -19,9 +19,8 @@
  * (customer.name/address, document.number/date, totals.subtotal/tax/total,
  * items[].description/quantity/unit_price/amount) still resolve.
  *
- * Known refinements (verify phase): unit-of-measure display + multi-unit qty
- * conversion (e.g. "10 Pack12"), doc-title lookup from customrecord_thl_docprintouttype
- * (currently hard-set for the invoice type), and the exact PFTS line grouping.
+ * Known refinements (verify phase): doc-title lookup from
+ * customrecord_thl_docprintouttype (currently hard-set for the invoice type).
  *
  * @author Wichit Wongta
  * @since 2026-07-18
@@ -102,37 +101,73 @@ function (query, record, companyConfig, bahtText) {
     var customerPaid = grandTotal - wht;
     var vatRatePct = taxRate ? (num(taxRate) * 100).toFixed(2) : '7.00';
 
-    // ── Line items: all lines (exclude the 'Subtotal' totals-marker line). Amount is
-    //    the GROSS extended amount (qty × rate, tax-exclusive) as the reference shows;
-    //    discount/promotion lines carry only an amount (no qty/rate). quantity is
-    //    GL-signed (negative for charges) → negate for display. ──
+    // ── Line items — mirror the PFTS reference line set (#73, verified against the
+    //    reference PDF + probe of inv 1234683):
+    //    · real item lines AND the item-less promo/markup/trade-agreement lines
+    //    · hidden: 'Subtotal' marker; 'Discount' rows (a Discount row is the printed
+    //      Discount column of the line ABOVE it — the reference lookahead)
+    //    · zero/absent numbers print BLANK, not 0.00
+    //    · qty in display units (base qty ÷ uom conversion, e.g. 120 → "10" Pack12);
+    //      unit price stays the base-unit rate, amount = base qty × rate (as printed)
+    //    · item display = code + displayname ("PD000002 Product B")
+    //    · an item-less row prints the PREVIOUS printed row's memo as its name and
+    //      its own memo as the sub-line (matches the reference bold/sub pairing)
+    //    quantity is GL-signed (negative for charges) → negate for display. The
+    //    reference shows expense-item lines GL-negative (-50/-1,500) but that
+    //    contradicts the record UI and its own summary sum — kept record-signed.
     var lines = many(
-      "SELECT linesequencenumber AS seq, itemtype, BUILTIN.DF(item) AS item_code, memo, " +
-      "  -quantity AS quantity, rate AS unit_price, " +
-      "  CASE WHEN quantity IS NOT NULL AND rate IS NOT NULL THEN -quantity * rate " +
-      "       ELSE -netamount END AS amount " +
-      "FROM transactionline " +
-      "WHERE transaction = ? AND mainline = 'F' AND taxline = 'F' AND item IS NOT NULL " +
-      "  AND itemtype <> 'Subtotal' " +
-      "ORDER BY linesequencenumber",
+      "SELECT tl.linesequencenumber AS seq, tl.itemtype, " +
+      "  BUILTIN.DF(tl.item) AS item_code, itm.displayname AS item_name, tl.memo, " +
+      "  -tl.quantity AS quantity, tl.rate AS unit_price, " +
+      "  uom.unitname AS unit_name, uom.conversionrate AS conv, " +
+      "  CASE WHEN tl.quantity IS NOT NULL AND tl.rate IS NOT NULL THEN -tl.quantity * tl.rate " +
+      "       ELSE -tl.netamount END AS amount " +
+      "FROM transactionline tl " +
+      "  LEFT JOIN item itm ON itm.id = tl.item " +
+      "  LEFT JOIN unitstypeuom uom ON uom.internalid = tl.units " +
+      "WHERE tl.transaction = ? AND tl.mainline = 'F' AND tl.taxline = 'F' " +
+      "  AND (tl.itemtype IS NULL OR tl.itemtype <> 'Subtotal') " +
+      "ORDER BY tl.linesequencenumber",
       [id]
     );
 
-    var items = lines.map(function (l, i) {
-      var qty = l.quantity == null ? null : num(l.quantity);
-      return {
-        no: i + 1,
-        code: l.item_code || '',
-        name: l.item_code || '',
-        memo: l.memo || '',
-        quantity: qty,
-        unit: '',                                  // refinement: UOM display
-        unit_price: l.unit_price == null ? '' : money(l.unit_price),
+    function qtyText(q) {
+      return q == null || q === '' ? ''
+        : Number(q).toLocaleString('en-US', { maximumFractionDigits: 2 });
+    }
+    function moneyOrBlank(v) {
+      return num(v) === 0 ? '' : money(v);
+    }
+
+    var items = [];
+    var prevMemo = '';
+    lines.forEach(function (l) {
+      if (l.itemtype === 'Discount') {
+        if (items.length && num(l.amount) !== 0) {
+          items[items.length - 1].discount = money(Math.abs(num(l.amount)));
+        }
+        return;
+      }
+      var isItem = !!l.item_code;
+      var name = isItem
+        ? l.item_code + (l.item_name && l.item_name !== l.item_code ? ' ' + l.item_name : '')
+        : (prevMemo || l.memo || '');
+      var conv = num(l.conv) || 1;
+      var memo = l.memo || '';
+      items.push({
+        no: items.length + 1,
+        code: isItem ? l.item_code : '',
+        name: name,
+        memo: memo,
+        quantity: isItem && l.quantity != null ? qtyText(num(l.quantity) / conv) : '',
+        unit: isItem ? (l.unit_name || '') : '',
+        unit_price: isItem ? moneyOrBlank(l.unit_price) : '',
         discount: '',
-        amount: money(l.amount),
-        // backward-compat (#69 simple template)
-        description: (l.item_code || '') + (l.memo ? '\n' + l.memo : '')
-      };
+        amount: moneyOrBlank(l.amount),
+        // backward-compat (#69 simple template); \n renders via the table cell <br/>
+        description: name + (memo ? '\n' + memo : '')
+      });
+      prevMemo = memo;
     });
 
     var cfg = companyConfig.load();
