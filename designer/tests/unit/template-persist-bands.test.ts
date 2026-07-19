@@ -54,3 +54,28 @@ describe('band persistence via export/import JSON (#47 3b)', () => {
     expect(dst.state.bands).toEqual(elementsToBands(dst.state.elements));
   });
 });
+
+describe('copy-set persistence (#92)', () => {
+  it('round-trips copies through export/import', () => {
+    const src = new AppStore();
+    addElement(src, 'text', 0, 0);
+    src.dispatch((d) => { d.copies = [{ th: 'ต้นฉบับ', en: 'Original' }, { th: 'สำเนา', en: 'Copy' }, { th: 'สำเนากรมสรรพากร', en: 'Tax Copy' }]; });
+    const json = exportTemplateJson(src);
+    expect(JSON.parse(json).copies).toHaveLength(3);
+
+    const dst = new AppStore();
+    importTemplateJson(dst, json);
+    expect(dst.state.copies).toEqual(src.state.copies);
+  });
+
+  it('omits copies when unset; import without copies restores null', () => {
+    const store = new AppStore();
+    addElement(store, 'text', 0, 0);
+    const json = exportTemplateJson(store);
+    expect(JSON.parse(json).copies).toBeUndefined();
+
+    const dst = new AppStore();
+    importTemplateJson(dst, json);
+    expect(dst.state.copies).toBeNull();
+  });
+});

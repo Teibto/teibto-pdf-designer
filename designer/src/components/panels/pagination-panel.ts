@@ -5,7 +5,7 @@
  *
  * @author Wichit Wongta
  */
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
@@ -277,6 +277,30 @@ export class PldPaginationPanel extends LitElement {
         Fill last page with empty rows
       </label>
 
+      <!-- Copy set (#92): one PDF section per copy (ต้นฉบับ/สำเนา/...) -->
+      <div class="divider"></div>
+      <div class="section-title" style="margin-top:8px"><span>🗐</span> Document Copies</div>
+      ${(this.store.state.copies ?? []).map((c, i) => html`
+        <div class="field-row">
+          <div class="field">
+            <input type="text" placeholder="ป้ายไทย เช่น ต้นฉบับ" .value=${c.th}
+              @change=${(e: Event) => this._updateCopy(i, 'th', (e.target as HTMLInputElement).value)} />
+          </div>
+          <div class="field">
+            <input type="text" placeholder="EN e.g. Original" .value=${c.en}
+              @change=${(e: Event) => this._updateCopy(i, 'en', (e.target as HTMLInputElement).value)} />
+          </div>
+          <button class="mode-btn" title="Remove copy" @click=${() => this._removeCopy(i)}>✕</button>
+        </div>
+      `)}
+      <div class="field-row">
+        <button class="mode-btn" @click=${this._addCopy}>+ Add copy</button>
+        ${!(this.store.state.copies ?? []).length
+          ? html`<span style="font-size:10px; color: var(--color-text-muted, #5c5e72); align-self:center;">
+              default: invoice = ต้นฉบับ+สำเนา, อื่น ๆ = ชุดเดียว</span>`
+          : nothing}
+      </div>
+
       <!-- Advanced Layout Controls -->
       <div class="divider"></div>
       <div class="section-header" @click=${() => { this._layoutOpen = !this._layoutOpen; }}>
@@ -394,6 +418,38 @@ export class PldPaginationPanel extends LitElement {
   private _update(key: keyof PaginationConfig, value: unknown) {
     this.store.dispatch((draft) => {
       (draft.pagination as any)[key] = value;
+      draft.template.isDirty = true;
+    });
+  }
+
+  // ── Copy set (#92) ──
+
+  private _addCopy = () => {
+    this.store.dispatch((draft) => {
+      const cur = draft.copies ?? [];
+      // First add seeds the engine default so editing starts from reality
+      draft.copies = cur.length
+        ? [...cur, { th: 'สำเนา', en: 'Copy' }]
+        : [{ th: 'ต้นฉบับ', en: 'Original' }, { th: 'สำเนา', en: 'Copy' }];
+      draft.template.isDirty = true;
+    });
+    this.requestUpdate();
+  };
+
+  private _removeCopy(idx: number) {
+    this.store.dispatch((draft) => {
+      const cur = draft.copies ?? [];
+      const next = cur.filter((_, i) => i !== idx);
+      draft.copies = next.length ? next : null;
+      draft.template.isDirty = true;
+    });
+    this.requestUpdate();
+  }
+
+  private _updateCopy(idx: number, key: 'th' | 'en', value: string) {
+    this.store.dispatch((draft) => {
+      if (!draft.copies || !draft.copies[idx]) return;
+      draft.copies[idx][key] = value;
       draft.template.isDirty = true;
     });
   }

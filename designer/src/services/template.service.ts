@@ -66,6 +66,7 @@ export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
     // Persist band edits so they survive reload (#47 3b). Only when non-empty —
     // an element-only template regenerates its bands from elements on load.
     bands: state.bands.length ? structuredClone(state.bands) : undefined,
+    copies: state.copies && state.copies.length ? structuredClone(state.copies) : undefined,
     jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
   };
 
@@ -126,6 +127,7 @@ export async function loadTemplate(
     // Restore persisted bands; legacy element-only templates regenerate them from
     // elements so band mode always has a structure (#47 3b).
     d.bands = template.bands ?? elementsToBands(template.elements);
+    d.copies = template.copies ?? null;
     d.page = template.page;
     d.pagination = { ...createDefaultPagination(), ...template.pagination };
     d.jsonData = template.jsonData || null;
@@ -168,6 +170,7 @@ export function exportTemplateJson(store: AppStore): string {
     pagination: structuredClone(state.pagination),
     elements: structuredClone(state.elements),
     bands: state.bands.length ? structuredClone(state.bands) : undefined,
+    copies: state.copies && state.copies.length ? structuredClone(state.copies) : undefined,
     jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
   };
 
@@ -228,6 +231,7 @@ export function importTemplateJson(
   store.dispatch((d) => {
     d.elements = template.elements || [];
     d.bands = template.bands ?? elementsToBands(template.elements || []);
+    d.copies = template.copies ?? null;
     d.page = template.page || createDefaultPage();
     d.pagination = { ...createDefaultPagination(), ...(template.pagination || {}) };
     d.jsonData = template.jsonData || null;

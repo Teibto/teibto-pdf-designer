@@ -262,6 +262,7 @@ export async function renderLivePreview(opts: {
   xml: string;
   rectype: string;
   recid: string;
+  copies?: { th: string; en: string }[] | null;
 }): Promise<Blob> {
   const baseUrl = getRendererUrl();
   if (!baseUrl) throw new Error('Render Suitelet URL not configured');
@@ -275,7 +276,7 @@ export async function renderLivePreview(opts: {
     const response = await fetch(target.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ xml: opts.xml, rectype: opts.rectype, recid: opts.recid }),
+      body: JSON.stringify({ xml: opts.xml, rectype: opts.rectype, recid: opts.recid, copies: opts.copies }),
       signal: controller.signal,
     });
 

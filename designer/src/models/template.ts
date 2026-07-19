@@ -70,6 +70,12 @@ export interface PaginationConfig {
   fillLastPage?: boolean;
 }
 
+/** One printed copy of the document (#92) — e.g. ต้นฉบับ/Original */
+export interface TemplateCopy {
+  th: string;
+  en: string;
+}
+
 export interface DocumentTemplate {
   /** Unique template ID */
   id: string;
@@ -95,6 +101,9 @@ export interface DocumentTemplate {
    * hold the row/column widths — the layout source once the free canvas retires.
    */
   bands?: Band[];
+  /** Copy set (#92): one PDF section per entry (ต้นฉบับ/สำเนา/...). Unset =
+   *  engine default (invoice → ต้นฉบับ+สำเนา, others → single copy). */
+  copies?: TemplateCopy[];
   /** Bound JSON data (optional) */
   jsonData?: Record<string, unknown> | null;
 }

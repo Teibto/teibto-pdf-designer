@@ -35,6 +35,8 @@ export interface AppState {
 
   // ─── Data Source ───
   jsonData: Record<string, unknown> | null;
+  /** Copy set (#92) — null = engine default per rectype */
+  copies: import('../models/template').TemplateCopy[] | null;
   jsonKeys: string[];
 
   // ─── Pagination ───

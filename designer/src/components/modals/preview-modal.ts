@@ -342,7 +342,7 @@ export class PldPreviewModal extends LitElement {
         options.thaiFontUrls = { regular: ctx.fontRegularUrl, bold: ctx.fontBoldUrl || undefined };
       }
       const xml = exportBfoXml(this.store.state, options);
-      const blob = await renderLivePreview({ xml, rectype: ctx.recordType, recid: ctx.recordId });
+      const blob = await renderLivePreview({ xml, rectype: ctx.recordType, recid: ctx.recordId, copies: this.store.state.copies });
       this.serverPdfUrl = URL.createObjectURL(blob);
     } catch (err) {
       this.serverError = err instanceof Error ? err.message : String(err);
