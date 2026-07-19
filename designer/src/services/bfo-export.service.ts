@@ -412,6 +412,25 @@ function elementToHtml(
   inCell = false,
   stacked = false,
 ): string {
+  const html = elementInnerHtml(el, recordType, useFreeMarker, pagination, inCell, stacked);
+  // Conditional visibility (#90): render only when the guarded field has a
+  // value. ?string first (JSON data source values are strings, but addRecord
+  // models can be numbers) then ?length — NOT ?has_content, which reports
+  // true for empty strings on the JSON data source (see #73 quirk).
+  if (useFreeMarker && el.visibleIf) {
+    return `<#if ((${recordType}.${el.visibleIf})!'')?string?length != 0>${html}</#if>`;
+  }
+  return html;
+}
+
+function elementInnerHtml(
+  el: CanvasElement,
+  recordType: string,
+  useFreeMarker: boolean,
+  pagination?: PaginationConfig,
+  inCell = false,
+  stacked = false,
+): string {
   switch (el.type) {
     case 'text':
     case 'header':

@@ -552,6 +552,11 @@ export class PldPreviewModal extends LitElement {
   }
 
   private _renderElement(el: CanvasElement, jsonData: Record<string, unknown> | null, pageNum: number) {
+    // Conditional visibility (#90) — mirror the export-side FreeMarker guard
+    if (el.visibleIf && jsonData) {
+      const v = resolveBinding(jsonData, el.visibleIf);
+      if (v === undefined || v === null || String(v) === '') return nothing;
+    }
     switch (el.type) {
       case 'text':
       case 'header': {
