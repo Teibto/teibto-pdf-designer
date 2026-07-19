@@ -110,15 +110,18 @@ define([
     // built from SuiteQL — the SAME data source as live Preview (preview-live),
     // so Print == Preview. Without this, Print binds the raw record and the
     // designer templates (${record.customer.name} etc.) render empty (#67 GAP #1).
-    var curated = (recType === 'invoice')
-      ? invoiceData.buildInvoiceData(recId)
-      : null;
-
-    var out = renderXmlWithRecord(tplXml, recType, recId, curated);
+    // Invoices also print the statutory copy set (ต้นฉบับ + สำเนา, #15).
+    var out = (recType === 'invoice')
+      ? renderInvoiceCopiesPdf(tplXml, recType, recId)
+      : renderXmlWithRecord(tplXml, recType, recId, null);
 
     // ─── 3. Set filename from tranid ───
-    var tranId = '';
-    try { tranId = out.rec.getValue({ fieldId: 'tranid' }) || recId; } catch (e) { tranId = recId; }
+    var tranId = recId;
+    try {
+      tranId = out.tranId
+        || (out.rec && out.rec.getValue({ fieldId: 'tranid' }))
+        || recId;
+    } catch (e) { tranId = recId; }
     var fileName = recType + '_' + tranId + '.pdf';
     out.pdfFile.name = fileName;
 
@@ -135,23 +138,19 @@ define([
   }
 
   /**
-   * Bind BFO XML to a real record and render a PDF — the single binding path
-   * shared by Print (render) and live Preview (preview-live), so a preview of
-   * unsaved designer XML is byte-for-byte the same engine + data sources as
-   * Print (#12). Only the XML source differs: saved template vs POSTed draft.
-   * Returns { pdfFile, rec } (caller names the file).
+   * Build a configured N/render renderer for one template + one data binding —
+   * the single binding path shared by Print (render) and live Preview
+   * (preview-live), so a preview of unsaved designer XML is byte-for-byte the
+   * same engine + data sources as Print (#12). When the caller supplies a
+   * curated data object (designer schema built via SuiteQL — see
+   * pld_lib_invoice_data), bind THAT as `record` so ${record.customer.name},
+   * <#list record.items ...> resolve; otherwise bind the raw NetSuite record
+   * (`rec`) so hand-written master templates (${record.tranid}) render unchanged.
    */
-  function renderXmlWithRecord(tplXml, recType, recId, curatedData) {
-    var rec = record.load({ type: recType, id: recId });
-
+  function makeRenderer(tplXml, curatedData, rec) {
     var renderer = render.create();
     renderer.templateContent = tplXml;
 
-    // Main record accessible as "record" in FreeMarker. When the caller supplies a
-    // curated data object (designer schema built via SuiteQL — see pld_lib_invoice_data),
-    // bind THAT as `record` so ${record.customer.name}, ${record.totals.total},
-    // <#list record.items ...> resolve; otherwise bind the raw NetSuite record so the
-    // hand-written master templates (${record.tranid} etc.) render unchanged.
     if (curatedData) {
       renderer.addCustomDataSource({ format: render.DataSource.OBJECT, alias: 'record', data: curatedData });
     } else {
@@ -178,7 +177,52 @@ define([
       }
     });
 
-    return { pdfFile: renderer.renderAsPdf(), rec: rec };
+    return renderer;
+  }
+
+  /**
+   * Bind BFO XML to a real record and render a single-copy PDF (non-invoice
+   * record types). Returns { pdfFile, rec } (caller names the file).
+   */
+  function renderXmlWithRecord(tplXml, recType, recId, curatedData) {
+    var rec = record.load({ type: recType, id: recId });
+    return { pdfFile: makeRenderer(tplXml, curatedData, rec).renderAsPdf(), rec: rec };
+  }
+
+  // Thai statutory copy set (#15) — every invoice prints ต้นฉบับ then สำเนา,
+  // labels exactly as the PFTS reference COPY array.
+  var INVOICE_COPIES = [
+    { th: 'ต้นฉบับ', en: 'Original' },
+    { th: 'สำเนา', en: 'Copy' }
+  ];
+
+  /**
+   * Render the invoice once per copy label and combine into ONE PDF via BFO
+   * <pdfset> (#15). FreeMarker must resolve per copy (each copy binds its own
+   * curated data → different title), so each pass uses renderAsString, then the
+   * resolved <pdf> documents render together with render.xmlToPdf.
+   * Returns { pdfFile, tranId }.
+   */
+  function renderInvoiceCopiesPdf(tplXml, recType, recId) {
+    var tranId = '';
+    var docs = INVOICE_COPIES.map(function (c) {
+      var curated = invoiceData.buildInvoiceData(recId, c.th, c.en);
+      tranId = tranId || (curated.document && curated.document.number) || '';
+      var resolved = makeRenderer(tplXml, curated, null).renderAsString();
+      var start = resolved.indexOf('<pdf>');
+      var end = resolved.lastIndexOf('</pdf>');
+      if (start < 0 || end < 0) {
+        throw new Error('renderAsString produced no <pdf> document — cannot build the copy set');
+      }
+      return resolved.substring(start, end + '</pdf>'.length);
+    });
+
+    var pdfFile = render.xmlToPdf({
+      xmlString: '<?xml version="1.0"?>\n' +
+        '<!DOCTYPE pdfset PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n' +
+        '<pdfset>\n' + docs.join('\n') + '\n</pdfset>'
+    });
+    return { pdfFile: pdfFile, tranId: tranId };
   }
 
   // ═══════════════════════════════════════════════════
@@ -201,12 +245,11 @@ define([
     if (!body.recid)   throw new Error('preview-live requires recid — open the designer from a record');
 
     // Designer templates bind the curated schema (company/customer/document/totals/
-    // items). For invoices, build that from SuiteQL so preview shows REAL data.
-    var curated = (body.rectype === 'invoice')
-      ? invoiceData.buildInvoiceData(body.recid)
-      : null;
-
-    var out = renderXmlWithRecord(body.xml, body.rectype, body.recid, curated);
+    // items). For invoices, build that from SuiteQL so preview shows REAL data —
+    // including the statutory copy set (ต้นฉบับ + สำเนา), same as Print (#15).
+    var out = (body.rectype === 'invoice')
+      ? renderInvoiceCopiesPdf(body.xml, body.rectype, body.recid)
+      : renderXmlWithRecord(body.xml, body.rectype, body.recid, null);
     out.pdfFile.name = 'preview.pdf';
 
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
