@@ -877,3 +877,41 @@ describe('visibleIf conditional visibility (#90)', () => {
     expect(xml).toContain("<#if ((record.items)!'')?string?length != 0>");
   });
 });
+
+// ═══════════════════════════════════════
+// WATERMARK (#100)
+// ═══════════════════════════════════════
+
+describe('watermark (#100)', () => {
+  it('emits nlwatermark macro + background-macro body attr', () => {
+    const state = createMockState([makeText()]);
+    state.page.watermarkText = 'สำเนา';
+    const xml = exportBfoXml(state);
+
+    expect(xml).toContain('<macro id="nlwatermark">');
+    expect(xml).toContain('background-macro="nlwatermark"');
+    expect(xml).toContain('สำเนา');
+    // BFO errors on these (probed on SB2) — must never be emitted
+    expect(xml).not.toContain('transform');
+    expect(xml).not.toContain('opacity');
+  });
+
+  it('escapes the text and composes with header/footer macros', () => {
+    const state = createMockState([makeText({ type: 'header', role: 'header', content: 'H' })]);
+    state.page.watermarkText = 'A&B';
+    const xml = exportBfoXml(state);
+
+    expect(xml).toContain('A&amp;B');
+    expect(xml).toContain('<macro id="nlheader">');
+    expect(xml).toContain('<macro id="nlwatermark">');
+  });
+
+  it('unset/blank: no watermark markup (byte-safe)', () => {
+    const state = createMockState([makeText()]);
+    const xml = exportBfoXml(state);
+    expect(xml).not.toContain('nlwatermark');
+
+    state.page.watermarkText = '   ';
+    expect(exportBfoXml(state)).not.toContain('nlwatermark');
+  });
+});
