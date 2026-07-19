@@ -276,3 +276,17 @@ describe('calculateRowHeight', () => {
     expect(height).toBeGreaterThan(24); // desc wraps
   });
 });
+
+describe('ZWSP word-break marks (#87)', () => {
+  it('U+200B adds no width — engine-inserted Thai word breaks', () => {
+    const plain = 'สินค้าพิเศษ';
+    const withZwsp = 'สินค้า​พิเศษ';
+    expect(estimateTextWidth(withZwsp, 10)).toBe(estimateTextWidth(plain, 10));
+  });
+
+  it('line count estimate unaffected by ZWSP', () => {
+    const plain = 'สินค้าอุตสาหกรรมเกรดพิเศษสำหรับงานก่อสร้าง';
+    const withZwsp = plain.split('สำหรับ').join('​สำหรับ​');
+    expect(estimateLineCount(withZwsp, 100, 10)).toBe(estimateLineCount(plain, 100, 10));
+  });
+});
