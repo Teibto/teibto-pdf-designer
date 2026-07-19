@@ -52,6 +52,46 @@ function (query, record, format, companyConfig, bahtText) {
     try { return rec.getValue({ fieldId: fld }); } catch (e) { return ''; }
   }
 
+  // ── Generic body-field exposure (#79) ──
+  // Every custbody_* plus a shortlist of standard body fields, so a template
+  // can bind fields the curated schema doesn't cover (fields.custbody_xxx)
+  // without touching this library. Select fields expose their display text;
+  // dates become DD/MM/YYYY; numbers stay numeric so col.format (#77) applies.
+  var STANDARD_FIELDS = [
+    'memo', 'salesrep', 'terms', 'currency', 'location',
+    'department', 'class', 'subsidiary', 'shipmethod', 'trackingnumbers'
+  ];
+  function fieldDisplay(rec, fld) {
+    var v;
+    try { v = rec.getValue({ fieldId: fld }); } catch (e) { return undefined; }
+    if (v === undefined || v === null) return '';
+    var t = '';
+    try {
+      t = rec.getText({ fieldId: fld });
+    } catch (e) { /* fields without text representation */ }
+    if (Array.isArray(t)) t = t.join(', ');
+    if (Array.isArray(v)) v = v.join(', ');
+    if (t !== '' && t != null && String(t) !== String(v)) return t;
+    if (v instanceof Date) {
+      return format.format({ value: v, type: format.Type.DATE });
+    }
+    return v;
+  }
+  function buildBodyFields(rec) {
+    var out = {};
+    var all = rec.getFields ? rec.getFields() : [];
+    all.forEach(function (fld) {
+      if (String(fld).indexOf('custbody') !== 0) return;
+      var v = fieldDisplay(rec, fld);
+      if (v !== undefined) out[fld] = v;
+    });
+    STANDARD_FIELDS.forEach(function (fld) {
+      var v = fieldDisplay(rec, fld);
+      if (v !== undefined) out[fld] = v;
+    });
+    return out;
+  }
+
   /**
    * @param {string|number} recId  invoice internal id
    * @param {string} [copyLabelTH] e.g. 'ต้นฉบับ' / 'สำเนา' (multi-copy); default original
@@ -241,7 +281,9 @@ function (query, record, format, companyConfig, bahtText) {
         total: money(grandTotal)
       },
       issuer: { createdBy: cleanName(hdr.created_by) },
-      items: items
+      items: items,
+      // Generic body fields (#79): fields.custbody_xxx + standard shortlist
+      fields: buildBodyFields(rec)
     };
   }
 
