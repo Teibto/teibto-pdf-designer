@@ -92,14 +92,36 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     return out;
   }
 
+  // ── Multi-rectype support (#91) ──
+  // Curated schema is shared; only the record type, document titles, and the
+  // GL sign of line amounts differ. Sales-side transactions store item lines
+  // GL-negative (negate for display, #67); purchase-side lines are positive.
+  var DOC_TITLES = {
+    invoice:       { th: 'ใบแจ้งหนี้/ใบกำกับภาษี', en: 'INVOICE/TAX INVOICE' },
+    creditmemo:    { th: 'ใบลดหนี้', en: 'CREDIT NOTE' },
+    estimate:      { th: 'ใบเสนอราคา', en: 'QUOTATION' },
+    salesorder:    { th: 'ใบสั่งขาย', en: 'SALES ORDER' },
+    purchaseorder: { th: 'ใบสั่งซื้อ', en: 'PURCHASE ORDER' }
+  };
+  var PURCHASE_SIDE = { purchaseorder: true, vendorbill: true };
+
+  /** Record types this builder supports (exported for the suitelet gates) */
+  function isSupportedType(recType) {
+    return Object.prototype.hasOwnProperty.call(DOC_TITLES, String(recType));
+  }
+
   /**
-   * @param {string|number} recId  invoice internal id
+   * @param {string} recType  NetSuite record type (invoice/estimate/salesorder/purchaseorder/creditmemo)
+   * @param {string|number} recId  transaction internal id
    * @param {string} [copyLabelTH] e.g. 'ต้นฉบับ' / 'สำเนา' (multi-copy); default original
    * @param {string} [copyLabelEN] e.g. 'Original' / 'Copy'
    */
-  function buildInvoiceData(recId, copyLabelTH, copyLabelEN) {
+  function buildTransactionData(recType, recId, copyLabelTH, copyLabelEN) {
     var id = Number(recId);
-    var rec = record.load({ type: record.Type.INVOICE, id: id });
+    var titles = DOC_TITLES[recType] || DOC_TITLES.invoice;
+    // '-' negates GL-signed sales lines for display; '' keeps purchase lines as-is
+    var sign = PURCHASE_SIDE[recType] ? '' : '-';
+    var rec = record.load({ type: recType, id: id });
 
     var hdr = first(
       "SELECT tranid, TO_CHAR(trandate,'DD/MM/YYYY') AS trandate, " +
@@ -158,10 +180,10 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var lines = many(
       "SELECT tl.linesequencenumber AS seq, tl.itemtype, " +
       "  BUILTIN.DF(tl.item) AS item_code, itm.displayname AS item_name, tl.memo, " +
-      "  -tl.quantity AS quantity, tl.rate AS unit_price, " +
+      "  " + sign + "tl.quantity AS quantity, tl.rate AS unit_price, " +
       "  uom.unitname AS unit_name, uom.conversionrate AS conv, " +
-      "  CASE WHEN tl.quantity IS NOT NULL AND tl.rate IS NOT NULL THEN -tl.quantity * tl.rate " +
-      "       ELSE -tl.netamount END AS amount " +
+      "  CASE WHEN tl.quantity IS NOT NULL AND tl.rate IS NOT NULL THEN " + sign + "tl.quantity * tl.rate " +
+      "       ELSE " + sign + "tl.netamount END AS amount " +
       "FROM transactionline tl " +
       "  LEFT JOIN item itm ON itm.id = tl.item " +
       "  LEFT JOIN unitstypeuom uom ON uom.internalid = tl.units " +
@@ -274,9 +296,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         dueDate: hdr.duedate || '',
         refSo: '',
         refNo: hdr.otherrefnum || '',
-        // Invoice type titles (this builder targets the invoice/tax-invoice form).
-        titleTH: 'ใบแจ้งหนี้/ใบกำกับภาษี' + (copyLabelTH ? ' (' + copyLabelTH + ')' : ' (ต้นฉบับ)'),
-        titleEN: 'INVOICE/TAX INVOICE' + (copyLabelEN ? ' (' + copyLabelEN + ')' : ' (Original)'),
+        // Titles per record type (#91), copy label appended (multi-copy #15)
+        titleTH: titles.th + (copyLabelTH ? ' (' + copyLabelTH + ')' : ' (ต้นฉบับ)'),
+        titleEN: titles.en + (copyLabelEN ? ' (' + copyLabelEN + ')' : ' (Original)'),
         copyTH: copyLabelTH || 'ต้นฉบับ',
         copyEN: copyLabelEN || 'Original',
         printedDate: format.format({ value: new Date(), type: format.Type.DATETIME }),
@@ -315,5 +337,14 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     };
   }
 
-  return { buildInvoiceData: buildInvoiceData };
+  /** Back-compat wrapper — the original invoice-only entry point */
+  function buildInvoiceData(recId, copyLabelTH, copyLabelEN) {
+    return buildTransactionData('invoice', recId, copyLabelTH, copyLabelEN);
+  }
+
+  return {
+    buildInvoiceData: buildInvoiceData,
+    buildTransactionData: buildTransactionData,
+    isSupportedType: isSupportedType
+  };
 });

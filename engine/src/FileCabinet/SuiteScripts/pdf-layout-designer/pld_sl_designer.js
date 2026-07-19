@@ -195,8 +195,8 @@ define([
       // Invoices load the curated schema (SuiteQL) so the mapping UI's keys match
       // exactly what the render binds (design = data = print). Other record types
       // keep the raw extract for now.
-      const data = (recType === 'invoice')
-        ? invoiceData.buildInvoiceData(recId)
+      const data = invoiceData.isSupportedType(recType)
+        ? invoiceData.buildTransactionData(recType, recId)
         : extractRecordData(record.load({ type: recType, id: recId }), recType);
 
       context.response.setHeader({ name: 'Content-Type', value: 'application/json' });

@@ -111,9 +111,16 @@ define([
     // so Print == Preview. Without this, Print binds the raw record and the
     // designer templates (${record.customer.name} etc.) render empty (#67 GAP #1).
     // Invoices also print the statutory copy set (ต้นฉบับ + สำเนา, #15).
-    var out = (recType === 'invoice')
-      ? renderInvoiceCopiesPdf(tplXml, recType, recId)
-      : renderXmlWithRecord(tplXml, recType, recId, null);
+    // #91: every supported type binds curated data; invoice keeps the copy set
+    var out;
+    if (recType === 'invoice') {
+      out = renderInvoiceCopiesPdf(tplXml, recType, recId);
+    } else if (invoiceData.isSupportedType(recType)) {
+      out = renderXmlWithRecord(tplXml, recType, recId,
+        invoiceData.buildTransactionData(recType, recId));
+    } else {
+      out = renderXmlWithRecord(tplXml, recType, recId, null);
+    }
 
     // ─── 3. Set filename from tranid ───
     var tranId = recId;
@@ -255,6 +262,9 @@ define([
       out = { pdfFile: makeRenderer(body.xml, body.data, null).renderAsPdf() };
     } else if (body.rectype === 'invoice') {
       out = renderInvoiceCopiesPdf(body.xml, body.rectype, body.recid);
+    } else if (invoiceData.isSupportedType(body.rectype)) {
+      out = renderXmlWithRecord(body.xml, body.rectype, body.recid,
+        invoiceData.buildTransactionData(body.rectype, body.recid));
     } else {
       out = renderXmlWithRecord(body.xml, body.rectype, body.recid, null);
     }
