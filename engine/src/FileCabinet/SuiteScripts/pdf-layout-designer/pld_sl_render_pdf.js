@@ -233,6 +233,9 @@ define([
    * Preview the CURRENT (unsaved) designer XML with the same record + data
    * sources Print uses — guarantees "preview == print". POST body:
    *   { xml: "<full BFO XML>", rectype: "invoice", recid: "123" }
+   * Optional `data`: a curated data object bound as `record` INSTEAD of
+   * buildInvoiceData — synthetic-data preview for QA/stress tests (#75); the
+   * render pipeline (FreeMarker + BFO + copy set) stays the real one.
    */
   function previewLivePdf(context) {
     if (context.request.method !== 'POST') {
@@ -242,14 +245,19 @@ define([
     var body = JSON.parse(context.request.body || '{}');
     if (!body.xml)     throw new Error('preview-live requires xml (export BFO from the designer)');
     if (!body.rectype) throw new Error('preview-live requires rectype');
-    if (!body.recid)   throw new Error('preview-live requires recid — open the designer from a record');
+    if (!body.recid && !body.data) throw new Error('preview-live requires recid — open the designer from a record');
 
     // Designer templates bind the curated schema (company/customer/document/totals/
     // items). For invoices, build that from SuiteQL so preview shows REAL data —
     // including the statutory copy set (ต้นฉบับ + สำเนา), same as Print (#15).
-    var out = (body.rectype === 'invoice')
-      ? renderInvoiceCopiesPdf(body.xml, body.rectype, body.recid)
-      : renderXmlWithRecord(body.xml, body.rectype, body.recid, null);
+    var out;
+    if (body.data) {
+      out = { pdfFile: makeRenderer(body.xml, body.data, null).renderAsPdf() };
+    } else if (body.rectype === 'invoice') {
+      out = renderInvoiceCopiesPdf(body.xml, body.rectype, body.recid);
+    } else {
+      out = renderXmlWithRecord(body.xml, body.rectype, body.recid, null);
+    }
     out.pdfFile.name = 'preview.pdf';
 
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });

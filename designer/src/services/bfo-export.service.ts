@@ -578,16 +578,20 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
         // ?xml first (a raw & in data — "Discount & FOC" — breaks the BFO parse),
         // then \n → <br/> so multi-line cells (item code + memo) print as lines.
         // ?string keeps numeric values (legacy templates) safe for ?xml (#73).
+        // Cell text sits in a block <p> with its own alignment — BFO justifies
+        // bare text that wraps inside a td (letter/word-spacing stretch on long
+        // Thai descriptions), same quirk as the th headers (#75).
+        const pOpen = `<p style="margin: 0; text-align: ${col.align};">`;
         if (col.boldFirstLine) {
           // First line bold (item name), remaining lines (memo) regular — the
           // reference scans by bold item names (#73).
           lines.push(
-            `  <td style="${style}"><#assign _bfl = (${listVar}.${col.key}!'')?string?xml>` +
+            `  <td style="${style}">${pOpen}<#assign _bfl = (${listVar}.${col.key}!'')?string?xml>` +
             `<#if _bfl?index_of('\\n') != -1><b>\${_bfl?keep_before('\\n')}</b><br/>\${_bfl?keep_after('\\n')?replace('\\n', '<br/>')}` +
-            `<#else><b>\${_bfl}</b></#if></td>`,
+            `<#else><b>\${_bfl}</b></#if></p></td>`,
           );
         } else {
-          lines.push(`  <td style="${style}">\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}</td>`);
+          lines.push(`  <td style="${style}">${pOpen}\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}</p></td>`);
         }
       });
       lines.push('</tr>');
