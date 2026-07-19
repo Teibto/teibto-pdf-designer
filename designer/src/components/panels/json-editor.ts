@@ -11,6 +11,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { loadJsonData } from '../../state/actions';
+import { getNsContext, autoLoadRecordIfAvailable } from '../../services/netsuite-adapter.service';
 import { showToast } from '../shared/toast-notification';
 import './data-form';
 
@@ -272,6 +273,10 @@ export class PldJsonEditor extends LitElement {
             : nothing}
         </div>
         <div class="actions">
+          ${getNsContext()?.recordId
+            ? html`<button class="small-btn" @click=${this._loadFromRecord}
+                title="Reload data from the NetSuite record">⟳ Record</button>`
+            : nothing}
           <button class="small-btn" @click=${this._loadSample} title="Load sample data">★ Sample</button>
           ${this.viewMode === 'json'
             ? html`<button class="small-btn" @click=${this._format} title="Format JSON">{ }</button>`
@@ -384,6 +389,23 @@ export class PldJsonEditor extends LitElement {
       this.keyCount = this.store.state.jsonKeys.length;
     } catch {
       this.isValid = false;
+    }
+  }
+
+  /** Re-fetch curated record data (#82) — Sample/template loads overwrite
+   *  jsonData, hiding the record's fields.* from the field picker (#78). */
+  private async _loadFromRecord() {
+    try {
+      const data = await autoLoadRecordIfAvailable();
+      if (!data) return;
+      this.jsonText = JSON.stringify(data, null, 2);
+      this.formData = data;
+      loadJsonData(this.store, data);
+      this.isValid = true;
+      this.keyCount = this.store.state.jsonKeys.length;
+      showToast('Record data loaded!', 'success');
+    } catch (err) {
+      showToast(`Load record failed: ${(err as Error).message}`, 'error');
     }
   }
 
