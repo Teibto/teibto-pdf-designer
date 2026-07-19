@@ -325,6 +325,14 @@ export class PldSidebarRight extends LitElement {
           </div>
         </div>
         ${el.binding ? html`<div class="binding-tag">📎 {{${el.binding}}}</div>` : nothing}
+        <div class="row">
+          <div class="field">
+            <label title="Render this element only when the field at this path has a value (#90)">Show only when field has value</label>
+            <input type="text" placeholder="e.g. totals.wht" list="pld-binding-paths"
+              .value=${el.visibleIf ?? ''}
+              @change=${(e: Event) => this._update('visibleIf', (e.target as HTMLInputElement).value)} />
+          </div>
+        </div>
       </div>
 
       <!-- Role -->

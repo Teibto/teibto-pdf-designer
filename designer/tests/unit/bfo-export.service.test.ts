@@ -848,3 +848,32 @@ describe('exportBfoXml useBands (#47 cutover 3a)', () => {
     expect(xml).not.toContain('<div id="header"');
   });
 });
+
+// ═══════════════════════════════════════
+// CONDITIONAL VISIBILITY (#90)
+// ═══════════════════════════════════════
+
+describe('visibleIf conditional visibility (#90)', () => {
+  it('wraps the element in a non-empty guard (?length, not ?has_content)', () => {
+    const state = createMockState([makeText({ content: 'WHT box', visibleIf: 'totals.wht' })]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain("<#if ((record.totals.wht)!'')?string?length != 0>");
+    expect(xml).toContain('WHT box');
+    expect(xml).not.toContain('?has_content');
+  });
+
+  it('no visibleIf: no guard emitted (byte-safe default)', () => {
+    const state = createMockState([makeText()]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).not.toContain('?length != 0>');
+  });
+
+  it('guards tables too', () => {
+    const state = createMockState([makeTable({ visibleIf: 'items' })]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    expect(xml).toContain("<#if ((record.items)!'')?string?length != 0>");
+  });
+});

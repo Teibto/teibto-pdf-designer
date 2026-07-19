@@ -52,6 +52,11 @@ export interface BaseElement {
   // Data binding
   binding?: string;
 
+  /** Conditional visibility (#90): render only when the value at this JSON
+   *  path is non-empty. Exported as a FreeMarker guard; empty/unset = always
+   *  visible. */
+  visibleIf?: string;
+
   // Z-index order
   zIndex: number;
 
