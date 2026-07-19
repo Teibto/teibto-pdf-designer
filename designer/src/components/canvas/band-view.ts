@@ -23,6 +23,7 @@ import { storeContext, AppStore } from '../../state/store';
 import {
   regenerateBands,
   setColumnWidth,
+  dragColumnBoundary,
   addBandRow,
   removeBandRow,
   moveBandRow,
@@ -71,6 +72,17 @@ export class PldBandView extends LitElement {
     .rowwrap { display: flex; align-items: stretch; gap: 6px; }
     .row { display: flex; gap: 8px; flex: 1; }
     .rowtools { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
+    .col-resizer {
+      flex: 0 0 6px;
+      cursor: col-resize;
+      border-radius: 3px;
+      align-self: stretch;
+      transition: background 0.1s;
+    }
+    .col-resizer:hover, .col-resizer:active {
+      background: var(--color-accent, #4f6ef7);
+    }
+
     .cell { border: 1px dashed var(--color-border, #2a2c3a); border-radius: 6px; padding: 8px; min-height: 34px; display: flex; flex-direction: column; gap: 4px; }
     .cell.drop { border-color: var(--band-color, #4f6ef7); border-style: solid; background: color-mix(in srgb, var(--band-color) 10%, transparent); }
     .cell-w { display: flex; align-items: center; gap: 4px; font-size: 10px; font-family: var(--font-mono, monospace); color: var(--color-text-dim, #8a8ca0); }
@@ -177,6 +189,12 @@ export class PldBandView extends LitElement {
                               })
                             : nothing}
                         </div>
+                        ${ci < row.columns.length - 1 ? html`
+                          <div class="col-resizer" title="ลากปรับความกว้าง"
+                            @pointerdown=${(e: PointerEvent) => this._onResizeStart(e, bi, ri, ci, col.widthPct, row.columns[ci + 1].widthPct)}
+                            @pointermove=${(e: PointerEvent) => this._onResizeMove(e)}
+                            @pointerup=${(e: PointerEvent) => this._onResizeEnd(e)}></div>
+                        ` : nothing}
                       `)}
                     </div>
                     <div class="rowtools">
@@ -189,6 +207,32 @@ export class PldBandView extends LitElement {
               </div>
             </div>
     `;
+  }
+
+  // ─── column boundary drag (#98) ───
+  private _resizing: { bi: number; ri: number; ci: number; startX: number; rowW: number; startLeft: number } | null = null;
+
+  private _onResizeStart(e: PointerEvent, bi: number, ri: number, ci: number, leftPct: number, _rightPct: number) {
+    const rowEl = (e.currentTarget as HTMLElement).closest('.row') as HTMLElement | null;
+    this._resizing = { bi, ri, ci, startX: e.clientX, rowW: rowEl?.offsetWidth || 1, startLeft: leftPct };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch { /* synthetic events have no active pointer */ }
+    e.preventDefault();
+  }
+
+  private _onResizeMove(e: PointerEvent) {
+    if (!this._resizing) return;
+    const r = this._resizing;
+    const deltaPct = ((e.clientX - r.startX) / r.rowW) * 100;
+    dragColumnBoundary(this.store, r.bi, r.ri, r.ci, r.startLeft + deltaPct);
+  }
+
+  private _onResizeEnd(e: PointerEvent) {
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch { /* ignore */ }
+    this._resizing = null;
   }
 
   // ─── element drag between cells (same band) ───
