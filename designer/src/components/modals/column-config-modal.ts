@@ -583,6 +583,11 @@ export class PldColumnConfigModal extends LitElement {
               @change=${(e: Event) => this._updateCol(idx, 'isIndex', (e.target as HTMLInputElement).checked)} />
             Auto Index (#)
           </label>
+          <label class="check-item">
+            <input type="checkbox" .checked=${col.boldFirstLine ?? false}
+              @change=${(e: Event) => this._updateCol(idx, 'boldFirstLine', (e.target as HTMLInputElement).checked)} />
+            Bold first line
+          </label>
         </div>
       </div>
 

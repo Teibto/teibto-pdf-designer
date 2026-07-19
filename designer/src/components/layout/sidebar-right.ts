@@ -541,6 +541,11 @@ export class PldSidebarRight extends LitElement {
             <input type="color" .value=${el.headerTextColor}
               @input=${(e: Event) => this._update('headerTextColor', (e.target as HTMLInputElement).value)} />
           </div>
+          <div class="field">
+            <label>Border</label>
+            <input type="color" .value=${el.borderColor}
+              @input=${(e: Event) => this._update('borderColor', (e.target as HTMLInputElement).value)} />
+          </div>
         </div>
       </div>
     `;
