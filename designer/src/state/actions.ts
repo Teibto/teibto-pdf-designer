@@ -826,6 +826,29 @@ export function setColumnWidth(
   }, { name: 'setColumnWidth', undoable: true, batchKey: `bandw-${bandIdx}-${rowIdx}-${colIdx}` }));
 }
 
+/** Drag the boundary between column leftIdx and leftIdx+1 (#98): only the
+ *  pair changes (their sum is preserved), so the divider tracks the mouse.
+ *  Both sides clamp to >=5%. */
+export function dragColumnBoundary(
+  store: AppStore,
+  bandIdx: number,
+  rowIdx: number,
+  leftIdx: number,
+  leftPct: number,
+): void {
+  store.dispatch(tagAction((draft) => {
+    const row = draft.bands[bandIdx]?.rows[rowIdx];
+    const left = row?.columns[leftIdx];
+    const right = row?.columns[leftIdx + 1];
+    if (!left || !right) return;
+    const pair = left.widthPct + right.widthPct;
+    if (pair < 10) return; // both already at minimum
+    const newLeft = Math.round(Math.min(Math.max(leftPct, 5), pair - 5));
+    left.widthPct = newLeft;
+    right.widthPct = pair - newLeft;
+  }, { name: 'dragColumnBoundary', undoable: true, batchKey: `banddrag-${bandIdx}-${rowIdx}-${leftIdx}` }));
+}
+
 // Band structural edits are undoable (#47 cutover): the history service now
 // snapshots `state.bands` alongside elements, so Ctrl+Z restores band layout the
 // same as canvas edits. (addElementToCell stays undoable:false because the

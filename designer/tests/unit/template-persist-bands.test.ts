@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { AppStore } from '../../src/state/store';
 import { exportTemplateJson, importTemplateJson } from '../../src/services/template.service';
-import { addElement, regenerateBands, setColumnWidth } from '../../src/state/actions';
+import { addElement, regenerateBands, setColumnWidth, dragColumnBoundary } from '../../src/state/actions';
 import { elementsToBands } from '../../src/services/band-layout.service';
 
 /** Store with a 2-column header row whose widths have been edited. */
@@ -77,5 +77,33 @@ describe('copy-set persistence (#92)', () => {
     const dst = new AppStore();
     importTemplateJson(dst, json);
     expect(dst.state.copies).toBeNull();
+  });
+});
+
+describe('dragColumnBoundary (#98)', () => {
+  it('moves the boundary — pair sum preserved, others untouched', () => {
+    const store = editedStore(); // 2 columns, widths 25/75
+    dragColumnBoundary(store, 0, 0, 0, 40);
+    const cols = store.state.bands[0].rows[0].columns;
+    expect(cols[0].widthPct).toBe(40);
+    expect(cols[1].widthPct).toBe(60);
+    expect(cols[0].widthPct + cols[1].widthPct).toBe(100);
+  });
+
+  it('clamps both sides to >=5%', () => {
+    const store = editedStore();
+    dragColumnBoundary(store, 0, 0, 0, 99);
+    const cols = store.state.bands[0].rows[0].columns;
+    expect(cols[0].widthPct).toBe(95);
+    expect(cols[1].widthPct).toBe(5);
+    dragColumnBoundary(store, 0, 0, 0, -10);
+    expect(store.state.bands[0].rows[0].columns[0].widthPct).toBe(5);
+  });
+
+  it('no-op on missing column / last boundary', () => {
+    const store = editedStore();
+    const before = JSON.stringify(store.state.bands);
+    dragColumnBoundary(store, 0, 0, 1, 50); // leftIdx 1 has no right neighbour
+    expect(JSON.stringify(store.state.bands)).toBe(before);
   });
 });
