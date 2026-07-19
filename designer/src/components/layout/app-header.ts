@@ -172,24 +172,24 @@ export class PldHeader extends LitElement {
           class="tab-btn ${this.activeView === 'design' ? 'active' : ''}"
           @click=${() => switchView(this.store, 'design')}
         >
-          ◇ Design
+          ◇ ออกแบบ
         </button>
         <button
           class="tab-btn ${this.activeView === 'flow' ? 'active' : ''}"
           @click=${() => switchView(this.store, 'flow')}
         >
-          ⟁ Flow Map
+          ⟁ ผังข้อมูล
         </button>
       </div>
 
       <!-- Actions -->
       <div class="actions">
-        <button class="btn btn-sm" @click=${this._onTemplates}>📁 Templates</button>
-        <button class="btn btn-sm" @click=${this._onSave}>💾 Save</button>
+        <button class="btn btn-sm" @click=${this._onTemplates}>📁 เทมเพลต</button>
+        <button class="btn btn-sm" @click=${this._onSave}>💾 บันทึก</button>
         <button class="btn btn-sm" @click=${this._onExportJson}>⟨/⟩ JSON</button>
-        <button class="btn btn-sm" @click=${this._onSample}>★ Sample</button>
+        <button class="btn btn-sm" @click=${this._onSample}>★ ตัวอย่าง</button>
         <button class="btn btn-sm btn-bfo" @click=${this._onExportBfo}>🔶 NetSuite BFO</button>
-        <button class="btn btn-sm btn-primary" @click=${this._onPreview}>▶ Preview</button>
+        <button class="btn btn-sm btn-primary" @click=${this._onPreview}>▶ พรีวิว</button>
       </div>
     `;
   }
