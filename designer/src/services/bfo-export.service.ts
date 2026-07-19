@@ -443,8 +443,10 @@ function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean,
     // overflow an edited/narrow column, so the text fills the cell instead (#47 3a).
     ...(inCell ? [] : [`width: ${sanitizeNumericCss(el.w, 'pt', 0, 5000)}`]),
     // Stacked cell: default <p>/<h2> margins accumulate per element and overflow
-    // the band's roleHeight box — render tight (see renderBand cellHtml, #73).
-    ...(stacked ? ['margin: 0 0 2pt 0'] : []),
+    // the band's roleHeight box — render tight; width 100% because BFO
+    // shrink-fits a stacked <h2>/<p> to its text, which defeats
+    // text-align: center (title rendered flush-left, #73).
+    ...(stacked ? ['margin: 0 0 2pt 0', 'width: 100%'] : []),
   ].join('; ');
 
   let content = escapeXml(el.content);
@@ -530,15 +532,21 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
 
   lines.push(`<table style="width: ${el.w}pt; border: 0.5pt solid ${el.borderColor};">`);
 
-  // Header
-  lines.push('<thead>');
-  lines.push('<tr>');
-  visibleCols.forEach((col) => {
-    const style = `background-color: ${sanitizeColor(el.headerBgColor)}; color: ${sanitizeColor(el.headerTextColor)}; text-align: ${col.align}; font-weight: bold; padding: 4pt 6pt; border: 0.5pt solid ${sanitizeColor(el.borderColor)}; width: ${col.width}pt;`;
-    lines.push(`  <th style="${style}">${escapeXml(col.label)}</th>`);
-  });
-  lines.push('</tr>');
-  lines.push('</thead>');
+  // Header — skipped entirely when no column has a label (bordered key/value
+  // grids like doc-info/summary would otherwise print a stray empty row, #73).
+  if (visibleCols.some((c) => c.label !== '')) {
+    lines.push('<thead>');
+    lines.push('<tr>');
+    visibleCols.forEach((col) => {
+      const style = `background-color: ${sanitizeColor(el.headerBgColor)}; color: ${sanitizeColor(el.headerTextColor)}; text-align: ${col.align}; font-weight: bold; padding: 4pt 6pt; border: 0.5pt solid ${sanitizeColor(el.borderColor)}; width: ${col.width}pt;`;
+      // Wrapped in a block <p> with its own alignment: BFO justifies bare text
+      // that wraps inside a th/td (letter-spacing stretch, "A m o u n t") and
+      // th text-align does not stop it (#73; netsuite-bfo-pdf truth table).
+      lines.push(`  <th style="${style}"><p style="margin: 0; text-align: ${col.align};">${escapeXml(col.label)}</p></th>`);
+    });
+    lines.push('</tr>');
+    lines.push('</thead>');
+  }
 
   // Body (FreeMarker loop)
   lines.push('<tbody>');
@@ -570,7 +578,17 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
         // ?xml first (a raw & in data — "Discount & FOC" — breaks the BFO parse),
         // then \n → <br/> so multi-line cells (item code + memo) print as lines.
         // ?string keeps numeric values (legacy templates) safe for ?xml (#73).
-        lines.push(`  <td style="${style}">\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}</td>`);
+        if (col.boldFirstLine) {
+          // First line bold (item name), remaining lines (memo) regular — the
+          // reference scans by bold item names (#73).
+          lines.push(
+            `  <td style="${style}"><#assign _bfl = (${listVar}.${col.key}!'')?string?xml>` +
+            `<#if _bfl?index_of('\\n') != -1><b>\${_bfl?keep_before('\\n')}</b><br/>\${_bfl?keep_after('\\n')?replace('\\n', '<br/>')}` +
+            `<#else><b>\${_bfl}</b></#if></td>`,
+          );
+        } else {
+          lines.push(`  <td style="${style}">\${(${listVar}.${col.key}!'')?string?xml?replace('\\n', '<br/>')}</td>`);
+        }
       });
       lines.push('</tr>');
     }

@@ -25,8 +25,8 @@
  * @author Wichit Wongta
  * @since 2026-07-18
  */
-define(['N/query', 'N/record', './pld_lib_company_config', './pld_lib_baht_text'],
-function (query, record, companyConfig, bahtText) {
+define(['N/query', 'N/record', 'N/format', './pld_lib_company_config', './pld_lib_baht_text'],
+function (query, record, format, companyConfig, bahtText) {
 
   function first(sql, params) {
     var rows = query.runSuiteQL({ query: sql, params: params }).asMappedResults();
@@ -211,6 +211,7 @@ function (query, record, companyConfig, bahtText) {
         titleEN: 'INVOICE/TAX INVOICE' + (copyLabelEN ? ' (' + copyLabelEN + ')' : ' (Original)'),
         copyTH: copyLabelTH || 'ต้นฉบับ',
         copyEN: copyLabelEN || 'Original',
+        printedDate: format.format({ value: new Date(), type: format.Type.DATETIME }),
         docInfoRows: docInfoRows
       },
       customer: {

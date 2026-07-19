@@ -100,6 +100,8 @@ export interface TableColumn {
   bold: boolean;
   uppercase: boolean;
   isIndex?: boolean;
+  /** Bold the first line of a multi-line cell (item name over memo, #73). */
+  boldFirstLine?: boolean;
 }
 
 /** Table element */

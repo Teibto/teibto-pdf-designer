@@ -47,10 +47,11 @@ function createInvoiceTemplate(): DocumentTemplate {
   });
 
   const col = (key: string, label: string, width: number, align: 'left' | 'center' | 'right',
-    o: { wrap?: boolean; bold?: boolean } = {}): TableColumn => ({
+    o: { wrap?: boolean; bold?: boolean; boldFirst?: boolean } = {}): TableColumn => ({
     key, label, width, align, format: 'text',
     overflow: o.wrap ? 'wrap' : 'ellipsis', maxLines: o.wrap ? 3 : 1,
     hidden: false, bold: !!o.bold, uppercase: false,
+    ...(o.boldFirst ? { boldFirstLine: true } : {}),
   });
 
   const TBL = (
@@ -73,9 +74,12 @@ function createInvoiceTemplate(): DocumentTemplate {
     } as ImageElement,
     T('company_name', 'header', 90, 22, 240, 15, '{{company.name}}', { size: 12, bold: true, color: '#111111', binding: 'company.name', header: true }),
     T('company_addr', 'header', 90, 39, 240, 20, '{{company.address}}', { size: 7, color: '#555555', binding: 'company.address' }),
-    T('company_tel', 'header', 90, 59, 240, 10, 'Tel. / โทร : {{company.phone}}', { size: 7, color: '#555555', binding: 'company.phone' }),
-    T('company_taxid', 'header', 90, 69, 240, 10, 'Tax ID / เลขประจำตัวผู้เสียภาษี : {{company.taxId}}', { size: 7, color: '#555555', binding: 'company.taxId' }),
-    T('company_branch', 'header', 90, 79, 240, 10, 'Branch / สาขา : {{company.branchCode}}', { size: 7, color: '#555555', binding: 'company.branchCode' }),
+    // Labeled lines keep {{...}} in content WITHOUT a binding prop — an element
+    // with BOTH exports as bare ${...} and the label is silently lost (#73;
+    // "binding drops the literal", see teibto-pld-render-verify).
+    T('company_tel', 'header', 90, 59, 240, 10, 'Tel. / โทร : {{company.phone}}', { size: 7, color: '#555555' }),
+    T('company_taxid', 'header', 90, 69, 240, 10, 'Tax ID / เลขประจำตัวผู้เสียภาษี : {{company.taxId}}', { size: 7, color: '#555555' }),
+    T('company_branch', 'header', 90, 79, 240, 10, 'Branch / สาขา : {{company.branchCode}}', { size: 7, color: '#555555' }),
     T('title_th', 'header', 338, 20, 233, 16, '{{document.titleTH}}', { size: 12, bold: true, align: 'center', color: '#111111', binding: 'document.titleTH', header: true }),
     T('title_en', 'header', 338, 37, 233, 11, '{{document.titleEN}}', { size: 9, align: 'center', color: '#333333', binding: 'document.titleEN' }),
     // h=100 matches the RENDERED height (5 rows × ~18pt with the global th/td
@@ -90,8 +94,8 @@ function createInvoiceTemplate(): DocumentTemplate {
     LN('cust_ul', 'content', 24, 158, 280),
     T('cust_name', 'content', 24, 162, 300, 12, '{{customer.name}}', { size: 9, bold: true, color: '#111111', binding: 'customer.name' }),
     T('cust_addr', 'content', 24, 175, 300, 34, '{{customer.address}}', { size: 8, color: '#444444', binding: 'customer.address' }),
-    T('cust_taxid', 'content', 24, 209, 300, 10, 'Tax ID / เลขประจำตัวผู้เสียภาษี : {{customer.taxId}}', { size: 8, color: '#444444', binding: 'customer.taxId' }),
-    T('cust_branch', 'content', 24, 219, 300, 10, 'Branch / สาขา : {{customer.branch}}', { size: 8, color: '#444444', binding: 'customer.branch' }),
+    T('cust_taxid', 'content', 24, 209, 300, 10, 'Tax ID / เลขประจำตัวผู้เสียภาษี : {{customer.taxId}}', { size: 8, color: '#444444' }),
+    T('cust_branch', 'content', 24, 219, 300, 10, 'Branch / สาขา : {{customer.branch}}', { size: 8, color: '#444444' }),
     T('ship_label', 'content', 338, 146, 233, 11, 'Ship To / ที่อยู่จัดส่งสินค้า', { size: 8, bold: true, color: '#111111' }),
     LN('ship_ul', 'content', 338, 158, 233),
     T('ship_addr', 'content', 338, 162, 233, 48, '{{shipTo.address}}', { size: 8, color: '#444444', binding: 'shipTo.address' }),
@@ -100,7 +104,7 @@ function createInvoiceTemplate(): DocumentTemplate {
     // ═══ TABLE: line items (7 columns, bilingual headers) ═══
     TBL('items_table', 'table', 24, 272, 547, 300, 'items', [
       col('no', 'No. / ลำดับ', 34, 'center'),
-      col('description', 'Description / รายละเอียด', 214, 'left', { wrap: true }),
+      col('description', 'Description / รายละเอียด', 214, 'left', { wrap: true, boldFirst: true }),
       col('quantity', 'Quantity / จำนวน', 55, 'center'),
       col('unit', 'Unit / หน่วย', 45, 'center'),
       col('unit_price', 'Unit Price / ราคาต่อหน่วย', 68, 'right'),
@@ -113,18 +117,20 @@ function createInvoiceTemplate(): DocumentTemplate {
     TBL('summary_table', 'summary', 300, 588, 271, 152, 'totals.summaryRows',
       [col('label', '', 181, 'right'), col('value', '', 90, 'right')],
       { headBg: '#ffffff', headFg: '#ffffff', border: '#999999' }),
-    T('baht_text', 'summary', 300, 744, 271, 14, '( {{totals.bahtText}} )', { size: 9, align: 'right', color: '#111111', binding: 'totals.bahtText' }),
+    T('baht_text', 'summary', 300, 744, 271, 14, '( {{totals.bahtText}} )', { size: 9, align: 'right', color: '#111111' }),
     LN('sign_sep', 'summary', 24, 772, 547, '#cccccc'),
     T('sign_created', 'summary', 60, 800, 200, 14, 'Created by / ผู้ออกเอกสาร', { size: 8, align: 'center', color: '#555555' }),
-    T('sign_created_date', 'summary', 40, 786, 240, 12, 'ลงวันที่ {{document.date}}', { size: 8, align: 'center', color: '#555555', binding: 'document.date' }),
+    T('sign_created_date', 'summary', 40, 786, 240, 12, 'ลงวันที่ {{document.date}}', { size: 8, align: 'center', color: '#555555' }),
     T('sign_approved', 'summary', 330, 800, 200, 14, 'Approved by / ผู้อนุมัติ', { size: 8, align: 'center', color: '#555555' }),
     T('sign_approved_date', 'summary', 310, 786, 240, 12, 'ลงวันที่', { size: 8, align: 'center', color: '#555555' }),
 
     // ═══ FOOTER (repeats every page) ═══
     LN('footer_line', 'footer', 24, 806, 547, '#cccccc'),
     T('footer_disclaimer', 'footer', 24, 810, 547, 20, DISCLAIMER, { size: 6, align: 'center', color: '#999999' }),
-    T('footer_created', 'footer', 24, 830, 340, 10, 'ผู้ออกเอกสาร / Created By : {{issuer.createdBy}}', { size: 7, color: '#777777', binding: 'issuer.createdBy' }),
-    T('footer_page', 'footer', 400, 830, 171, 10, 'Page', { size: 7, align: 'right', color: '#777777' }),
+    T('footer_created', 'footer', 24, 830, 340, 10, 'ผู้ออกเอกสาร / Created By : {{issuer.createdBy}}', { size: 7, color: '#777777' }),
+    // No page element here — the export appends its own "Page X of Y" line to
+    // the footer macro; a second static one printed a bare "Page" (#73).
+    T('footer_printed', 'footer', 400, 830, 171, 10, 'Printed Date : {{document.printedDate}}', { size: 7, align: 'right', color: '#777777' }),
   ];
 
   // The header and customer blocks are vertical stacks beside each other, which
@@ -205,6 +211,7 @@ function createInvoiceTemplate(): DocumentTemplate {
       },
       document: {
         titleTH: 'ใบแจ้งหนี้/ใบกำกับภาษี (ต้นฉบับ)', titleEN: 'INVOICE/TAX INVOICE (Original)',
+        printedDate: '17/7/2026 10:59 pm',
         docInfoRows: [
           { label: 'Doc No. / เลขที่เอกสาร', value: 'INT-TTL-260700001' },
           { label: 'Date / วันที่', value: '15/07/2026' },
