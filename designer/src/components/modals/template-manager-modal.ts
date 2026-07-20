@@ -426,6 +426,13 @@ export class PldTemplateManagerModal extends LitElement {
     clearPaginationCache();
     this.store.dispatch((draft) => {
       draft.elements = structuredClone(tpl.elements);
+      // Bands must load with the elements (#113) — band-view does not
+      // auto-regenerate, and a later "Save to NetSuite" with empty bands
+      // exports an empty body (useBands renders state.bands as-is).
+      draft.bands = tpl.bands ? structuredClone(tpl.bands) : elementsToBands(tpl.elements);
+      // Same stale-state class: copies from a previously loaded template must
+      // not survive into the sample (mirrors loadTemplate semantics).
+      draft.copies = tpl.copies ? structuredClone(tpl.copies) : null;
       draft.page = { ...tpl.page };
       draft.pagination = { ...tpl.pagination };
       draft.jsonData = tpl.jsonData ? structuredClone(tpl.jsonData) : null;
