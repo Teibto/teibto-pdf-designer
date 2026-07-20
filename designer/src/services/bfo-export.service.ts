@@ -729,9 +729,14 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       const spanStyle = `text-align: left; font-weight: bold; padding: 4pt 6pt; border: 0.5pt solid ${sanitizeColor(el.borderColor)};`;
       // [FUNC-2] Use first non-index column for span row label (index column has no meaningful value)
       const spanLabelCol = visibleCols.find((c) => !c.isIndex) ?? visibleCols[0];
-      lines.push(`<#if ${listVar}.${spanField}?has_content>`);
+      // NOT ?has_content: on the JSON data source it returns true for '' AND
+      // for missing keys (probe-proven SB2 2026-07-20, #111) — every row would
+      // render as a span row. Only a ?length check separates empty from set.
+      lines.push(`<#if ((${listVar}.${spanField})!'')?length != 0>`);
       if (stCols.length) emitSubtotalRow();
-      lines.push(`<tr><td colspan="${visibleCols.length}" style="${spanStyle}">\${${listVar}.${spanLabelCol.key}!''}</td></tr>`);
+      // ?xml like every other cell — a raw & in the section name must not
+      // break the whole render (#111).
+      lines.push(`<tr><td colspan="${visibleCols.length}" style="${spanStyle}">\${(${listVar}.${spanLabelCol.key}!'')?string?xml}</td></tr>`);
       lines.push('<#else>');
       lines.push('<tr>');
       visibleCols.forEach((col) => {
