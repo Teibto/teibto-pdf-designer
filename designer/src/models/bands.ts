@@ -14,7 +14,7 @@
  * @author Wichit Wongta
  * @since 2026-07-17
  */
-import type { ElementRoleType } from './element';
+import type { ElementRoleType, ElementType } from './element';
 
 /** One cell in a row — a percentage-width column holding stacked elements. */
 export interface BandColumn {
@@ -50,6 +50,29 @@ export interface BandRow {
 export interface Band {
   role: ElementRoleType;
   rows: BandRow[];
+}
+
+/**
+ * Element types each band accepts (#49) — maintainer-approved matrix
+ * (2026-07-20). Governs NEW additions only (palette drop + add actions);
+ * legacy templates reconstructed by elementsToBands keep whatever they carry.
+ * Rationale: the table band holds only the item table (anything else gets
+ * caught in pagination/fill), the watermark band is closed — print watermark
+ * is pagination-level (#100 page.watermarkText) — and list renders as a
+ * content-only block.
+ */
+export const BAND_ACCEPTS: Record<ElementRoleType, readonly ElementType[]> = {
+  header: ['header', 'text', 'table', 'image', 'shape', 'line', 'barcode'],
+  content: ['header', 'text', 'table', 'image', 'shape', 'line', 'barcode', 'list'],
+  table: ['table'],
+  summary: ['header', 'text', 'table', 'shape', 'line'],
+  footer: ['text', 'table', 'image', 'shape', 'line', 'barcode'],
+  watermark: [],
+};
+
+/** True when `type` may be added to a band of `role` (#49). */
+export function bandAccepts(role: ElementRoleType, type: ElementType): boolean {
+  return (BAND_ACCEPTS[role] ?? []).includes(type);
 }
 
 /**

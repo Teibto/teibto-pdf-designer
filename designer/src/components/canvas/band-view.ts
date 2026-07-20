@@ -37,7 +37,8 @@ import {
   selectElement,
 } from '../../state/actions';
 import { ELEMENT_ROLES } from '../../constants/roles';
-import { BAND_ORDER, type Band } from '../../models/bands';
+import { BAND_ORDER, bandAccepts, type Band } from '../../models/bands';
+import { showToast } from '../shared/toast-notification';
 import type { ElementType, ElementRoleType, CanvasElement } from '../../models/element';
 
 @customElement('pld-band-view')
@@ -96,6 +97,11 @@ export class PldBandView extends LitElement {
 
     .cell { border: 1px dashed var(--color-border, #2a2c3a); border-radius: 6px; padding: 8px; min-height: 34px; display: flex; flex-direction: column; gap: 4px; }
     .cell.drop { border-color: var(--band-color, #4f6ef7); border-style: solid; background: color-mix(in srgb, var(--band-color) 10%, transparent); }
+    .cell.drop-deny, .empty-slot.drop-deny {
+      outline: 2px dashed var(--color-danger, #ef4444);
+      outline-offset: -2px;
+      cursor: not-allowed;
+    }
     .cell-w { display: flex; align-items: center; gap: 4px; font-size: 10px; font-family: var(--font-mono, monospace); color: var(--color-text-dim, #8a8ca0); }
     .cell-w .sp { flex: 1; }
     button { width: 18px; height: 18px; line-height: 1; border: 1px solid var(--color-border, #2a2c3a); border-radius: 3px; background: var(--color-bg-hover, #222430); color: var(--color-text, #e8e9f0); cursor: pointer; padding: 0; font-size: 11px; }
@@ -145,7 +151,7 @@ export class PldBandView extends LitElement {
     const role = ELEMENT_ROLES[roleType];
     return html`
       <div class="band empty-slot" style="--band-color: ${role.color};"
-        @dragover=${(e: DragEvent) => this._onDragOver(e)}
+        @dragover=${(e: DragEvent) => this._onDragOver(e, roleType)}
         @dragleave=${(e: DragEvent) => this._onDragLeave(e)}
         @drop=${(e: DragEvent) => this._onEmptyDrop(e, roleType)}>
         <div class="band-head">${role.label} <span style="opacity:.7;font-weight:400;">· ว่าง</span></div>
@@ -170,7 +176,7 @@ export class PldBandView extends LitElement {
                     <div class="row">
                       ${repeat(row.columns, (col) => col.id, (col, ci) => html`
                         <div class="cell"
-                          @dragover=${(e: DragEvent) => this._onDragOver(e)}
+                          @dragover=${(e: DragEvent) => this._onDragOver(e, band.role)}
                           @dragleave=${(e: DragEvent) => this._onDragLeave(e)}
                           @drop=${(e: DragEvent) => this._onDrop(e, bi, ri, ci)}
                           style="flex: ${col.widthPct} 1 0;">
@@ -263,13 +269,22 @@ export class PldBandView extends LitElement {
     (e.target as HTMLElement).removeAttribute('dragging');
     this._dragElId = null;
   }
-  private _onDragOver(e: DragEvent) {
+  private _onDragOver(e: DragEvent, role: ElementRoleType) {
+    // Acceptance matrix (#49): a palette drag (dragType set) the band rejects
+    // gets a deny cursor and NO preventDefault — the drop never fires. Chip
+    // moves (no dragType) are within-band and always allowed.
+    const dragType = this.store.state.dragType;
+    if (dragType && !bandAccepts(role, dragType as ElementType)) {
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+      (e.currentTarget as HTMLElement).classList.add('drop-deny');
+      return;
+    }
     e.preventDefault(); // required to allow a drop
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     (e.currentTarget as HTMLElement).classList.add('drop');
   }
   private _onDragLeave(e: DragEvent) {
-    (e.currentTarget as HTMLElement).classList.remove('drop');
+    (e.currentTarget as HTMLElement).classList.remove('drop', 'drop-deny');
   }
   private _onDrop(e: DragEvent, bi: number, ri: number, ci: number) {
     e.preventDefault();
@@ -279,7 +294,11 @@ export class PldBandView extends LitElement {
     // HTML5 protected-mode getData and is never set by a chip drag.
     const type = this.store.state.dragType;
     if (type) {
-      addElementToCell(this.store, type as ElementType, bi, ri, ci);
+      const id = addElementToCell(this.store, type as ElementType, bi, ri, ci);
+      if (id === null) {
+        const role = this.store.state.bands[bi]?.role;
+        showToast(`band ${role ?? ''} ไม่รับ element ชนิด ${type} (#49)`, 'warning');
+      }
       this.store.dispatch((d) => { d.dragType = null; });
     } else if (this._dragElId) {
       moveElementToCell(this.store, this._dragElId, bi, ri, ci);
@@ -292,7 +311,10 @@ export class PldBandView extends LitElement {
     (e.currentTarget as HTMLElement).classList.remove('drop');
     const type = this.store.state.dragType;
     if (type) {
-      addElementToNewBand(this.store, type as ElementType, role);
+      const id = addElementToNewBand(this.store, type as ElementType, role);
+      if (id === null) {
+        showToast(`band ${role} ไม่รับ element ชนิด ${type} (#49)`, 'warning');
+      }
       this.store.dispatch((d) => { d.dragType = null; });
     }
     this._dragElId = null;
