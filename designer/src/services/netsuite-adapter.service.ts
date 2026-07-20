@@ -208,6 +208,26 @@ export async function getNsTemplate(
   return result as any;
 }
 
+/**
+ * Duplicate a NetSuite template record server-side (#105): read the source
+ * record's designer JSON + BFO XML and save them as a NEW record named
+ * "<name> (copy)". The default flag is never copied — a fresh copy must not
+ * hijack Print for its record type.
+ */
+export async function duplicateNsTemplate(
+  tplId: string,
+): Promise<{ id: string; name: string }> {
+  const src = await getNsTemplate(tplId);
+  const name = `${src.name} (copy)`;
+  const result = await saveNsTemplate({
+    name,
+    data: src.data,
+    xml: src.xml,
+    rectype: src.rectype || undefined,
+  });
+  return { id: result.id, name };
+}
+
 // ═══════════════════════════════════════
 // PDF RENDER (via Render Suitelet)
 // ═══════════════════════════════════════
