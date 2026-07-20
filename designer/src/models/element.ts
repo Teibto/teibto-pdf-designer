@@ -107,6 +107,12 @@ export interface TableColumn {
   isIndex?: boolean;
   /** Bold the first line of a multi-line cell (item name over memo, #73). */
   boldFirstLine?: boolean;
+  /**
+   * Two-level header (#104): ADJACENT columns sharing the same non-empty group
+   * render one spanning cell above their own labels (e.g. "จำนวนเงิน" over
+   * rate + amount). Empty/absent = ungrouped.
+   */
+  group?: string;
 }
 
 /** Table element */
