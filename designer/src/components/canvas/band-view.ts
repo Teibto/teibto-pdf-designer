@@ -163,11 +163,20 @@ export class PldBandView extends LitElement {
   /** Render a populated band with its rows, cells and tools. */
   private _renderBand(band: Band, bi: number, byId: Map<string, CanvasElement>, selectedId: string | null) {
     const role = ELEMENT_ROLES[band.role];
+    const itemTable = band.role === 'table'
+      ? band.rows.flatMap((r) => r.columns.flatMap((c) => c.elementIds))
+          .map((id) => byId.get(id))
+          .find((el) => el?.type === 'table')
+      : undefined;
     return html`
             <div class="band" style="--band-color: ${role.color};">
               <div class="band-head">
                 ${role.label} <span style="opacity:.7;font-weight:400;">· ${band.rows.length} row</span>
                 <span class="sp"></span>
+                ${itemTable ? html`
+                  <button class="wide" title="ตั้งค่าคอลัมน์ของตาราง item (#119)"
+                    @click=${() => this._openColumnConfig(itemTable.id)}>⚙ คอลัมน์</button>
+                ` : nothing}
                 <button class="wide" title="เพิ่มแถว" @click=${() => addBandRow(this.store, bi)}>+ row</button>
               </div>
               <div class="band-body">
@@ -269,6 +278,15 @@ export class PldBandView extends LitElement {
     (e.target as HTMLElement).removeAttribute('dragging');
     this._dragElId = null;
   }
+  /** Shortcut from the Table band head (#119): select the item table and open
+   *  its column config directly — no need to find and click the chip first. */
+  private _openColumnConfig(elementId: string) {
+    selectElement(this.store, elementId);
+    this.dispatchEvent(new CustomEvent('pld-open-column-config', {
+      detail: { elementId }, bubbles: true, composed: true,
+    }));
+  }
+
   private _onDragOver(e: DragEvent, role: ElementRoleType) {
     // Acceptance matrix (#49): a palette drag (dragType set) the band rejects
     // gets a deny cursor and NO preventDefault — the drop never fires. Chip

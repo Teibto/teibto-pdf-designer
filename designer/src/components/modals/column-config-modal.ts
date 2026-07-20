@@ -95,6 +95,26 @@ export class PldColumnConfigModal extends LitElement {
       gap: 2px;
     }
 
+    .add-col-btn {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px;
+      border: 1px dashed var(--color-border, #2a2c3a);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--color-text-dim, #8a8ca0);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .add-col-btn:hover {
+      border-color: var(--color-accent, #4f6ef7);
+      color: var(--color-accent, #4f6ef7);
+      background: rgba(79, 110, 247, 0.06);
+    }
+
     .col-item {
       display: flex;
       align-items: center;
@@ -495,6 +515,7 @@ export class PldColumnConfigModal extends LitElement {
                 <span class="col-width-badge">${col.width}px</span>
               </div>
             `)}
+            <button class="add-col-btn" @click=${this._addColumn}>＋ เพิ่มคอลัมน์</button>
           </div>
         </div>
 
