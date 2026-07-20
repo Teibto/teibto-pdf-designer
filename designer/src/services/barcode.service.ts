@@ -1,6 +1,6 @@
 /**
  * Barcode Rendering Service
- * Wraps bwip-js for SVG (canvas preview) and PNG (PDF export) generation.
+ * Wraps bwip-js for SVG generation (HTML sim preview).
  * Supports code128, code39, ean13, qrcode, and many more.
  *
  * @author Wichit Wongta
@@ -59,33 +59,6 @@ export async function renderBarcodeSvg(opts: BarcodeRenderOptions): Promise<stri
   } catch (err) {
     console.warn('[barcode] SVG render failed:', err);
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${opts.width || 180}" height="${opts.height || 80}"><text x="10" y="30" font-size="12" fill="red">Invalid barcode</text></svg>`;
-  }
-}
-
-/**
- * Render a barcode as PNG data URL (for PDF export via jsPDF.addImage).
- */
-export async function renderBarcodeDataUrl(opts: BarcodeRenderOptions): Promise<string | null> {
-  const bwipjs = await loadBwipJs();
-  const bcid = BARCODE_TYPE_MAP[opts.barcodeType] || 'code128';
-  const isQR = bcid === 'qrcode' || bcid === 'datamatrix';
-
-  try {
-    // Create offscreen canvas
-    const canvas = document.createElement('canvas');
-    bwipjs.toCanvas(canvas, {
-      bcid,
-      text: opts.value || ' ',
-      includetext: opts.includeText !== false && !isQR,
-      scale: 3,
-      height: isQR ? 10 : 8,
-      width: isQR ? 10 : undefined,
-      backgroundcolor: 'ffffff',
-    });
-    return canvas.toDataURL('image/png');
-  } catch (err) {
-    console.warn('[barcode] Canvas render failed:', err);
-    return null;
   }
 }
 
