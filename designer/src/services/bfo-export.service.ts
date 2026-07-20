@@ -627,6 +627,33 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
   // grids like doc-info/summary would otherwise print a stray empty row, #73).
   if (visibleCols.some((c) => c.label !== '')) {
     lines.push('<thead>');
+
+    // Column groups (#104): a leading row where ADJACENT columns sharing the
+    // same non-empty group merge into one colspan cell. colspan only — rowspan
+    // is unverified on BFO, so ungrouped columns get an empty cell here and
+    // keep their label in the row below.
+    const hasGroups = visibleCols.some((c) => (c.group ?? '').trim() !== '');
+    if (hasGroups) {
+      const groupStyle = `background-color: ${sanitizeColor(el.headerBgColor)}; color: ${sanitizeColor(el.headerTextColor)}; text-align: center; font-weight: bold; padding: 4pt 6pt; border: 0.5pt solid ${sanitizeColor(el.borderColor)};`;
+      lines.push('<tr>');
+      for (let i = 0; i < visibleCols.length; ) {
+        const group = (visibleCols[i].group ?? '').trim();
+        let span = 1;
+        while (
+          group !== '' &&
+          i + span < visibleCols.length &&
+          (visibleCols[i + span].group ?? '').trim() === group
+        ) span++;
+        if (group !== '') {
+          lines.push(`  <th colspan="${span}" style="${groupStyle}"><p style="margin: 0; text-align: center;">${escapeXml(group)}</p></th>`);
+        } else {
+          lines.push(`  <th style="${groupStyle}"><p style="margin: 0;">&#160;</p></th>`);
+        }
+        i += span;
+      }
+      lines.push('</tr>');
+    }
+
     lines.push('<tr>');
     visibleCols.forEach((col) => {
       const style = `background-color: ${sanitizeColor(el.headerBgColor)}; color: ${sanitizeColor(el.headerTextColor)}; text-align: ${col.align}; font-weight: bold; padding: 4pt 6pt; border: 0.5pt solid ${sanitizeColor(el.borderColor)}; width: ${col.width}pt;`;

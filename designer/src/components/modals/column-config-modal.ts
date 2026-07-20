@@ -535,6 +535,13 @@ export class PldColumnConfigModal extends LitElement {
         </div>
         <div class="prop-row">
           <div class="prop-field">
+            <label>Group — หัวตาราง 2 ชั้น (คอลัมน์ติดกันที่ตั้ง group เดียวกันถูกคร่อมด้วยหัวเดียว)</label>
+            <input type="text" .value=${col.group ?? ''} placeholder="เช่น จำนวนเงิน (เว้นว่าง = ไม่จัดกลุ่ม)"
+              @change=${(e: Event) => this._updateCol(idx, 'group', (e.target as HTMLInputElement).value)} />
+          </div>
+        </div>
+        <div class="prop-row">
+          <div class="prop-field">
             <label>Width (px)</label>
             <input type="number" .value=${String(col.width)} min="20" max="500"
               @change=${(e: Event) => this._updateCol(idx, 'width', Number((e.target as HTMLInputElement).value))} />
