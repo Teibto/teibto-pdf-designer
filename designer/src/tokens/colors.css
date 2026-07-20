@@ -47,3 +47,32 @@
   --color-role-footer:    #e74c8b;
   --color-role-watermark: #6b7280;
 }
+
+/* ═══════════════════════════════════════
+   LIGHT THEME (#121) — override เฉพาะ surface / border / text
+   accent · semantic · role · json syntax คงเดิม (ใช้ได้ทั้งสองโหมด)
+   เปิดใช้ด้วย data-theme="light" บน <html> (theme service)
+   ═══════════════════════════════════════ */
+:root[data-theme="light"] {
+  /* ─── Surface ─── */
+  --color-bg-deep:     #eef0f5;
+  --color-bg-panel:    #f6f7fa;
+  --color-bg-card:     #ffffff;
+  --color-bg-hover:    #e9ebf2;
+  --color-bg-element:  #dfe2ec;
+
+  /* ─── Border ─── */
+  --color-border:        #d4d7e2;
+  --color-border-active: #4f6ef7;
+
+  /* ─── Accent (darken เล็กน้อยให้ contrast บนพื้นสว่างพอ) ─── */
+  --color-accent-glow: rgba(79, 110, 247, 0.18);
+
+  /* ─── Text ─── */
+  --color-text:        #1a1c28;
+  --color-text-dim:    #5c5e72;
+  --color-text-muted:  #9497a8;
+
+  /* ─── Element Roles (เข้มขึ้นเพื่อ contrast บนพื้นขาว) ─── */
+  --color-role-content: #6b6d80;
+}

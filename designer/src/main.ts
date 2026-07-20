@@ -8,6 +8,10 @@
 // ─── Global Styles ───
 import './styles/tailwind.css';
 
+// ─── Theme (#121) — apply saved Dark/Light before first render (กัน flash) ───
+import { initTheme } from './services/theme.service';
+initTheme();
+
 // ─── Root Component (registers <pld-app-shell> and all children) ───
 import './components/app-shell';
 

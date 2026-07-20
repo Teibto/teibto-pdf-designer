@@ -9,6 +9,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { switchView } from '../../state/actions';
+import { getTheme, toggleTheme, type Theme } from '../../services/theme.service';
 
 @customElement('pld-header')
 export class PldHeader extends LitElement {
@@ -16,6 +17,8 @@ export class PldHeader extends LitElement {
   private store!: AppStore;
 
   @state() private activeView: 'design' | 'flow' = 'design';
+
+  @state() private theme: Theme = getTheme();
 
   static styles = css`
     :host {
@@ -184,6 +187,10 @@ export class PldHeader extends LitElement {
 
       <!-- Actions -->
       <div class="actions">
+        <button class="btn btn-sm" @click=${this._onToggleTheme}
+          title="สลับธีม Dark / Light">
+          ${this.theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+        </button>
         <button class="btn btn-sm" @click=${this._onTemplates}>📁 เทมเพลต</button>
         <button class="btn btn-sm" @click=${this._onSave}>💾 บันทึก</button>
         <button class="btn btn-sm" @click=${this._onExportJson}>⟨/⟩ JSON</button>
@@ -200,6 +207,8 @@ export class PldHeader extends LitElement {
       new CustomEvent(name, { bubbles: true, composed: true }),
     );
   }
+
+  private _onToggleTheme() { this.theme = toggleTheme(); }
 
   private _onTemplates() { this._emit('pld-show-templates'); }
   private _onSave()      { this._emit('pld-save-template'); }
