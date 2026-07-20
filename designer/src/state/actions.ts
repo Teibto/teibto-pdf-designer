@@ -24,7 +24,7 @@ import type { PageSizeName, Orientation } from '../models/page';
 import { resolvePageDimensions } from '../models/page';
 import { validatePropertyUpdate } from '../services/validation.service';
 import { elementsToBands, redistributeRowWidths } from '../services/band-layout.service';
-import { BAND_ORDER } from '../models/bands';
+import { BAND_ORDER, bandAccepts } from '../models/bands';
 import type { ElementRoleType } from '../models/element';
 import { tagAction } from './middleware';
 
@@ -841,9 +841,12 @@ export function addElementToCell(
   bandIdx: number,
   rowIdx: number,
   colIdx: number,
-): void {
+): string | null {
   const band = store.state.bands[bandIdx];
-  if (!band?.rows[rowIdx]?.columns[colIdx]) return;
+  if (!band?.rows[rowIdx]?.columns[colIdx]) return null;
+  // Acceptance matrix (#49): the band's role decides which element types may
+  // be ADDED (legacy templates keep whatever they already carry).
+  if (!bandAccepts(band.role, type)) return null;
   const id = addElement(store, type); // pool + selection (no legacy x/y, #107)
   store.dispatch(tagAction((draft) => {
     const el = draft.elements.find((e) => e.id === id);
@@ -852,6 +855,7 @@ export function addElementToCell(
     // undoable:false — the addElement above already pushed the undo snapshot, so a
     // single Ctrl+Z removes the whole "add element to cell" (element + band ref).
   }, { name: 'addElementToCell', undoable: false }));
+  return id;
 }
 
 /**
@@ -860,7 +864,8 @@ export function addElementToCell(
  * template — or add to a role that has no band — without a free canvas. The band
  * is inserted at its BAND_ORDER position so document order stays canonical.
  */
-export function addElementToNewBand(store: AppStore, type: ElementType, role: ElementRoleType): void {
+export function addElementToNewBand(store: AppStore, type: ElementType, role: ElementRoleType): string | null {
+  if (!bandAccepts(role, type)) return null; // acceptance matrix (#49)
   const id = addElement(store, type); // pool + selection (undo point; no legacy x/y, #107)
   store.dispatch(tagAction((draft) => {
     const el = draft.elements.find((e) => e.id === id);
@@ -876,6 +881,7 @@ export function addElementToNewBand(store: AppStore, type: ElementType, role: El
     }
     band.rows.push({ id: nanoid(8), columns: [{ id: nanoid(8), widthPct: 100, elementIds: [id] }] });
   }, { name: 'addElementToNewBand', undoable: false })); // addElement pushed the undo point
+  return id;
 }
 
 /** Remove an element from BOTH the shared pool and its band cell (skip if locked). */
