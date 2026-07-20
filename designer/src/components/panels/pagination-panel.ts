@@ -30,6 +30,8 @@ export class PldPaginationPanel extends LitElement {
     keepTogetherField: '',
     headerMode: 'all',
     columnSpanField: '',
+    sectionSubtotal: false,
+    sectionSubtotalLabel: '',
   };
 
   @state() private jsonKeys: string[] = [];
@@ -417,6 +419,24 @@ export class PldPaginationPanel extends LitElement {
           </select>
         </div>
       </div>
+
+      ${this.config.columnSpanField ? html`
+        <label class="check-item"
+          title="พิมพ์แถวรวมย่อยตัวหนาท้ายแต่ละ section (คั่นด้วยแถว Column Span) — รวมเฉพาะคอลัมน์ที่ติ๊ก Section Subtotal ใน column config (#106)">
+          <input type="checkbox" .checked=${this.config.sectionSubtotal ?? false}
+            @change=${(e: Event) => this._update('sectionSubtotal', (e.target as HTMLInputElement).checked)} />
+          แถวรวมย่อยต่อ section (Section Subtotal)
+        </label>
+        ${this.config.sectionSubtotal ? html`
+          <div class="field-row">
+            <div class="field">
+              <label title="ข้อความในเซลล์แรกของแถวรวมย่อย (ว่าง = รวม)">Subtotal Label</label>
+              <input type="text" placeholder="รวม" .value=${this.config.sectionSubtotalLabel ?? ''}
+                @change=${(e: Event) => this._update('sectionSubtotalLabel', (e.target as HTMLInputElement).value)} />
+            </div>
+          </div>
+        ` : ''}
+      ` : ''}
       </div>
     `;
   }

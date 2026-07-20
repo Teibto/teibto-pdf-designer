@@ -113,6 +113,11 @@ export interface TableColumn {
    * rate + amount). Empty/absent = ungrouped.
    */
   group?: string;
+  /**
+   * Sum this column into the per-section subtotal row (#106). Only takes
+   * effect when pagination.sectionSubtotal is on and columnSpanField is set.
+   */
+  subtotal?: boolean;
 }
 
 /** Table element */

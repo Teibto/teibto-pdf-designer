@@ -68,6 +68,15 @@ export interface PaginationConfig {
    *  anchors the summary block on the last page (#84). Requires
    *  rowsPerPage > 0. Default: false (optional for legacy templates). */
   fillLastPage?: boolean;
+
+  /** Section subtotal (#106): emit a bold subtotal row at the end of every
+   *  section (rows delimited by columnSpanField headers), summing the columns
+   *  flagged TableColumn.subtotal. Requires columnSpanField. Default: false. */
+  sectionSubtotal?: boolean;
+
+  /** Label printed in the first non-summed cell of a subtotal row (#106).
+   *  Empty/unset = "รวม". */
+  sectionSubtotalLabel?: string;
 }
 
 /** One printed copy of the document (#92) — e.g. ต้นฉบับ/Original */
@@ -125,5 +134,7 @@ export function createDefaultPagination(): PaginationConfig {
     headerMode: 'all',
     columnSpanField: '',
     fillLastPage: false,
+    sectionSubtotal: false,
+    sectionSubtotalLabel: '',
   };
 }
