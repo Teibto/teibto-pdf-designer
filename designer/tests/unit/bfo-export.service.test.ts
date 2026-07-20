@@ -622,12 +622,16 @@ describe('null-safe bindings (#4)', () => {
     expect(xml).toContain("<#else>${_cv?string?xml?replace('\\n', '<br/>')}</#if>");
   });
 
-  it('column-span row label gets null-safe default', () => {
+  it('column-span row label gets null-safe default + ?xml escape (#111)', () => {
     const state = createMockState([makeTable()]);
     const stateWithSpan = { ...state, pagination: { ...createDefaultPagination(), columnSpanField: 'isSection' } };
     const xml = exportBfoXml(stateWithSpan, { useFreeMarker: true });
 
-    expect(xml).toContain("${lines.item!''}</td></tr>");
+    expect(xml).toContain("${(lines.item!'')?string?xml}</td></tr>");
+    // NOT ?has_content — true for '' and missing keys on the JSON data source
+    // (probe-proven SB2, #111): only a ?length check separates empty from set.
+    expect(xml).toContain("<#if ((lines.isSection)!'')?length != 0>");
+    expect(xml).not.toContain('isSection?has_content');
   });
 
   it('image src binding gets null-safe default that survives escapeXml', () => {
