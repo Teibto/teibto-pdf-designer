@@ -24,8 +24,6 @@ export class PldPaginationPanel extends LitElement {
     showContinuationHeader: true,
     orphanWidowMinRows: 2,
     summaryBreak: 'auto',
-    dynamicFooter: true,
-    dynamicFooterGap: 16,
     forceBreakBeforeRows: [],
     keepTogetherField: '',
     headerMode: 'all',
@@ -342,21 +340,6 @@ export class PldPaginationPanel extends LitElement {
         </div>
       </div>
 
-      <label class="check-item">
-        <input type="checkbox" .checked=${this.config.dynamicFooter !== false}
-          @change=${(e: Event) => this._update('dynamicFooter', (e.target as HTMLInputElement).checked)} />
-        Dynamic footer position
-      </label>
-
-      ${this.config.dynamicFooter !== false ? html`
-        <div class="field-row" style="margin-top: 4px;">
-          <div class="field">
-            <label title="Vertical space in points between the last table row and the footer/summary element">Footer Gap (pt)</label>
-            <input type="number" .value=${String(this.config.dynamicFooterGap ?? 16)} min="0" max="100"
-              @change=${(e: Event) => this._update('dynamicFooterGap', Number((e.target as HTMLInputElement).value))} />
-          </div>
-        </div>
-      ` : ''}
       </div>
 
       <!-- Page Break Controls (v2.2) -->

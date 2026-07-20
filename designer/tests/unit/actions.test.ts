@@ -4,11 +4,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { AppStore } from '../../src/state/store';
+import { exportTemplateJson } from '../../src/services/template.service';
+import { validateTemplate } from '../../src/services/validation.service';
 import {
   addElement,
   removeElement,
   selectElement,
-  moveElement,
   resizeElement,
   updateElement,
   duplicateElement,
@@ -36,9 +37,6 @@ import {
   pasteElements,
   cutElements,
   deleteSelected,
-  nudgeElement,
-  alignElements,
-  distributeElements,
   snapToGrid,
   regenerateBands,
   addBandRow,
@@ -65,6 +63,17 @@ function createStoreWithElements(count = 3): AppStore {
 // ═══════════════════════════════════════
 
 describe('addElement', () => {
+  it('band-native element carries no legacy x/y and passes validation (#107)', () => {
+    const store = new AppStore();
+    addElement(store, 'text');
+    const el = store.state.elements[0];
+    expect(el.x).toBeUndefined();
+    expect(el.y).toBeUndefined();
+    const json = JSON.parse(exportTemplateJson(store));
+    const v = validateTemplate(json);
+    expect(v.valid).toBe(true);
+  });
+
   it('adds a text element', () => {
     const store = new AppStore();
     const id = addElement(store, 'text', 10, 20);
@@ -159,41 +168,6 @@ describe('selectElement', () => {
     selectElement(store, null);
 
     expect(store.state.selectedId).toBeNull();
-  });
-});
-
-describe('moveElement', () => {
-  it('moves element to new position', () => {
-    const store = createStoreWithElements();
-    const id = store.state.elements[0].id;
-
-    moveElement(store, id, 200, 300);
-
-    const el = store.state.elements.find((e) => e.id === id)!;
-    expect(el.x).toBe(200);
-    expect(el.y).toBe(300);
-  });
-
-  it('clamps to non-negative', () => {
-    const store = createStoreWithElements();
-    const id = store.state.elements[0].id;
-
-    moveElement(store, id, -50, -100);
-
-    const el = store.state.elements.find((e) => e.id === id)!;
-    expect(el.x).toBe(0);
-    expect(el.y).toBe(0);
-  });
-
-  it('does not move locked elements', () => {
-    const store = createStoreWithElements();
-    const id = store.state.elements[0].id;
-    toggleLock(store, id);
-
-    moveElement(store, id, 999, 999);
-
-    const el = store.state.elements.find((e) => e.id === id)!;
-    expect(el.x).not.toBe(999);
   });
 });
 
@@ -443,31 +417,6 @@ describe('deleteSelected', () => {
 // NUDGE
 // ═══════════════════════════════════════
 
-describe('nudgeElement', () => {
-  it('moves selected element by delta', () => {
-    const store = createStoreWithElements(1);
-    const origX = store.state.elements[0].x;
-    const origY = store.state.elements[0].y;
-    selectElement(store, store.state.elements[0].id);
-
-    nudgeElement(store, 5, 10);
-
-    expect(store.state.elements[0].x).toBe(origX + 5);
-    expect(store.state.elements[0].y).toBe(origY + 10);
-  });
-
-  it('clamps to non-negative', () => {
-    const store = createStoreWithElements(1);
-    store.dispatch((d) => { d.elements[0].x = 3; d.elements[0].y = 3; });
-    selectElement(store, store.state.elements[0].id);
-
-    nudgeElement(store, -10, -10);
-
-    expect(store.state.elements[0].x).toBe(0);
-    expect(store.state.elements[0].y).toBe(0);
-  });
-});
-
 // ═══════════════════════════════════════
 // PAGE
 // ═══════════════════════════════════════
@@ -517,32 +466,6 @@ describe('loadJsonData', () => {
 // ═══════════════════════════════════════
 // ALIGNMENT
 // ═══════════════════════════════════════
-
-describe('alignment', () => {
-  it('alignElements left aligns to minimum x', () => {
-    const store = new AppStore();
-    const id1 = addElement(store, 'text', 100, 0);
-    const id2 = addElement(store, 'text', 200, 0);
-    toggleMultiSelect(store, id1);
-    toggleMultiSelect(store, id2);
-
-    alignElements(store, 'left');
-
-    const els = store.state.elements;
-    expect(els[0].x).toBe(els[1].x);
-    expect(els[0].x).toBe(100); // aligned to minimum
-  });
-
-  it('needs at least 2 elements', () => {
-    const store = createStoreWithElements(1);
-    selectElement(store, store.state.elements[0].id);
-    const origX = store.state.elements[0].x;
-
-    alignElements(store, 'left');
-
-    expect(store.state.elements[0].x).toBe(origX); // unchanged
-  });
-});
 
 // ═══════════════════════════════════════
 // SNAP TO GRID

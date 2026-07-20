@@ -36,8 +36,8 @@ import { tagAction } from './middleware';
 export function addElement(
   store: AppStore,
   type: ElementType,
-  x: number,
-  y: number,
+  x?: number,
+  y?: number,
 ): string {
   const id = nanoid(10);
   const defaults = ELEMENT_DEFAULTS[type];
@@ -167,23 +167,6 @@ export function selectElement(store: AppStore, id: string | null): void {
   }, { name: 'selectElement', undoable: false }));
 }
 
-/** Move an element to new position */
-export function moveElement(
-  store: AppStore,
-  id: string,
-  x: number,
-  y: number,
-): void {
-  store.dispatch(tagAction((draft) => {
-    const el = draft.elements.find((e) => e.id === id);
-    if (el && !el.locked) {
-      el.x = Math.max(0, x);
-      el.y = Math.max(0, y);
-      draft.template.isDirty = true;
-    }
-  }, { name: 'moveElement', undoable: true, batchKey: `move-${id}` }));
-}
-
 /** Resize an element */
 export function resizeElement(
   store: AppStore,
@@ -237,8 +220,8 @@ export function duplicateElement(store: AppStore, id: string): void {
     const clone = structuredClone(current(el)) as CanvasElement;
     clone.id = nanoid(10);
     clone.name = `${el.name}_copy`;
-    clone.x += 20;
-    clone.y += 20;
+    if (clone.x != null) clone.x += 20;
+    if (clone.y != null) clone.y += 20;
     clone.zIndex = draft.elements.length;
 
     draft.elements.push(clone);
@@ -529,8 +512,8 @@ export function pasteElements(store: AppStore): void {
       const clone = structuredClone(current(orig)) as CanvasElement;
       clone.id = nanoid(10);
       clone.name = `${orig.name}_paste`;
-      clone.x += 15;
-      clone.y += 15;
+      if (clone.x != null) clone.x += 15;
+      if (clone.y != null) clone.y += 15;
       clone.zIndex = draft.elements.length;
       draft.elements.push(clone);
       newIds.push(clone.id);
@@ -540,119 +523,6 @@ export function pasteElements(store: AppStore): void {
     draft.multiSelect = newIds.length > 1 ? newIds : [];
     draft.template.isDirty = true;
   });
-}
-
-// ═══════════════════════════════════════
-// ALIGNMENT ACTIONS
-// ═══════════════════════════════════════
-
-type AlignType = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
-type DistributeType = 'horizontal' | 'vertical';
-
-/** Align selected elements */
-export function alignElements(store: AppStore, alignment: AlignType): void {
-  const ids = getSelectedIds(store);
-  if (ids.length < 2) return;
-
-  store.dispatch((draft) => {
-    const els = draft.elements.filter((e) => ids.includes(e.id));
-    if (els.length < 2) return;
-
-    switch (alignment) {
-      case 'left': {
-        const minX = Math.min(...els.map((e) => e.x));
-        els.forEach((e) => { e.x = minX; });
-        break;
-      }
-      case 'right': {
-        const maxRight = Math.max(...els.map((e) => e.x + e.w));
-        els.forEach((e) => { e.x = maxRight - e.w; });
-        break;
-      }
-      case 'center': {
-        const minX = Math.min(...els.map((e) => e.x));
-        const maxRight = Math.max(...els.map((e) => e.x + e.w));
-        const cx = (minX + maxRight) / 2;
-        els.forEach((e) => { e.x = cx - e.w / 2; });
-        break;
-      }
-      case 'top': {
-        const minY = Math.min(...els.map((e) => e.y));
-        els.forEach((e) => { e.y = minY; });
-        break;
-      }
-      case 'bottom': {
-        const maxBottom = Math.max(...els.map((e) => e.y + e.h));
-        els.forEach((e) => { e.y = maxBottom - e.h; });
-        break;
-      }
-      case 'middle': {
-        const minY = Math.min(...els.map((e) => e.y));
-        const maxBottom = Math.max(...els.map((e) => e.y + e.h));
-        const cy = (minY + maxBottom) / 2;
-        els.forEach((e) => { e.y = cy - e.h / 2; });
-        break;
-      }
-    }
-    draft.template.isDirty = true;
-  });
-}
-
-/** Distribute selected elements evenly */
-export function distributeElements(store: AppStore, direction: DistributeType): void {
-  const ids = getSelectedIds(store);
-  if (ids.length < 3) return;
-
-  store.dispatch((draft) => {
-    const els = draft.elements
-      .filter((e) => ids.includes(e.id))
-      .sort((a, b) => (direction === 'horizontal' ? a.x - b.x : a.y - b.y));
-
-    if (els.length < 3) return;
-
-    if (direction === 'horizontal') {
-      const first = els[0].x;
-      const last = els[els.length - 1].x + els[els.length - 1].w;
-      const totalW = els.reduce((s, e) => s + e.w, 0);
-      const gap = (last - first - totalW) / (els.length - 1);
-      let cx = first;
-      for (const el of els) {
-        el.x = cx;
-        cx += el.w + gap;
-      }
-    } else {
-      const first = els[0].y;
-      const last = els[els.length - 1].y + els[els.length - 1].h;
-      const totalH = els.reduce((s, e) => s + e.h, 0);
-      const gap = (last - first - totalH) / (els.length - 1);
-      let cy = first;
-      for (const el of els) {
-        el.y = cy;
-        cy += el.h + gap;
-      }
-    }
-    draft.template.isDirty = true;
-  });
-}
-
-// ═══════════════════════════════════════
-// NUDGE ACTIONS (Arrow Keys)
-// ═══════════════════════════════════════
-
-/** Nudge selected element by delta */
-export function nudgeElement(store: AppStore, dx: number, dy: number): void {
-  const ids = getSelectedIds(store);
-  if (ids.length === 0) return;
-
-  store.dispatch(tagAction((draft) => {
-    for (const el of draft.elements) {
-      if (ids.includes(el.id) && !el.locked) {
-        el.x = Math.max(0, el.x + dx);
-        el.y = Math.max(0, el.y + dy);
-      }
-    }
-    draft.template.isDirty = true;
-  }, { name: 'nudgeElement', undoable: true, batchKey: 'nudge' }));
 }
 
 // ═══════════════════════════════════════
@@ -974,7 +844,7 @@ export function addElementToCell(
 ): void {
   const band = store.state.bands[bandIdx];
   if (!band?.rows[rowIdx]?.columns[colIdx]) return;
-  const id = addElement(store, type, 0, 0); // pool + selection (geometry unused in band mode)
+  const id = addElement(store, type); // pool + selection (no legacy x/y, #107)
   store.dispatch(tagAction((draft) => {
     const el = draft.elements.find((e) => e.id === id);
     if (el) el.role = band.role;
@@ -991,7 +861,7 @@ export function addElementToCell(
  * is inserted at its BAND_ORDER position so document order stays canonical.
  */
 export function addElementToNewBand(store: AppStore, type: ElementType, role: ElementRoleType): void {
-  const id = addElement(store, type, 0, 0); // pool + selection (undo point)
+  const id = addElement(store, type); // pool + selection (undo point; no legacy x/y, #107)
   store.dispatch(tagAction((draft) => {
     const el = draft.elements.find((e) => e.id === id);
     if (el) el.role = role;

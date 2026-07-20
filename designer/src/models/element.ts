@@ -44,8 +44,13 @@ export interface BaseElement {
   role: ElementRoleType;
 
   // Position & size (in points)
-  x: number;
-  y: number;
+  /** @deprecated legacy free-canvas coordinate (#107) — carried only by
+   *  elements imported from pre-band templates; elementsToBands reads it to
+   *  reconstruct band structure. Band-created elements omit it. Nothing else
+   *  may read x/y. */
+  x?: number;
+  /** @deprecated see x — legacy import only (#107). */
+  y?: number;
   w: number;
   h: number;
 

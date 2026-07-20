@@ -520,83 +520,27 @@ describe('Pagination Service', () => {
   });
 
   // ═══════════════════════════════════════
-  // DYNAMIC FOOTER POSITIONING
+  // DYNAMIC FOOTER — retired (#107)
   // ═══════════════════════════════════════
 
-  describe('dynamic footer positioning', () => {
-    function createSummaryAt(y: number) {
-      return {
-        id: 'summary-1',
-        type: 'text' as const,
-        name: 'GrandTotal',
-        role: 'summary' as const,
-        x: 20, y, w: 500, h: 40,
-        zIndex: 5,
-        locked: false,
-        visible: true,
-        content: 'Total',
-        fontSize: 12,
-        fontWeight: 'bold' as const,
-        color: '#333',
-        textAlign: 'right' as const,
-      };
-    }
-
-    it('sets dynamicY on summary/footer elements when enabled', () => {
+  describe('dynamic footer machinery retired (#107)', () => {
+    it('PageElement carries no dynamicY and PageData no tableEndY (band-flow preview)', () => {
       const items = Array.from({ length: 3 }, (_, i) => ({ name: `Item ${i}` }));
       const state = createMockState({
-        elements: [
-          createHeaderElement(),
-          createTableElement('items'),
-          createSummaryAt(700),
-          createFooterElement(),
-        ],
+        elements: [createTableElement('items')],
         jsonData: { items },
-        pagination: {
-          ...createDefaultPagination(),
-          mode: 'rows',
-          rowsPerPage: 10,
-          dynamicFooter: true,
-          dynamicFooterGap: 16,
-        },
+        pagination: { ...createDefaultPagination(), mode: 'rows', rowsPerPage: 10 },
       });
-      const result = finalizePagination(computePagination(state), state);
-      const page1 = result.pagesData[0];
-
-      // Find summary element in page data
-      const summaryEl = page1.elements.find((e) => e.element.role === 'summary');
-      expect(summaryEl).toBeDefined();
-      // dynamicY should be set (repositioned closer to table end)
-      if (summaryEl && summaryEl.dynamicY !== undefined) {
-        expect(summaryEl.dynamicY).toBeLessThan(700); // moved up from original Y=700
+      const result = computePagination(state);
+      const page1 = result.pagesData[0] as unknown as Record<string, unknown>;
+      expect(page1.tableEndY).toBeUndefined();
+      for (const pe of result.pagesData[0].elements) {
+        expect((pe as unknown as Record<string, unknown>).dynamicY).toBeUndefined();
       }
     });
 
-    it('does NOT set dynamicY when dynamicFooter is false', () => {
+    it('legacy dynamicFooter config values are tolerated as no-ops', () => {
       const items = Array.from({ length: 3 }, (_, i) => ({ name: `Item ${i}` }));
-      const state = createMockState({
-        elements: [
-          createTableElement('items'),
-          createSummaryAt(700),
-        ],
-        jsonData: { items },
-        pagination: {
-          ...createDefaultPagination(),
-          mode: 'rows',
-          rowsPerPage: 10,
-          dynamicFooter: false,
-        },
-      });
-      const result = computePagination(state);
-      const page1 = result.pagesData[0];
-
-      const summaryEl = page1.elements.find((e) => e.element.role === 'summary');
-      expect(summaryEl).toBeDefined();
-      expect(summaryEl!.dynamicY).toBeUndefined();
-    });
-
-    it('provides tableEndY for each page', () => {
-      const items = Array.from({ length: 25 }, (_, i) => ({ name: `Item ${i}` }));
       const state = createMockState({
         elements: [createTableElement('items')],
         jsonData: { items },
@@ -605,41 +549,11 @@ describe('Pagination Service', () => {
           mode: 'rows',
           rowsPerPage: 10,
           dynamicFooter: true,
+          dynamicFooterGap: 30,
         },
       });
       const result = computePagination(state);
-
-      for (const page of result.pagesData) {
-        expect(typeof page.tableEndY).toBe('number');
-        expect(page.tableEndY).toBeGreaterThan(0);
-      }
-    });
-
-    it('respects dynamicFooterGap spacing', () => {
-      const items = Array.from({ length: 3 }, (_, i) => ({ name: `Item ${i}` }));
-      const gap = 30;
-      const state = createMockState({
-        elements: [
-          createTableElement('items'),
-          createSummaryAt(700),
-        ],
-        jsonData: { items },
-        pagination: {
-          ...createDefaultPagination(),
-          mode: 'rows',
-          rowsPerPage: 10,
-          dynamicFooter: true,
-          dynamicFooterGap: gap,
-        },
-      });
-      const result = computePagination(state);
-      const page1 = result.pagesData[0];
-
-      const summaryEl = page1.elements.find((e) => e.element.role === 'summary');
-      if (summaryEl?.dynamicY !== undefined) {
-        // dynamicY should be >= tableEndY + gap
-        expect(summaryEl.dynamicY).toBeGreaterThanOrEqual(page1.tableEndY + gap);
-      }
+      expect(result.totalPages).toBeGreaterThan(0);
     });
   });
 
@@ -1311,31 +1225,6 @@ describe('Pagination Service', () => {
       for (const page of result.pagesData) {
         expect(groupBoundaries.has(page.tableRowStart)).toBe(true);
       }
-    });
-  });
-
-  describe('v3.1 regression: tableEndY accuracy', () => {
-    it('tableEndY uses actual row heights when rowHeights provided (height-based)', () => {
-      // With height-based mode, tableEndY should reflect actual content height
-      // Even in row-based mode (which doesn't pass rowHeights), tableEndY uses baseRowHeight
-      const items = Array.from({ length: 5 }, (_, i) => ({ name: `Item ${i}` }));
-      const state = createMockState({
-        elements: [createTableElement('items')],
-        jsonData: { items },
-        pagination: {
-          ...createDefaultPagination(),
-          mode: 'rows',
-          rowsPerPage: 10,
-          baseRowHeight: 24,
-          orphanWidowMinRows: 0,
-        },
-      });
-
-      const result = finalizePagination(computePagination(state), state);
-      const page1 = result.pagesData[0];
-
-      // tableEndY = tableEl.y(200) + tableHeader(28) + 5 rows * 24pt = 348
-      expect(page1.tableEndY).toBe(200 + 28 + 5 * 24);
     });
   });
 

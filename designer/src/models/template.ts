@@ -32,11 +32,15 @@ export interface PaginationConfig {
   /** When true, footer & summary elements are repositioned relative to where
    *  the table content actually ends on each page, eliminating large gaps.
    *  Default: true */
-  dynamicFooter: boolean;
+  /** @deprecated no-op since #107 — the sim preview is band-flow, so a footer
+   *  follows the table naturally (same as BFO print). Kept for saved-template
+   *  compatibility only. */
+  dynamicFooter?: boolean;
 
   /** Spacing in pt between table end and the first summary/footer element.
-   *  Only effective when dynamicFooter is true. Default: 16 */
-  dynamicFooterGap: number;
+   *  Only effective when dynamicFooter is true. Default: 16
+   *  @deprecated no-op since #107 (see dynamicFooter). */
+  dynamicFooterGap?: number;
 
   // ─── Page Break Controls (v2.2) ───
 
@@ -127,8 +131,6 @@ export function createDefaultPagination(): PaginationConfig {
     showContinuationHeader: true,
     orphanWidowMinRows: 2,
     summaryBreak: 'auto',
-    dynamicFooter: true,
-    dynamicFooterGap: 16,
     forceBreakBeforeRows: [],
     keepTogetherField: '',
     headerMode: 'all',

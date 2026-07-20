@@ -30,7 +30,6 @@ import {
   cutElements,
   pasteElements,
   selectElement,
-  nudgeElement,
   bringForward,
   sendBackward,
   bringToFront,
@@ -73,23 +72,6 @@ export function registerKeyboardShortcuts(store: AppStore): () => void {
     if (key === 'escape') {
       selectElement(store, null);
       store.dispatch((d) => { d.multiSelect = []; });
-      return;
-    }
-
-    // ─── Arrow Keys → Nudge ───
-    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
-      const ids = getSelectedIds(store);
-      if (ids.length === 0) return;
-
-      e.preventDefault();
-      const step = e.shiftKey ? 10 : 1;
-
-      switch (key) {
-        case 'arrowup':    nudgeElement(store, 0, -step); break;
-        case 'arrowdown':  nudgeElement(store, 0, step); break;
-        case 'arrowleft':  nudgeElement(store, -step, 0); break;
-        case 'arrowright': nudgeElement(store, step, 0); break;
-      }
       return;
     }
 

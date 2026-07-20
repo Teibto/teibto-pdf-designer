@@ -87,11 +87,12 @@ export function validateElement(el: unknown, index: number): ValidationResult {
     errors.push({ path: `${prefix}.role`, message: `Invalid role: ${e.role}`, code: 'INVALID_ROLE' });
   }
 
-  // Numeric bounds
-  if (typeof e.x !== 'number' || !isFinite(e.x)) {
+  // Numeric bounds — x/y are optional legacy-import coords (#107): validate
+  // only when present so band-created elements (no x/y) pass.
+  if (e.x !== undefined && (typeof e.x !== 'number' || !isFinite(e.x))) {
     errors.push({ path: `${prefix}.x`, message: 'x must be a finite number', code: 'INVALID_NUMBER' });
   }
-  if (typeof e.y !== 'number' || !isFinite(e.y)) {
+  if (e.y !== undefined && (typeof e.y !== 'number' || !isFinite(e.y))) {
     errors.push({ path: `${prefix}.y`, message: 'y must be a finite number', code: 'INVALID_NUMBER' });
   }
   if (typeof e.w !== 'number' || (e.w as number) < 1) {

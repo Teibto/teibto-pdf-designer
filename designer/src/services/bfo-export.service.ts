@@ -167,8 +167,8 @@ function buildBfoCss(hasEmbeddedThaiFont: boolean): string {
 /** Bounding-box height (pt) of a group of elements, with breathing room */
 function roleHeight(els: CanvasElement[], minHeight: number): number {
   if (els.length === 0) return 0;
-  const top = Math.min(...els.map((e) => e.y));
-  const bottom = Math.max(...els.map((e) => e.y + e.h));
+  const top = Math.min(...els.map((e) => e.y ?? 0));
+  const bottom = Math.max(...els.map((e) => (e.y ?? 0) + e.h));
   return Math.max(Math.ceil(bottom - top) + 8, minHeight);
 }
 

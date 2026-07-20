@@ -185,12 +185,36 @@ export class PldPreviewModal extends LitElement {
       flex-shrink: 0;
       transform-origin: top center;
       overflow: hidden;
+      /* mirror BFO body padding="0.5in" (36pt) so flow position ≈ print */
+      padding: 36px;
+      box-sizing: border-box;
     }
 
-    /* ─── Element renders (simplified for preview) ─── */
-    .el-preview {
-      position: absolute;
+    /* ─── Band-flow layout (#107): bands stack like BFO print ─── */
+    .flow-row {
+      display: flex;
+      width: 100%;
+      align-items: flex-start;
+    }
+
+    .flow-col {
       overflow: hidden;
+      min-width: 0;
+    }
+
+    .flow-el {
+      position: relative;
+    }
+
+    .watermark-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 1;
     }
 
     .el-text {
@@ -249,12 +273,11 @@ export class PldPreviewModal extends LitElement {
       line-height: 1.5;
     }
 
-    /* ─── Page break indicators ─── */
+    /* ─── Page break indicators (in-flow, #107) ─── */
     .break-indicator {
-      position: absolute;
-      left: 0;
-      right: 0;
       display: flex;
+      width: 100%;
+      margin: 2px 0;
       align-items: center;
       gap: 6px;
       z-index: 9999;
@@ -287,8 +310,10 @@ export class PldPreviewModal extends LitElement {
     }
 
     .continuation-badge {
-      position: absolute;
-      right: 8px;
+      align-self: flex-end;
+      margin-left: auto;
+      width: fit-content;
+      display: block;
       font-size: 7px;
       font-weight: 600;
       letter-spacing: 0.5px;
@@ -440,96 +465,100 @@ export class PldPreviewModal extends LitElement {
   }
 
   private _renderPageElements(state: Readonly<AppState>, pageNum: number) {
-    const elements = state.elements;
     const totalPages = this.totalPages;
-
-    // Get pagination data for dynamicY support
     const paginationResult = finalizePagination(computePagination(state), state);
     const pageData = paginationResult.pagesData.find((p) => p.pageNumber === pageNum);
 
-    // Build dynamicY map from pagination engine
-    const dynamicYMap = new Map<string, number>();
+    // Per-element visibility from the pagination engine (headerMode, roles)
+    const visibleIds = new Set<string>();
     if (pageData) {
       for (const pe of pageData.elements) {
-        if (pe.dynamicY !== undefined) {
-          dynamicYMap.set(pe.element.id, pe.dynamicY);
-        }
+        if (pe.visible) visibleIds.add(pe.element.id);
+      }
+    } else {
+      for (const el of state.elements) {
+        const role = ELEMENT_ROLES[el.role];
+        const show = role.showOnPages === 'all'
+          || (role.showOnPages === 'first' && pageNum === 1)
+          || (role.showOnPages === 'last' && pageNum === totalPages);
+        if (show) visibleIds.add(el.id);
       }
     }
 
-    // Filter elements visible on this page
-    // Use pagination engine's visibility (respects headerMode, role overrides)
-    let visible: CanvasElement[];
-    if (pageData) {
-      visible = pageData.elements
-        .filter((pe) => pe.visible)
-        .map((pe) => pe.element);
-    } else {
-      visible = elements.filter((el: CanvasElement) => {
-        const role = ELEMENT_ROLES[el.role];
-        switch (role.showOnPages) {
-          case 'all': return true;
-          case 'first': return pageNum === 1;
-          case 'last': return pageNum === totalPages;
-          default: return true;
-        }
-      });
-    }
+    const byId = new Map(state.elements.map((e) => [e.id, e]));
+    const { before, after } = this._buildBreakIndicators(state, pageNum, pageData);
 
-    const sorted = [...visible].sort((a, b) => a.zIndex - b.zIndex);
-
-    // Build break indicators
-    const indicators = this._buildBreakIndicators(state, pageNum, pageData);
-
+    // Band-flow (#107): stack bands top-to-bottom exactly like the BFO export
+    // prints them — the sim preview no longer reads element x/y. A footer
+    // after the table follows it naturally in flow (old dynamicFooter shift
+    // machinery retired with it).
     return html`
-      ${indicators}
-      ${sorted.map((el) => {
-      const opacity = el.role === 'watermark' ? 0.15 : 1;
-      // Apply dynamicY for summary/footer elements
-      const effectiveY = dynamicYMap.get(el.id) ?? el.y;
-      return html`
-        <div class="el-preview" style="
-          left: ${el.x}px; top: ${effectiveY}px;
-          width: ${el.w}px; height: ${el.h}px;
-          opacity: ${opacity};
-          z-index: ${el.zIndex};
-        ">
-          ${this._renderElement(el, state.jsonData, pageNum)}
-        </div>
-      `;
-    })}`;
+      ${state.bands.map((band) => {
+        const resolve = (ids: string[]): CanvasElement[] =>
+          ids.map((id) => byId.get(id))
+            .filter((el): el is CanvasElement => !!el && visibleIds.has(el.id));
+
+        if (band.role === 'watermark') {
+          const els = band.rows.flatMap((r) => r.columns.flatMap((c) => resolve(c.elementIds)));
+          if (els.length === 0) return nothing;
+          return html`<div class="watermark-overlay">
+            ${els.map((el) => this._renderElement(el, state.jsonData, pageNum))}
+          </div>`;
+        }
+
+        const rowsHtml = band.rows.map((row) => {
+          const anyVisible = row.columns.some((c) => resolve(c.elementIds).length > 0);
+          if (!anyVisible) return nothing;
+          return html`
+            <div class="flow-row" style="${row.height != null ? `min-height: ${row.height}px;` : ''}">
+              ${row.columns.map((col) => html`
+                <div class="flow-col" style="width: ${col.widthPct}%;">
+                  ${resolve(col.elementIds).map((el) => html`
+                    <div class="flow-el">${this._renderElement(el, state.jsonData, pageNum)}</div>
+                  `)}
+                </div>
+              `)}
+            </div>
+          `;
+        });
+
+        if (band.role === 'table') {
+          return html`${before}${rowsHtml}${after}`;
+        }
+        return rowsHtml;
+      })}
+    `;
   }
 
   /**
-   * [UI-5] Build visual break indicators for the preview page.
-   * Shows force break markers, continuation badges, and page-end lines.
+   * [UI-5] Break indicators, now in-flow (#107): `before` renders above the
+   * table band (continuation badge + force-break), `after` below it
+   * (page-end line) — no y coordinates involved.
    */
   private _buildBreakIndicators(
     state: Readonly<AppState>,
     pageNum: number,
     pageData?: import('../../services/pagination.service').PageData,
-  ) {
-    if (!pageData) return nothing;
+  ): { before: unknown; after: unknown } {
+    const none = { before: nothing, after: nothing };
+    if (!pageData) return none;
 
     const tableEl = state.elements.find((el) => el.type === 'table' && el.role === 'table');
-    if (!tableEl) return nothing;
+    if (!tableEl) return none;
 
     const forceBreaks = new Set(state.pagination.forceBreakBeforeRows ?? []);
-    const indicators: ReturnType<typeof html>[] = [];
+    const before: ReturnType<typeof html>[] = [];
+    const after: ReturnType<typeof html>[] = [];
 
-    // Continuation badge (top-right of table area)
     if (pageData.isContinuation) {
-      indicators.push(html`
-        <div class="continuation-badge" style="top: ${tableEl.y - 2}px;">
-          ↑ cont'd from page ${pageNum - 1}
-        </div>
+      before.push(html`
+        <div class="continuation-badge">↑ cont'd from page ${pageNum - 1}</div>
       `);
     }
 
-    // Force break indicator at top of page (if this page starts at a force break)
     if (forceBreaks.has(pageData.tableRowStart) && pageData.tableRowStart > 0) {
-      indicators.push(html`
-        <div class="break-indicator force-break" style="top: ${tableEl.y - 6}px;">
+      before.push(html`
+        <div class="break-indicator force-break">
           <span class="break-line"></span>
           <span class="break-label">✂ force break before row ${pageData.tableRowStart + 1}</span>
           <span class="break-line"></span>
@@ -537,10 +566,9 @@ export class PldPreviewModal extends LitElement {
       `);
     }
 
-    // Page-end indicator (dashed line at tableEndY when more pages follow)
     if (pageNum < this.totalPages && !pageData.isSummaryPage && pageData.tableRowEnd > pageData.tableRowStart) {
-      indicators.push(html`
-        <div class="break-indicator page-end" style="top: ${pageData.tableEndY + 2}px;">
+      after.push(html`
+        <div class="break-indicator page-end">
           <span class="break-line"></span>
           <span class="break-label">page ${pageNum} ends — row ${pageData.tableRowEnd} ↓</span>
           <span class="break-line"></span>
@@ -548,7 +576,7 @@ export class PldPreviewModal extends LitElement {
       `);
     }
 
-    return indicators;
+    return { before, after };
   }
 
   private _renderElement(el: CanvasElement, jsonData: Record<string, unknown> | null, pageNum: number) {
