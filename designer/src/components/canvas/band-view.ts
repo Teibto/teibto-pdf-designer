@@ -27,6 +27,7 @@ import {
   addBandRow,
   removeBandRow,
   moveBandRow,
+  setRowHeight,
   splitColumn,
   mergeColumn,
   moveElementToCell,
@@ -72,6 +73,16 @@ export class PldBandView extends LitElement {
     .rowwrap { display: flex; align-items: stretch; gap: 6px; }
     .row { display: flex; gap: 8px; flex: 1; }
     .rowtools { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
+    .row-h {
+      width: 48px;
+      background: var(--color-bg-deep, #0a0b10);
+      border: 1px solid var(--color-border, #2a2c3a);
+      border-radius: 4px;
+      color: var(--color-text-dim, #8a8ca0);
+      font-size: 10px;
+      padding: 2px 4px;
+      font-family: inherit;
+    }
     .col-resizer {
       flex: 0 0 6px;
       cursor: col-resize;
@@ -198,6 +209,13 @@ export class PldBandView extends LitElement {
                       `)}
                     </div>
                     <div class="rowtools">
+                      ${band.role === 'header' || band.role === 'footer' ? html`
+                        <input class="row-h" type="number" min="4" step="1"
+                          title="ความสูงแถว (pt) — คุมความสูง header/footer ที่พิมพ์; ว่าง = auto"
+                          placeholder="auto"
+                          .value=${row.height != null ? String(Math.round(row.height)) : ''}
+                          @change=${(e: Event) => setRowHeight(this.store, bi, ri, Number((e.target as HTMLInputElement).value))} />
+                      ` : nothing}
                       <button title="เลื่อนขึ้น" ?disabled=${ri === 0} @click=${() => moveBandRow(this.store, bi, ri, -1)}>↑</button>
                       <button title="เลื่อนลง" ?disabled=${ri === band.rows.length - 1} @click=${() => moveBandRow(this.store, bi, ri, 1)}>↓</button>
                       <button title="ลบแถว" @click=${() => removeBandRow(this.store, bi, ri)}>✕</button>

@@ -35,9 +35,18 @@ export function elementsToBands(
     if (inRole.length === 0) continue;
 
     const rows = groupIntoRows(inRole);
+    // y-slice partition (#107): each row's height spans its top up to the next
+    // row's top (last row: to the role bbox bottom), UNROUNDED — the heights
+    // telescope, so Σ heights === bbox and macro heights derived from bands
+    // stay byte-identical to the legacy element-bbox math.
+    const tops = rows.map((r) => Math.min(...r.map((e) => e.y)));
+    const bottom = Math.max(...inRole.map((e) => e.y + e.h));
     bands.push({
       role,
-      rows: rows.map((rowEls, ri) => buildRow(role, ri, rowEls)),
+      rows: rows.map((rowEls, ri) => {
+        const sliceEnd = ri + 1 < rows.length ? tops[ri + 1] : bottom;
+        return buildRow(role, ri, rowEls, Math.max(sliceEnd - tops[ri], 1));
+      }),
     });
   }
 
@@ -70,7 +79,7 @@ function groupIntoRows(els: readonly CanvasElement[]): CanvasElement[][] {
 }
 
 /** Build a row: sort its elements left-to-right, one column each, widths → 100%. */
-function buildRow(role: string, ri: number, rowEls: CanvasElement[]): BandRow {
+function buildRow(role: string, ri: number, rowEls: CanvasElement[], height: number): BandRow {
   const ordered = [...rowEls].sort((a, b) => (a.x - b.x) || (a.y - b.y));
   const widths = normalizeWidths(ordered.map((e) => e.w));
 
@@ -80,7 +89,7 @@ function buildRow(role: string, ri: number, rowEls: CanvasElement[]): BandRow {
     elementIds: [el.id],
   }));
 
-  return { id: `${role}-r${ri}`, columns };
+  return { id: `${role}-r${ri}`, columns, height };
 }
 
 /**

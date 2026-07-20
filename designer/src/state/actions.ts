@@ -865,6 +865,19 @@ export function addBandRow(store: AppStore, bandIdx: number, atIdx?: number): vo
   }, { name: 'addBandRow', undoable: true }));
 }
 
+/**
+ * Set a band row's height in pt (#107) — bands own vertical geometry, so this
+ * reaches the header/footer macro height directly (roleHeightFromBand).
+ * height <= 0 / NaN clears back to auto (content estimate on export).
+ */
+export function setRowHeight(store: AppStore, bandIdx: number, rowIdx: number, height: number): void {
+  store.dispatch(tagAction((draft) => {
+    const row = draft.bands[bandIdx]?.rows[rowIdx];
+    if (!row) return;
+    row.height = Number.isFinite(height) && height > 0 ? Math.max(4, height) : undefined;
+  }, { name: 'setRowHeight', undoable: true }));
+}
+
 /** Remove a row from a band. */
 export function removeBandRow(store: AppStore, bandIdx: number, rowIdx: number): void {
   store.dispatch(tagAction((draft) => {

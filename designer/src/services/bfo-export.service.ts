@@ -104,7 +104,7 @@ export function exportBfoXml(
   // Build body HTML (header/footer live in macros when useMacros)
   const bodyHtml = buildBfoBody(elements, recordType, useFreeMarker, state.pagination, useMacros, bands, byId);
 
-  const bodyAttrs = buildBodyAttrs(page, headerElements, footerElements, watermarkText);
+  const bodyAttrs = buildBodyAttrs(page, headerElements, footerElements, watermarkText, bands, byId);
 
   // Wrap in full BFO template
   return `<?xml version="1.0"?>
@@ -170,6 +170,34 @@ function roleHeight(els: CanvasElement[], minHeight: number): number {
   const top = Math.min(...els.map((e) => e.y));
   const bottom = Math.max(...els.map((e) => e.y + e.h));
   return Math.max(Math.ceil(bottom - top) + 8, minHeight);
+}
+
+/**
+ * Band-owned macro height (#107). Three tiers keep legacy output stable:
+ * - every row has a height → Σ heights (elementsToBands assigns telescoping
+ *   y-slices, so an unedited band is byte-identical to the bbox math);
+ * - NO row has a height (band persisted before #107) → legacy element bbox;
+ * - mixed (rows added in the band editor carry no height) → per-row: stored
+ *   height, else content estimate (tallest column = Σ stacked el.h).
+ */
+function roleHeightFromBand(
+  band: Band | undefined,
+  byId: Map<string, CanvasElement> | undefined,
+  els: CanvasElement[],
+  minHeight: number,
+): number {
+  if (!band || band.rows.length === 0 || band.rows.every((r) => r.height == null)) {
+    return roleHeight(els, minHeight);
+  }
+  const estimate = (r: Band['rows'][number]): number =>
+    Math.max(
+      12,
+      ...r.columns.map((c) =>
+        c.elementIds.reduce((sum, id) => sum + (byId?.get(id)?.h ?? 0), 0),
+      ),
+    );
+  const sum = band.rows.reduce((acc, r) => acc + (r.height ?? estimate(r)), 0);
+  return Math.max(Math.ceil(sum) + 8, minHeight);
 }
 
 /**
@@ -321,6 +349,8 @@ function buildBodyAttrs(
   headerElements: CanvasElement[],
   footerElements: CanvasElement[],
   watermarkText = '',
+  bands?: readonly Band[],
+  byId?: Map<string, CanvasElement>,
 ): string {
   const attrs: string[] = [];
 
@@ -329,12 +359,12 @@ function buildBodyAttrs(
 
   if (headerElements.length > 0) {
     attrs.push('header="nlheader"');
-    attrs.push(`header-height="${roleHeight(headerElements, 24)}pt"`);
+    attrs.push(`header-height="${roleHeightFromBand(bands?.find((b) => b.role === 'header'), byId, headerElements, 24)}pt"`);
   }
   if (footerElements.length > 0) {
     attrs.push('footer="nlfooter"');
     // extra room for the appended "Page X of Y" line
-    attrs.push(`footer-height="${roleHeight(footerElements, 20) + 14}pt"`);
+    attrs.push(`footer-height="${roleHeightFromBand(bands?.find((b) => b.role === 'footer'), byId, footerElements, 20) + 14}pt"`);
   }
 
   if (watermarkText) {

@@ -34,6 +34,16 @@ export interface BandColumn {
 export interface BandRow {
   id: string;
   columns: BandColumn[];
+  /**
+   * Row height in pt (#107) — bands own vertical geometry. elementsToBands
+   * assigns each row its y-slice (this row's top up to the next row's top,
+   * unrounded) so Σ heights over a band equals the legacy element bbox and
+   * header/footer macro heights stay byte-identical. Absent on rows saved
+   * before #107 and on rows added in the band editor: the exporter then falls
+   * back (whole-band bbox when NO row has a height; per-row content estimate
+   * when only some do).
+   */
+  height?: number;
 }
 
 /** A band = one role's region, an ordered stack of rows. */
