@@ -279,21 +279,12 @@ export class PldSidebarRight extends LitElement {
         </div>
       </div>
 
-      <!-- Position & Size -->
+      <!-- Size & flow order — X retired (#107): nothing reads el.x since the
+           band cutover. Y still orders legacy import/re-sync + roleHeight;
+           W/H still size single-col elements, tables and header/footer macros
+           (they retire in #107 slice 3 when bands own geometry). -->
       <div class="group">
-        <div class="group-title">Position & Size</div>
-        <div class="row">
-          <div class="field">
-            <label>X</label>
-            <input type="number" .value=${String(Math.round(el.x))}
-              @change=${(e: Event) => this._move(Number((e.target as HTMLInputElement).value), el.y)} />
-          </div>
-          <div class="field">
-            <label>Y</label>
-            <input type="number" .value=${String(Math.round(el.y))}
-              @change=${(e: Event) => this._move(el.x, Number((e.target as HTMLInputElement).value))} />
-          </div>
-        </div>
+        <div class="group-title">Size</div>
         <div class="row">
           <div class="field">
             <label>Width</label>
@@ -304,6 +295,13 @@ export class PldSidebarRight extends LitElement {
             <label>Height</label>
             <input type="number" .value=${String(Math.round(el.h))}
               @change=${(e: Event) => this._resize(el.w, Number((e.target as HTMLInputElement).value))} />
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Y (ลำดับแนวตั้ง/ความสูง band)</label>
+            <input type="number" .value=${String(Math.round(el.y))}
+              @change=${(e: Event) => this._move(el.x, Number((e.target as HTMLInputElement).value))} />
           </div>
         </div>
       </div>
