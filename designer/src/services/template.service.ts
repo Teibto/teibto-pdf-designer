@@ -144,6 +144,31 @@ export async function loadTemplate(
 }
 
 // ═══════════════════════════════════════
+// DUPLICATE
+// ═══════════════════════════════════════
+
+/**
+ * Duplicate a saved template under a new id, named "<name> (copy)" (#105).
+ * Deep-copies the stored record so later edits never bleed into the source.
+ */
+export async function duplicateTemplate(templateId: string): Promise<DocumentTemplate> {
+  const src = await get<DocumentTemplate>(`${TEMPLATE_PREFIX}${templateId}`);
+  if (!src) throw new Error(`Template not found: ${templateId}`);
+
+  const now = new Date().toISOString();
+  const copy: DocumentTemplate = {
+    ...structuredClone(src),
+    id: nanoid(10),
+    name: `${src.name} (copy)`,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await set(`${TEMPLATE_PREFIX}${copy.id}`, copy);
+  return copy;
+}
+
+// ═══════════════════════════════════════
 // DELETE
 // ═══════════════════════════════════════
 

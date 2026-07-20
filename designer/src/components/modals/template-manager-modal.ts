@@ -15,9 +15,18 @@ import {
   saveTemplate,
   loadTemplate,
   deleteTemplate,
+  duplicateTemplate,
   exportTemplateJson,
   importTemplateJson,
 } from '../../services/template.service';
+import {
+  isNetSuiteEnv,
+  listNsTemplates,
+  getNsTemplate,
+  duplicateNsTemplate,
+  type NsTemplate,
+} from '../../services/netsuite-adapter.service';
+import { elementsToBands } from '../../services/band-layout.service';
 import { getSampleTemplates } from '../../constants/sample-templates';
 import { clearPaginationCache } from '../../services/pagination.service';
 import { showToast } from '../shared/toast-notification';
@@ -32,8 +41,10 @@ export class PldTemplateManagerModal extends LitElement {
 
   @state() private savedTemplates: DocumentTemplate[] = [];
   @state() private sampleTemplates: DocumentTemplate[] = [];
-  @state() private activeTab: 'saved' | 'samples' | 'import' = 'saved';
+  @state() private nsTemplates: NsTemplate[] = [];
+  @state() private activeTab: 'saved' | 'samples' | 'netsuite' | 'import' = 'saved';
   @state() private loading = false;
+  @state() private nsLoading = false;
   @state() private importJson = '';
 
   static styles = css`
@@ -227,6 +238,7 @@ export class PldTemplateManagerModal extends LitElement {
     if (changed.has('open') && this.open) {
       await this._refresh();
       this.sampleTemplates = getSampleTemplates();
+      if (isNetSuiteEnv()) this._refreshNs();
     }
   }
 
@@ -234,6 +246,17 @@ export class PldTemplateManagerModal extends LitElement {
     this.loading = true;
     this.savedTemplates = await listTemplates();
     this.loading = false;
+  }
+
+  private async _refreshNs() {
+    this.nsLoading = true;
+    try {
+      this.nsTemplates = await listNsTemplates();
+    } catch (err) {
+      showToast(`Failed to list NetSuite templates: ${(err as Error).message}`, 'error');
+    } finally {
+      this.nsLoading = false;
+    }
   }
 
   render() {
@@ -257,6 +280,12 @@ export class PldTemplateManagerModal extends LitElement {
               @click=${() => (this.activeTab = 'samples')}>
               ★ Samples
             </button>
+            ${isNetSuiteEnv() ? html`
+              <button class="tab ${this.activeTab === 'netsuite' ? 'active' : ''}"
+                @click=${() => (this.activeTab = 'netsuite')}>
+                🌐 NetSuite (${this.nsTemplates.length})
+              </button>
+            ` : nothing}
             <button class="tab ${this.activeTab === 'import' ? 'active' : ''}"
               @click=${() => (this.activeTab = 'import')}>
               ⟨/⟩ Import / Export
@@ -265,6 +294,7 @@ export class PldTemplateManagerModal extends LitElement {
 
           ${this.activeTab === 'saved' ? (this.loading ? html`<p style="text-align:center;padding:24px;color:var(--color-text-muted)">Loading...</p>` : this._renderSaved()) : nothing}
           ${this.activeTab === 'samples' ? this._renderSamples() : nothing}
+          ${this.activeTab === 'netsuite' ? (this.nsLoading ? html`<p style="text-align:center;padding:24px;color:var(--color-text-muted)">Loading...</p>` : this._renderNetsuite()) : nothing}
           ${this.activeTab === 'import' ? this._renderImportExport() : nothing}
         </div>
 
@@ -295,6 +325,7 @@ export class PldTemplateManagerModal extends LitElement {
             <div class="tpl-elements">${tpl.elements.length} elements</div>
             <div class="tpl-actions">
               <button class="tpl-btn primary" @click=${() => this._loadTemplate(tpl.id)}>Load</button>
+              <button class="tpl-btn" @click=${() => this._duplicateTemplate(tpl.id)}>Duplicate</button>
               <button class="tpl-btn" @click=${() => this._exportSingle(tpl)}>Export</button>
               <button class="tpl-btn danger" @click=${() => this._deleteTemplate(tpl.id, tpl.name)}>Delete</button>
             </div>
@@ -316,6 +347,31 @@ export class PldTemplateManagerModal extends LitElement {
             <div class="tpl-elements">${tpl.elements.length} elements • Includes sample data</div>
             <div class="tpl-actions">
               <button class="tpl-btn primary">Load Sample</button>
+            </div>
+          </div>
+        `)}
+      </div>
+    `;
+  }
+
+  private _renderNetsuite() {
+    if (this.nsTemplates.length === 0) {
+      return html`<div class="empty-msg">No templates saved in NetSuite yet.<br />Use "Save to NetSuite" in the BFO Export dialog.</div>`;
+    }
+
+    return html`
+      <div class="template-grid">
+        ${this.nsTemplates.map((tpl) => html`
+          <div class="template-card">
+            <div class="tpl-name">${tpl.isDefault ? '★ ' : ''}${tpl.name}</div>
+            <div class="tpl-meta">
+              <span>Record type: ${tpl.rectype || '—'}${tpl.isDefault ? ' (default)' : ''}</span>
+              <span>Modified: ${tpl.modified}</span>
+            </div>
+            <div class="tpl-elements">NetSuite ID: ${tpl.id}</div>
+            <div class="tpl-actions">
+              <button class="tpl-btn primary" @click=${() => this._loadNsTemplate(tpl.id)}>Load</button>
+              <button class="tpl-btn" @click=${() => this._duplicateNsTemplate(tpl.id)}>Duplicate</button>
             </div>
           </div>
         `)}
@@ -383,6 +439,65 @@ export class PldTemplateManagerModal extends LitElement {
     });
     showToast(`Loaded sample: ${tpl.name}`, 'success');
     this._close();
+  }
+
+  private async _duplicateTemplate(id: string) {
+    try {
+      const copy = await duplicateTemplate(id);
+      await this._refresh();
+      showToast(`Duplicated as "${copy.name}"`, 'success');
+    } catch (err) {
+      showToast(`Duplicate failed: ${(err as Error).message}`, 'error');
+    }
+  }
+
+  private async _duplicateNsTemplate(id: string) {
+    try {
+      const copy = await duplicateNsTemplate(id);
+      await this._refreshNs();
+      showToast(`Duplicated in NetSuite as "${copy.name}" (ID: ${copy.id})`, 'success');
+    } catch (err) {
+      showToast(`Duplicate failed: ${(err as Error).message}`, 'error');
+    }
+  }
+
+  /**
+   * Load a NetSuite template record into the designer. Sets template.id to the
+   * NS record id so "Save to NetSuite" overwrites this record instead of
+   * creating a new one. Keeps the currently loaded record data (jsonData).
+   */
+  private async _loadNsTemplate(id: string) {
+    try {
+      const src = await getNsTemplate(id);
+      let data: Partial<DocumentTemplate>;
+      try {
+        data = JSON.parse(src.data);
+      } catch {
+        throw new Error('Template has no designer data (XML-only record) — it cannot be edited here');
+      }
+      if (!data.elements) {
+        throw new Error('Template has no designer data (XML-only record) — it cannot be edited here');
+      }
+
+      clearPaginationCache();
+      this.store.dispatch((draft) => {
+        draft.elements = data.elements!;
+        draft.bands = data.bands ?? elementsToBands(data.elements!);
+        draft.copies = data.copies ?? null;
+        if (data.page) draft.page = { ...data.page };
+        if (data.pagination) draft.pagination = { ...draft.pagination, ...data.pagination };
+        draft.template.id = src.id;
+        draft.template.name = src.name;
+        draft.template.isDirty = false;
+        draft.selectedId = null;
+        draft.multiSelect = [];
+        draft.currentPage = 1;
+      });
+      showToast(`Loaded from NetSuite: ${src.name}`, 'success');
+      this._close();
+    } catch (err) {
+      showToast(`Load failed: ${(err as Error).message}`, 'error');
+    }
   }
 
   private async _deleteTemplate(id: string, name: string) {
