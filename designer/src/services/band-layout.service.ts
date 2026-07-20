@@ -39,8 +39,8 @@ export function elementsToBands(
     // row's top (last row: to the role bbox bottom), UNROUNDED — the heights
     // telescope, so Σ heights === bbox and macro heights derived from bands
     // stay byte-identical to the legacy element-bbox math.
-    const tops = rows.map((r) => Math.min(...r.map((e) => e.y)));
-    const bottom = Math.max(...inRole.map((e) => e.y + e.h));
+    const tops = rows.map((r) => Math.min(...r.map((e) => e.y ?? 0)));
+    const bottom = Math.max(...inRole.map((e) => (e.y ?? 0) + e.h));
     bands.push({
       role,
       rows: rows.map((rowEls, ri) => {
@@ -59,19 +59,20 @@ export function elementsToBands(
  * starts a new row. Deterministic (sorted by y, then x).
  */
 function groupIntoRows(els: readonly CanvasElement[]): CanvasElement[][] {
-  const sorted = [...els].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  const sorted = [...els].sort((a, b) => ((a.y ?? 0) - (b.y ?? 0)) || ((a.x ?? 0) - (b.x ?? 0)));
   const rows: CanvasElement[][] = [];
   let current: CanvasElement[] = [];
   let rowBottom = -Infinity;
 
   for (const el of sorted) {
-    if (current.length === 0 || el.y < rowBottom) {
+    const y = el.y ?? 0;
+    if (current.length === 0 || y < rowBottom) {
       current.push(el);
-      rowBottom = Math.max(rowBottom, el.y + el.h);
+      rowBottom = Math.max(rowBottom, y + el.h);
     } else {
       rows.push(current);
       current = [el];
-      rowBottom = el.y + el.h;
+      rowBottom = y + el.h;
     }
   }
   if (current.length > 0) rows.push(current);
@@ -80,7 +81,7 @@ function groupIntoRows(els: readonly CanvasElement[]): CanvasElement[][] {
 
 /** Build a row: sort its elements left-to-right, one column each, widths → 100%. */
 function buildRow(role: string, ri: number, rowEls: CanvasElement[], height: number): BandRow {
-  const ordered = [...rowEls].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+  const ordered = [...rowEls].sort((a, b) => ((a.x ?? 0) - (b.x ?? 0)) || ((a.y ?? 0) - (b.y ?? 0)));
   const widths = normalizeWidths(ordered.map((e) => e.w));
 
   const columns: BandColumn[] = ordered.map((el, ci) => ({

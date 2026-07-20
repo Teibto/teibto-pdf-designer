@@ -8,7 +8,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
-import { updateElement, moveElement, resizeElement, removeElement, duplicateElement } from '../../state/actions';
+import { updateElement, resizeElement, removeElement, duplicateElement } from '../../state/actions';
 import type { CanvasElement, TextElement, ImageElement, ShapeElement, LineElement, BarcodeElement, ListElement, TableElement, ElementRoleType } from '../../models/element';
 import { ELEMENT_ROLES } from '../../constants/roles';
 import { openImagePicker, clearElementImage } from '../../services/image.service';
@@ -279,10 +279,9 @@ export class PldSidebarRight extends LitElement {
         </div>
       </div>
 
-      <!-- Size & flow order — X retired (#107): nothing reads el.x since the
-           band cutover. Y still orders legacy import/re-sync + roleHeight;
-           W/H still size single-col elements, tables and header/footer macros
-           (they retire in #107 slice 3 when bands own geometry). -->
+      <!-- Size only (#107): x/y are legacy-import fields nothing renders from.
+           W/H still size the element's content and the table's declared
+           height; band row heights control header/footer macro height. -->
       <div class="group">
         <div class="group-title">Size</div>
         <div class="row">
@@ -295,13 +294,6 @@ export class PldSidebarRight extends LitElement {
             <label>Height</label>
             <input type="number" .value=${String(Math.round(el.h))}
               @change=${(e: Event) => this._resize(el.w, Number((e.target as HTMLInputElement).value))} />
-          </div>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>Y (ลำดับแนวตั้ง/ความสูง band)</label>
-            <input type="number" .value=${String(Math.round(el.y))}
-              @change=${(e: Event) => this._move(el.x, Number((e.target as HTMLInputElement).value))} />
           </div>
         </div>
       </div>
@@ -623,11 +615,6 @@ export class PldSidebarRight extends LitElement {
   private _update(key: string, value: unknown) {
     if (!this.selected) return;
     updateElement(this.store, this.selected.id, key as any, value as any);
-  }
-
-  private _move(x: number, y: number) {
-    if (!this.selected) return;
-    moveElement(this.store, this.selected.id, x, y);
   }
 
   private _resize(w: number, h: number) {

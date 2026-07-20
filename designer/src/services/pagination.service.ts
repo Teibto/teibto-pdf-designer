@@ -16,7 +16,6 @@
  * v3.1 fixes:
  *   - [PERF-1] hashJsonContent optimised to O(1) fingerprint
  *   - [PERF-2] shouldForceBreak uses Set for O(1) lookup
- *   - [CALC-1] buildPage uses actual rowHeights for tableEndY
  *   - [CALC-2] fixedHeight respects headerMode via getFixedHeight()
  *   - [CALC-3] applySummaryBreak uses actual rowHeights
  *   - [CALC-4] forceBreak inside group logs console.warn
@@ -53,8 +52,6 @@ export interface PageData {
   tableRowStart: number;
   tableRowEnd: number;
   isContinuation: boolean;
-  /** Y coordinate where table content ends on this page (for dynamic positioning) */
-  tableEndY: number;
   /** Whether this page is a dedicated summary page (no table rows) */
   isSummaryPage: boolean;
   /** Row indices (absolute, 0-based) that should render as full-width column span.
@@ -68,9 +65,6 @@ export interface PageElement {
   visible: boolean;
   /** For tables: which rows to display on this page */
   rowSlice?: { start: number; end: number };
-  /** Adjusted Y position when dynamicFooter is enabled.
-   *  If set, renderers should use this instead of element.y */
-  dynamicY?: number;
 }
 
 // ═══════════════════════════════════════
@@ -86,10 +80,9 @@ function cacheKey(state: Readonly<AppState>): string {
   const p = state.pagination;
   const parts = [
     state.elements.length,
-    state.elements.map((e) => `${e.id}:${e.role}:${e.y}:${e.h}:${e.binding || ''}`).join(','),
+    state.elements.map((e) => `${e.id}:${e.role}:${e.h}:${e.binding || ''}`).join(','),
     p.mode, p.rowsPerPage, p.baseRowHeight, p.lineHeightPx,
     p.orphanWidowMinRows ?? 2, p.summaryBreak ?? 'auto',
-    p.dynamicFooter ?? true, p.dynamicFooterGap ?? 16,
     (p.forceBreakBeforeRows ?? []).join(','),
     p.keepTogetherField ?? '',
     p.headerMode ?? 'all',
@@ -329,9 +322,8 @@ function computeHeightBased(state: Readonly<AppState>): PaginationResult {
   // [CALC-3] Apply summary page break (pass rowHeights for accurate space calculation)
   ranges = applySummaryBreak(ranges, state, totalRows, rowHeights);
 
-  // [CALC-1] Pass rowHeights to buildPage for accurate tableEndY
   const pagesData = ranges.map((range, idx) =>
-    buildPage(idx + 1, state, range.start, range.end, idx > 0, range.start === range.end, rows, rowHeights),
+    buildPage(idx + 1, state, range.start, range.end, idx > 0, range.start === range.end, rows),
   );
 
   return {
@@ -557,7 +549,10 @@ function applySummaryBreak(
 // ═══════════════════════════════════════
 
 /**
- * [CALC-1] Accepts optional rowHeights for accurate tableEndY computation.
+ * Build one page's element visibility + row slice. Layout is band-flow (#107):
+ * the sim preview stacks bands in order, so the old y-based tableEndY /
+ * dynamic-footer reposition machinery is gone — a footer after the table in
+ * flow follows it naturally, same as BFO print.
  */
 function buildPage(
   pageNumber: number,
@@ -567,59 +562,13 @@ function buildPage(
   isContinuation: boolean,
   isSummaryPage: boolean,
   rows: Record<string, unknown>[] = [],
-  rowHeights?: number[],
 ): PageData {
   const elements = state.elements;
   const pagination = state.pagination;
   const pageElements: PageElement[] = [];
   const headerMode = pagination.headerMode ?? 'all';
   const columnSpanField = pagination.columnSpanField ?? '';
-
-  const tableEl = elements.find(
-    (el) => el.type === 'table' && el.role === 'table',
-  );
   const rowCount = rowEnd - rowStart;
-  const baseRowHeight = pagination.baseRowHeight || 24;
-  const tableHeaderH = baseRowHeight + 4;
-
-  // [CALC-1] Use actual row heights when available, fallback to baseRowHeight
-  let tableContentH: number;
-  if (rowHeights && rowHeights.length > 0) {
-    tableContentH = 0;
-    for (let i = rowStart; i < rowEnd; i++) {
-      tableContentH += rowHeights[i] ?? baseRowHeight;
-    }
-  } else {
-    tableContentH = rowCount * baseRowHeight;
-  }
-  const estimatedTableContentH = tableHeaderH + tableContentH;
-
-  const tableStartY = tableEl ? tableEl.y : 200;
-  const tableEndY = isSummaryPage
-    ? tableStartY
-    : tableStartY + estimatedTableContentH;
-
-  // Dynamic footer positioning
-  const useDynamic = pagination.dynamicFooter !== false;
-  const gap = pagination.dynamicFooterGap ?? 16;
-
-  const dynamicElements = useDynamic
-    ? elements
-        .filter((el) => el.role === 'summary' || el.role === 'footer')
-        .sort((a, b) => a.y - b.y)
-    : [];
-
-  const dynamicYMap = new Map<string, number>();
-  if (useDynamic && dynamicElements.length > 0 && rowCount > 0) {
-    const firstDynamicY = dynamicElements[0].y;
-    const shift = (tableEndY + gap) - firstDynamicY;
-    if (shift !== 0) {
-      for (const el of dynamicElements) {
-        const newY = Math.max(el.y + shift, tableEndY + gap);
-        dynamicYMap.set(el.id, newY);
-      }
-    }
-  }
 
   for (const el of elements) {
     const role = ELEMENT_ROLES[el.role];
@@ -653,11 +602,6 @@ function buildPage(
       pageEl.rowSlice = { start: rowStart, end: rowEnd };
     }
 
-    const dynY = dynamicYMap.get(el.id);
-    if (dynY !== undefined) {
-      pageEl.dynamicY = dynY;
-    }
-
     pageElements.push(pageEl);
   }
 
@@ -678,7 +622,6 @@ function buildPage(
     tableRowStart: rowStart,
     tableRowEnd: rowEnd,
     isContinuation,
-    tableEndY,
     isSummaryPage,
     columnSpanRows,
   };
