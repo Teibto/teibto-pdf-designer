@@ -677,9 +677,50 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
 
   if (useFreeMarker && el.binding) {
     const listVar = el.binding.split('.').pop() || 'item';
+
+    // Section subtotal (#106): sum the flagged columns per section (rows
+    // delimited by columnSpanField headers) and emit a bold subtotal row
+    // before the next section header + after the last data row. FreeMarker
+    // accumulate — works on both preview-live and Print without touching the
+    // data lib. JSON data-source values are ALL strings and the curated
+    // invoice data pre-formats them ("1,234.50"), so each value is
+    // comma-stripped and regex-gated before ?number. NOT <#attempt>+#assign:
+    // a failing assign inside attempt leaks the previous value (SB2, #77).
+    const stCols = spanField && pagination?.sectionSubtotal
+      ? visibleCols.filter((c) => c.subtotal && !c.isIndex)
+      : [];
+    const stVar = (c: TableColumn) => `_st_${c.key.replace(/[^A-Za-z0-9_]/g, '_')}`;
+    const emitSubtotalRow = () => {
+      const labelCol = visibleCols.find((c) => !stCols.includes(c));
+      const label = escapeXml((pagination?.sectionSubtotalLabel ?? '').trim() || 'รวม');
+      lines.push('<#if _sec != 0>');
+      lines.push('<tr>');
+      visibleCols.forEach((col) => {
+        const style = `font-weight: bold; padding: 4pt 6pt; border: 0.5pt solid ${sanitizeColor(el.borderColor)}; text-align: ${col.align};`;
+        if (stCols.includes(col)) {
+          lines.push(`  <td style="${style}"><p style="margin: 0; text-align: ${col.align};">\${${stVar(col)}?string("#,##0.00")}</p></td>`);
+        } else if (col === labelCol) {
+          lines.push(`  <td style="${style}"><p style="margin: 0; text-align: ${col.align};">${label}</p></td>`);
+        } else {
+          lines.push(`  <td style="${style}"><p style="margin: 0;">&#160;</p></td>`);
+        }
+      });
+      lines.push('</tr>');
+      // Subtotal rows occupy table height — count them into the fill total
+      // (#84) or the last page loses alignment by one row per section.
+      if (fillN > 0) lines.push('<#assign _rc = _rc + 1>');
+      stCols.forEach((c) => lines.push(`<#assign ${stVar(c)} = 0>`));
+      lines.push('<#assign _sec = 0>');
+      lines.push('</#if>');
+    };
+
     // Row counter for last-page fill (#84) — NOT ?size: on the JSON data
     // source ?size prints blank silently (netsuite-bfo-pdf truth table)
     if (fillN > 0) lines.push('<#assign _rc = 0>');
+    if (stCols.length) {
+      lines.push('<#assign _sec = 0>');
+      stCols.forEach((c) => lines.push(`<#assign ${stVar(c)} = 0>`));
+    }
     // Null-safe list: record without sublist lines renders an empty table, not an error (#4)
     lines.push(`<#list (${recordType}.${el.binding})![] as ${listVar}>`);
 
@@ -689,6 +730,7 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
       // [FUNC-2] Use first non-index column for span row label (index column has no meaningful value)
       const spanLabelCol = visibleCols.find((c) => !c.isIndex) ?? visibleCols[0];
       lines.push(`<#if ${listVar}.${spanField}?has_content>`);
+      if (stCols.length) emitSubtotalRow();
       lines.push(`<tr><td colspan="${visibleCols.length}" style="${spanStyle}">\${${listVar}.${spanLabelCol.key}!''}</td></tr>`);
       lines.push('<#else>');
       lines.push('<tr>');
@@ -697,6 +739,17 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
         lines.push(`  <td style="${style}">${cellValueFm(listVar, col)}</td>`);
       });
       lines.push('</tr>');
+      if (stCols.length) {
+        lines.push('<#assign _sec = _sec + 1>');
+        stCols.forEach((c) => {
+          lines.push(`<#assign _sv = (${listVar}.${c.key})!''>`);
+          lines.push(
+            `<#if _sv?is_number><#assign ${stVar(c)} = ${stVar(c)} + _sv>` +
+            `<#elseif _sv?is_string && _sv?trim?replace(',','')?matches(r"-?[0-9]+(\\.[0-9]+)?")>` +
+            `<#assign ${stVar(c)} = ${stVar(c)} + _sv?trim?replace(',','')?number></#if>`,
+          );
+        });
+      }
       lines.push('</#if>');
     } else {
       lines.push('<tr>');
@@ -726,6 +779,8 @@ function tableToHtml(el: TableElement, recordType: string, useFreeMarker: boolea
 
     if (fillN > 0) lines.push('<#assign _rc = _rc + 1>');
     lines.push(`</#list>`);
+    // Close the last open section (#106) — no trailing header row triggers it
+    if (stCols.length) emitSubtotalRow();
 
     // Last-page fill (#84): pad with empty rows so the printed row count is a
     // multiple of rowsPerPage — the table box keeps a constant height and the

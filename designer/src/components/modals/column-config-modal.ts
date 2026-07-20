@@ -623,6 +623,12 @@ export class PldColumnConfigModal extends LitElement {
               @change=${(e: Event) => this._updateCol(idx, 'boldFirstLine', (e.target as HTMLInputElement).checked)} />
             Bold first line
           </label>
+          <label class="check-item"
+            title="รวมยอดคอลัมน์นี้ในแถวรวมย่อยท้ายแต่ละ section — มีผลเมื่อเปิด Section Subtotal ใน Pagination panel (#106)">
+            <input type="checkbox" .checked=${col.subtotal ?? false}
+              @change=${(e: Event) => this._updateCol(idx, 'subtotal', (e.target as HTMLInputElement).checked)} />
+            Section Subtotal (Σ)
+          </label>
         </div>
       </div>
 
