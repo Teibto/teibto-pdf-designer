@@ -138,9 +138,12 @@ export class PldAppShell extends LitElement {
       }
     });
 
-    // Wire global events from header buttons
+    // Wire global events from header buttons.
+    // NOTE (#131): pld-save-template is handled by the window listener below ONLY.
+    // The header dispatches it bubbles+composed, so it reaches window on its own;
+    // adding a `this` listener too would fire _saveTemplate twice (double NetSuite
+    // save). Ctrl+S dispatches straight on window, so one listener covers both.
     this.addEventListener('pld-show-templates', () => { this.showTemplateManager = true; });
-    this.addEventListener('pld-save-template', () => this._saveTemplate());
     this.addEventListener('pld-show-export-json', () => this._exportJson());
     this.addEventListener('pld-load-sample', () => this._loadSample());
     this.addEventListener('pld-show-bfo-export', () => { this.showBfoExport = true; });
@@ -153,7 +156,8 @@ export class PldAppShell extends LitElement {
       this.showColumnConfig = true;
     });
 
-    // Window-level save event
+    // Sole save handler (#131): catches both Ctrl+S (dispatched on window by
+    // keyboard.service) and the header button (bubbles+composed up to window).
     window.addEventListener('pld-save-template', () => this._saveTemplate());
 
     // ─── NetSuite Auto-load ───

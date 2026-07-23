@@ -143,6 +143,11 @@ export class PldFlowView extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // Seed from the CURRENT store on connect — flow-view mounts lazily on view
+    // switch, so data loaded earlier must show without waiting for the next
+    // state-changed (#130).
+    this.elements = this.store.state.elements;
+    this.jsonKeys = this.store.state.jsonKeys;
     this.store.addEventListener('state-changed', (e: Event) => {
       const s = (e as StateChangedEvent).state;
       this.elements = s.elements;

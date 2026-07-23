@@ -1,80 +1,99 @@
 /**
- * E2E Tests — Core Application
- * Tests app launch, basic layout, and navigation.
+ * E2E — App shell & global chrome (band-model UI, #123)
  *
  * @author Wichit Wongta
+ * @since 2026-07-22
  */
 import { test, expect } from '@playwright/test';
+import { gotoApp, headerBtn } from './_helpers';
 
-test.describe('App Shell', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    // Wait for Lit components to render
-    await page.waitForSelector('pld-app-shell');
-  });
+test.describe('App shell', () => {
+  test.beforeEach(async ({ page }) => gotoApp(page));
 
-  test('should load the application', async ({ page }) => {
+  test('loads with the expected title', async ({ page }) => {
     await expect(page).toHaveTitle(/PDF Layout/i);
   });
 
-  test('should display header with toolbar buttons', async ({ page }) => {
-    const header = page.locator('pld-app-header');
-    await expect(header).toBeVisible();
+  test('renders header, template bar, both sidebars and the band view', async ({ page }) => {
+    await expect(page.locator('pld-header')).toBeVisible();
+    await expect(page.locator('pld-template-bar')).toBeVisible();
+    await expect(page.locator('pld-sidebar-left')).toBeVisible();
+    await expect(page.locator('pld-band-view')).toBeVisible();
+    await expect(page.locator('pld-sidebar-right')).toBeVisible();
   });
 
-  test('should display left sidebar with element palette', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-left');
-    await expect(sidebar).toBeVisible();
-  });
-
-  test('should display right sidebar (property inspector)', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-right');
-    await expect(sidebar).toBeVisible();
-  });
-
-  test('should display canvas', async ({ page }) => {
-    const canvas = page.locator('pld-canvas');
-    await expect(canvas).toBeVisible();
-  });
-
-  test('should switch between design and flow views', async ({ page }) => {
-    // The design view should be default
-    const canvas = page.locator('pld-canvas');
-    await expect(canvas).toBeVisible();
-
-    // Click flow view button (if exists in header)
-    const flowBtn = page.locator('text=Flow').first();
-    if (await flowBtn.isVisible()) {
-      await flowBtn.click();
-      const flowView = page.locator('pld-flow-view');
-      await expect(flowView).toBeVisible();
-
-      // Switch back
-      const designBtn = page.locator('text=Design').first();
-      await designBtn.click();
-      await expect(canvas).toBeVisible();
+  test('band view shows all six role slots on a blank template', async ({ page }) => {
+    for (const role of ['Header', 'Content', 'Table', 'Summary', 'Footer', 'Watermark']) {
+      await expect(
+        page.locator('pld-band-view .empty-slot').filter({ hasText: role }),
+      ).toBeVisible();
     }
   });
 });
 
-test.describe('Zoom Controls', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
+test.describe('View switcher', () => {
+  test.beforeEach(async ({ page }) => gotoApp(page));
+
+  test('switches between ออกแบบ (design) and ผังข้อมูล (flow)', async ({ page }) => {
+    await expect(page.locator('pld-band-view')).toBeVisible();
+
+    await headerBtn(page, 'ผังข้อมูล').click();
+    await expect(page.locator('pld-flow-view')).toBeVisible();
+
+    await headerBtn(page, 'ออกแบบ').click();
+    await expect(page.locator('pld-band-view')).toBeVisible();
+  });
+});
+
+test.describe('Theme toggle', () => {
+  test('flips dark ↔ light and persists on the document element', async ({ page }) => {
+    await gotoApp(page);
+
+    // Default is dark → button offers "Light".
+    const btn = headerBtn(page, 'Light');
+    await expect(btn).toBeVisible();
+
+    await btn.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(headerBtn(page, 'Dark')).toBeVisible();
+
+    await headerBtn(page, 'Dark').click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(headerBtn(page, 'Light')).toBeVisible();
+  });
+});
+
+test.describe('Page settings', () => {
+  test.beforeEach(async ({ page }) => gotoApp(page));
+
+  test('changes page size', async ({ page }) => {
+    const letter = page.locator('pld-sidebar-left .page-size-btn', { hasText: 'Letter' });
+    await letter.click();
+    await expect(letter).toHaveClass(/active/);
   });
 
-  test('should zoom in with Ctrl+Plus', async ({ page }) => {
-    await page.keyboard.press('Control+=');
-    // Zoom should increase from default 100%
+  test('changes orientation', async ({ page }) => {
+    const landscape = page.locator('pld-sidebar-left .page-size-btn', { hasText: 'Landscape' });
+    await landscape.click();
+    await expect(landscape).toHaveClass(/active/);
   });
+});
 
-  test('should zoom out with Ctrl+Minus', async ({ page }) => {
-    await page.keyboard.press('Control+-');
-  });
+test.describe('Left sidebar tabs', () => {
+  test('switches Elements → Layers → Data → Settings', async ({ page }) => {
+    await gotoApp(page);
+    const sidebar = page.locator('pld-sidebar-left');
 
-  test('should reset zoom with Ctrl+0', async ({ page }) => {
-    await page.keyboard.press('Control+=');
-    await page.keyboard.press('Control+=');
-    await page.keyboard.press('Control+0');
+    await sidebar.locator('.tab', { hasText: 'เลเยอร์' }).click();
+    await expect(page.locator('pld-layers-panel')).toBeVisible();
+
+    await sidebar.locator('.tab', { hasText: 'ข้อมูล' }).click();
+    await expect(page.locator('pld-json-editor')).toBeVisible();
+
+    await sidebar.locator('.tab', { hasText: 'ตั้งค่า' }).click();
+    await expect(page.locator('pld-pagination-panel')).toBeVisible();
+
+    await sidebar.locator('.tab', { hasText: 'องค์ประกอบ' }).click();
+    await expect(sidebar.locator('.element-grid')).toBeVisible();
   });
 });

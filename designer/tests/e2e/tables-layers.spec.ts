@@ -1,95 +1,72 @@
 /**
- * E2E Tests — Table & Layers
- * Tests table column configuration, resize handles, and layers panel.
+ * E2E — Table column config & Layers panel (band-model UI, #123)
  *
  * @author Wichit Wongta
+ * @since 2026-07-22
  */
 import { test, expect } from '@playwright/test';
+import { gotoApp, loadSample, band } from './_helpers';
 
-test.describe('Table Element', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
+test.describe('Table column configuration', () => {
+  test('opens the column config modal from the Table band head', async ({ page }) => {
+    await gotoApp(page);
+    await loadSample(page);
 
-    // Add a table element
-    const sidebar = page.locator('pld-sidebar-left');
-    const tableBtn = sidebar.locator('text=Table').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await tableBtn.dragTo(canvas);
-  });
+    // The sample's Table band exposes a ⚙ คอลัมน์ shortcut (#119).
+    await band(page, 'Table').locator('button', { hasText: 'คอลัมน์' }).click();
 
-  test('should add table element to canvas', async ({ page }) => {
-    const tableElements = page.locator('pld-canvas-element');
-    const count = await tableElements.count();
-    expect(count).toBeGreaterThan(0);
-  });
+    const modal = page.locator('pld-column-config-modal');
+    await expect(modal.getByText('Table Column Configuration')).toBeVisible();
 
-  test('should show column resize handles on hover', async ({ page }) => {
-    const element = page.locator('pld-canvas-element').first();
-    await element.hover();
-
-    // Table should display resize handles via col-resize-overlay
-    // Note: column handles are inside shadow DOM
-  });
-
-  test('should open column config modal via right-click', async ({ page }) => {
-    const element = page.locator('pld-canvas-element').first();
-    await element.click({ button: 'right' });
-
-    const contextMenu = page.locator('pld-context-menu');
-    await expect(contextMenu).toBeVisible();
+    await modal.locator('.close-btn').click();
+    await expect(modal.getByText('Table Column Configuration')).toBeHidden();
   });
 });
 
-test.describe('Layers Panel', () => {
+test.describe('Layers panel', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
-
-    // Load sample to have elements
-    const sampleBtn = page.locator('text=Sample').first();
-    await sampleBtn.click();
-    await page.waitForSelector('pld-canvas-element');
+    await gotoApp(page);
+    await loadSample(page);
+    await page.locator('pld-sidebar-left .tab', { hasText: 'เลเยอร์' }).click();
+    await expect(page.locator('pld-layers-panel')).toBeVisible();
   });
 
-  test('should display layers for all elements', async ({ page }) => {
-    const layers = page.locator('pld-layers-panel');
-    await expect(layers).toBeVisible();
-
-    // The panel should show layer items
-    const layerItems = page.locator('pld-layers-panel .layer-item');
-    const count = await layerItems.count();
-    expect(count).toBeGreaterThan(0);
+  test('lists a layer per element', async ({ page }) => {
+    const items = page.locator('pld-layers-panel .layer-item');
+    expect(await items.count()).toBeGreaterThan(3);
   });
 
-  test('should select element by clicking layer', async ({ page }) => {
-    const firstLayer = page.locator('pld-layers-panel .layer-item').first();
-    await firstLayer.click();
-
-    // Layer should get selected class
-    await expect(firstLayer).toHaveClass(/selected/);
+  test('selecting a layer populates the property inspector', async ({ page }) => {
+    await page.locator('pld-layers-panel .layer-item').first().click();
+    await expect(page.locator('pld-layers-panel .layer-item.selected')).toHaveCount(1);
+    await expect(page.locator('pld-sidebar-right .empty')).toBeHidden();
   });
 
-  test('should toggle element visibility', async ({ page }) => {
-    const visBtn = page.locator('pld-layers-panel .action-btn').first();
-    await visBtn.click();
+  test('toggles element visibility', async ({ page }) => {
+    const first = page.locator('pld-layers-panel .layer-item').first();
+    await first.click();
+    await first.locator('.action-btn[title="Hide"]').click();
+    await expect(first).toHaveClass(/hidden-el/);
+    await first.locator('.action-btn[title="Show"]').click();
+    await expect(first).not.toHaveClass(/hidden-el/);
   });
 
-  test('should toggle element lock', async ({ page }) => {
-    const lockBtn = page.locator('pld-layers-panel .action-btn').nth(1);
-    await lockBtn.click();
+  test('toggles element lock', async ({ page }) => {
+    const first = page.locator('pld-layers-panel .layer-item').first();
+    await first.click();
+    await first.locator('.action-btn[title="Lock"]').click();
+    await expect(first).toHaveClass(/locked/);
+    await first.locator('.action-btn[title="Unlock"]').click();
+    await expect(first).not.toHaveClass(/locked/);
   });
 
-  test('should rename layer on double-click', async ({ page }) => {
-    const firstLayer = page.locator('pld-layers-panel .layer-item').first();
-    await firstLayer.dblclick();
-
-    // Input should appear
-    const editInput = page.locator('pld-layers-panel .edit-input');
-    await expect(editInput).toBeVisible();
-
-    // Type new name and confirm
-    await editInput.fill('Renamed Layer');
-    await page.keyboard.press('Enter');
+  test('renames a layer via double-click', async ({ page }) => {
+    const first = page.locator('pld-layers-panel .layer-item').first();
+    await first.dblclick();
+    const input = first.locator('.edit-input');
+    await expect(input).toBeVisible();
+    await input.fill('Renamed Layer');
+    await input.press('Enter');
+    await expect(first.locator('.layer-name')).toHaveText('Renamed Layer');
   });
 });

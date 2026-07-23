@@ -1,160 +1,104 @@
 /**
- * E2E Tests — Element Interactions
- * Tests drag-drop, selection, move, resize, keyboard shortcuts.
+ * E2E — Palette drag & band-cell editing (band-model UI, #123)
  *
  * @author Wichit Wongta
+ * @since 2026-07-22
  */
 import { test, expect } from '@playwright/test';
+import { gotoApp, dragPaletteTo, emptyRole, band, chips } from './_helpers';
 
-test.describe('Element Palette', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
+test.describe('Palette → band drop', () => {
+  test.beforeEach(async ({ page }) => gotoApp(page));
+
+  test('drops a Text element into the Header band', async ({ page }) => {
+    await expect(chips(page)).toHaveCount(0);
+    await dragPaletteTo(page, 'Text', emptyRole(page, 'Header'));
+    await expect(band(page, 'Header')).toBeVisible();
+    await expect(chips(page)).toHaveCount(1);
   });
 
-  test('should show all 8 element types in palette', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-left');
-    await expect(sidebar).toBeVisible();
-
-    // Check that element type buttons exist
-    const elementTypes = ['Header', 'Text', 'Image', 'Table', 'Shape', 'Line', 'Barcode', 'List'];
-    for (const type of elementTypes) {
-      const btn = sidebar.locator(`text=${type}`).first();
-      await expect(btn).toBeVisible();
-    }
+  test('drops a Table into the Table band', async ({ page }) => {
+    await dragPaletteTo(page, 'Table', emptyRole(page, 'Table'));
+    await expect(band(page, 'Table')).toBeVisible();
+    await expect(chips(page).filter({ hasText: 'table' })).toHaveCount(1);
   });
 
-  test('should add a text element by dragging to canvas', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-left');
-    const textBtn = sidebar.locator('text=Text').first();
-    const canvas = page.locator('pld-canvas .page').first();
-
-    // Drag from palette to canvas
-    await textBtn.dragTo(canvas);
-
-    // Verify element was added
-    const element = page.locator('pld-canvas-element').first();
-    await expect(element).toBeVisible();
-  });
-});
-
-test.describe('Element Selection', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
-
-    // Add a text element by dragging
-    const sidebar = page.locator('pld-sidebar-left');
-    const textBtn = sidebar.locator('text=Text').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await textBtn.dragTo(canvas);
+  test('drops a List into the Content band', async ({ page }) => {
+    await dragPaletteTo(page, 'List', emptyRole(page, 'Content'));
+    await expect(band(page, 'Content')).toBeVisible();
+    await expect(chips(page).filter({ hasText: 'list' })).toHaveCount(1);
   });
 
-  test('should select element on click', async ({ page }) => {
-    const element = page.locator('pld-canvas-element').first();
-    await element.click();
-
-    // Element should show selection state (has .selected class in shadow DOM)
-    await expect(element).toBeVisible();
-  });
-
-  test('should deselect with Escape', async ({ page }) => {
-    const element = page.locator('pld-canvas-element').first();
-    await element.click();
-    await page.keyboard.press('Escape');
-  });
-
-  test('should delete element with Delete key', async ({ page }) => {
-    const element = page.locator('pld-canvas-element').first();
-    await element.click();
-
-    const countBefore = await page.locator('pld-canvas-element').count();
-    await page.keyboard.press('Delete');
-    const countAfter = await page.locator('pld-canvas-element').count();
-
-    expect(countAfter).toBeLessThan(countBefore);
-  });
-
-  test('should duplicate element with Ctrl+D', async ({ page }) => {
-    const element = page.locator('pld-canvas-element').first();
-    await element.click();
-
-    const countBefore = await page.locator('pld-canvas-element').count();
-    await page.keyboard.press('Control+d');
-    const countAfter = await page.locator('pld-canvas-element').count();
-
-    expect(countAfter).toBe(countBefore + 1);
-  });
-
-  test('should select all with Ctrl+A', async ({ page }) => {
-    // Add another element
-    const sidebar = page.locator('pld-sidebar-left');
-    const shapeBtn = sidebar.locator('text=Shape').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await shapeBtn.dragTo(canvas, { targetPosition: { x: 300, y: 300 } });
-
-    await page.keyboard.press('Control+a');
-    // All elements should be in multi-select
+  test('rejects a List on the Header band (acceptance matrix #49)', async ({ page }) => {
+    // header does not accept `list` → the drop never applies, Header stays empty.
+    await dragPaletteTo(page, 'List', emptyRole(page, 'Header'));
+    await expect(emptyRole(page, 'Header')).toBeVisible();
+    await expect(chips(page)).toHaveCount(0);
   });
 });
 
-test.describe('Keyboard Shortcuts', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
+test.describe('Chip selection & deletion', () => {
+  test('dropping auto-selects the element and populates the property inspector', async ({ page }) => {
+    await gotoApp(page);
+    // Before any element exists the inspector shows its empty placeholder.
+    await expect(page.locator('pld-sidebar-right .empty')).toBeVisible();
+
+    await dragPaletteTo(page, 'Text', emptyRole(page, 'Header'));
+
+    // addElement() selects the new element, so the inspector is populated
+    // immediately on drop — no extra click needed.
+    await expect(page.locator('pld-sidebar-right .empty')).toBeHidden();
+    await expect(page.locator('pld-sidebar-right label', { hasText: 'Name' })).toBeVisible();
   });
 
-  test('should undo with Ctrl+Z', async ({ page }) => {
-    // Add element
-    const sidebar = page.locator('pld-sidebar-left');
-    const textBtn = sidebar.locator('text=Text').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await textBtn.dragTo(canvas);
-
-    const countAfterAdd = await page.locator('pld-canvas-element').count();
-    expect(countAfterAdd).toBeGreaterThan(0);
-
-    // Undo should remove it
-    await page.keyboard.press('Control+z');
+  test('clicking a chip selects it in the property inspector', async ({ page }) => {
+    await gotoApp(page);
+    await dragPaletteTo(page, 'Text', emptyRole(page, 'Header'));
+    // Deselect (click a chip re-selects), then confirm click drives selection.
+    await chips(page).first().click();
+    await expect(chips(page).first()).toHaveClass(/sel/);
+    await expect(page.locator('pld-sidebar-right label', { hasText: 'Name' })).toBeVisible();
   });
 
-  test('should copy and paste with Ctrl+C/V', async ({ page }) => {
-    // Add and select element
-    const sidebar = page.locator('pld-sidebar-left');
-    const textBtn = sidebar.locator('text=Text').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await textBtn.dragTo(canvas);
+  test('deletes a chip via its ✕ button', async ({ page }) => {
+    await gotoApp(page);
+    await dragPaletteTo(page, 'Text', emptyRole(page, 'Header'));
+    await expect(chips(page)).toHaveCount(1);
 
-    const element = page.locator('pld-canvas-element').first();
-    await element.click();
-
-    const countBefore = await page.locator('pld-canvas-element').count();
-
-    await page.keyboard.press('Control+c');
-    await page.keyboard.press('Control+v');
-
-    const countAfter = await page.locator('pld-canvas-element').count();
-    expect(countAfter).toBe(countBefore + 1);
+    await chips(page).first().locator('button.del').click();
+    await expect(chips(page)).toHaveCount(0);
   });
 });
 
-test.describe('Context Menu', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
+test.describe('Chip move between cells', () => {
+  test('drags a chip from one column to another in the same band', async ({ page }) => {
+    await gotoApp(page);
+    await dragPaletteTo(page, 'Text', emptyRole(page, 'Header'));
+    const header = band(page, 'Header');
 
-    // Add element
-    const sidebar = page.locator('pld-sidebar-left');
-    const textBtn = sidebar.locator('text=Text').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await textBtn.dragTo(canvas);
+    // Split into two columns, then move the chip from cell 0 → cell 1.
+    await header.locator('.cell').first().getByTitle('แยกคอลัมน์').click();
+    await expect(header.locator('.cell')).toHaveCount(2);
+    await expect(header.locator('.cell').nth(0).locator('.chip')).toHaveCount(1);
+
+    await chips(page).first().dragTo(header.locator('.cell').nth(1));
+    await expect(header.locator('.cell').nth(1).locator('.chip')).toHaveCount(1);
+    await expect(header.locator('.cell').nth(0).locator('.chip')).toHaveCount(0);
   });
+});
 
-  test('should open context menu on right-click', async ({ page }) => {
-    const element = page.locator('pld-canvas-element').first();
-    await element.click({ button: 'right' });
+test.describe('Row management', () => {
+  test('adds and removes a row in a band', async ({ page }) => {
+    await gotoApp(page);
+    await dragPaletteTo(page, 'Text', emptyRole(page, 'Header'));
+    const header = band(page, 'Header');
+    await expect(header.locator('.band-head').first()).toContainText('1 row');
 
-    const contextMenu = page.locator('pld-context-menu');
-    await expect(contextMenu).toBeVisible();
+    await header.locator('button', { hasText: '+ row' }).click();
+    await expect(header.locator('.band-head').first()).toContainText('2 row');
+
+    // Remove the last row via its rowtools ✕.
+    await header.locator('.rowtools button[title="ลบแถว"]').last().click();
+    await expect(header.locator('.band-head').first()).toContainText('1 row');
   });
 });

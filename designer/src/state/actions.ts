@@ -153,6 +153,16 @@ export function removeElement(store: AppStore, id: string): void {
 
   store.dispatch((draft) => {
     draft.elements = draft.elements.filter((e) => e.id !== id);
+    // Drop any band reference too (#126) — otherwise a dangling id survives in
+    // state.bands and rides along through save/undo. Mirrors removeBandElement.
+    for (const band of draft.bands) {
+      for (const row of band.rows) {
+        for (const col of row.columns) {
+          const i = col.elementIds.indexOf(id);
+          if (i >= 0) col.elementIds.splice(i, 1);
+        }
+      }
+    }
     if (draft.selectedId === id) {
       draft.selectedId = null;
     }
@@ -225,6 +235,22 @@ export function duplicateElement(store: AppStore, id: string): void {
     clone.zIndex = draft.elements.length;
 
     draft.elements.push(clone);
+
+    // Mirror into the band structure (#125): place the clone right after the
+    // source in its band cell, so it's visible in the editor/preview/export
+    // (bands are the layout source of truth after #47).
+    outer: for (const band of draft.bands) {
+      for (const row of band.rows) {
+        for (const col of row.columns) {
+          const i = col.elementIds.indexOf(id);
+          if (i >= 0) {
+            col.elementIds.splice(i + 1, 0, clone.id);
+            break outer;
+          }
+        }
+      }
+    }
+
     draft.selectedId = clone.id;
     draft.template.isDirty = true;
   });
