@@ -8,7 +8,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
-import { updateElement, resizeElement, removeElement, duplicateElement } from '../../state/actions';
+import { updateElement, resizeElement, removeElement, duplicateElement, moveElementToBandByRole } from '../../state/actions';
 import type { CanvasElement, TextElement, ImageElement, ShapeElement, LineElement, BarcodeElement, ListElement, TableElement, ElementRoleType } from '../../models/element';
 import { ELEMENT_ROLES } from '../../constants/roles';
 import { openImagePicker, clearElementImage } from '../../services/image.service';
@@ -333,7 +333,7 @@ export class PldSidebarRight extends LitElement {
             ([key, role]) => html`
               <div
                 class="role-option ${el.role === key ? 'active' : ''}"
-                @click=${() => this._update('role', key)}
+                @click=${() => this._setRole(key)}
               >
                 <span class="role-dot" style="background: ${role.color}"></span>
                 ${role.label}
@@ -615,6 +615,21 @@ export class PldSidebarRight extends LitElement {
   private _update(key: string, value: unknown) {
     if (!this.selected) return;
     updateElement(this.store, this.selected.id, key as any, value as any);
+  }
+
+  /**
+   * Change the selected element's role (#127). In the band model role == band, so
+   * this physically moves the chip to the target band via moveElementToBandByRole
+   * — never a bare el.role write (which desyncs role from placement). A role that
+   * rejects the element type (acceptance matrix #49) is refused with a toast.
+   */
+  private _setRole(role: ElementRoleType) {
+    if (!this.selected) return;
+    const type = this.selected.type;
+    const ok = moveElementToBandByRole(this.store, this.selected.id, role);
+    if (!ok) {
+      showToast(`ย้ายไปส่วน "${ELEMENT_ROLES[role].label}" ไม่ได้ — ไม่รับ element ชนิด ${type} (#49)`, 'warning');
+    }
   }
 
   private _resize(w: number, h: number) {

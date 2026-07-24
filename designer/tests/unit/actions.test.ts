@@ -48,6 +48,7 @@ import {
   addElementToCell,
   addElementToNewBand,
   removeBandElement,
+  moveElementToBandByRole,
 } from '../../src/state/actions';
 
 function createStoreWithElements(count = 3): AppStore {
@@ -956,5 +957,48 @@ describe('addElementToNewBand (empty-state, #47 cutover)', () => {
     addElementToNewBand(store, 'text', 'content');
     expect(store.state.bands).toHaveLength(1);
     expect(store.state.bands[0].rows).toHaveLength(2);
+  });
+});
+
+describe('moveElementToBandByRole (#127 — role selector re-homes the chip)', () => {
+  it('detaches the chip from its band and re-homes it under the new role', () => {
+    const store = new AppStore();
+    const id = addElementToNewBand(store, 'text', 'header')!;
+    expect(store.state.bands.map((b) => b.role)).toEqual(['header']);
+
+    const ok = moveElementToBandByRole(store, id, 'summary');
+    expect(ok).toBe(true);
+
+    // el.role and band placement now agree — the core #127 invariant.
+    expect(store.state.elements.find((e) => e.id === id)!.role).toBe('summary');
+    const summary = store.state.bands.find((b) => b.role === 'summary')!;
+    expect(bandIds(store)).toEqual([id]); // exactly one reference, no dangling copy
+    expect(summary.rows.flatMap((r) => r.columns.flatMap((c) => c.elementIds))).toContain(id);
+  });
+
+  it('creates the destination band at its BAND_ORDER slot when absent', () => {
+    const store = new AppStore();
+    const id = addElementToNewBand(store, 'text', 'footer')!;
+    moveElementToBandByRole(store, id, 'header'); // header precedes footer
+    expect(store.state.bands.map((b) => b.role)).toEqual(['header', 'footer']);
+  });
+
+  it('refuses a move the acceptance matrix rejects (#49) — no mutation, returns false', () => {
+    const store = new AppStore();
+    const id = addElementToNewBand(store, 'list', 'content')!; // list only lives in content
+    const before = structuredClone(store.state.bands);
+
+    const ok = moveElementToBandByRole(store, id, 'summary'); // summary rejects 'list'
+    expect(ok).toBe(false);
+    expect(store.state.elements.find((e) => e.id === id)!.role).toBe('content');
+    expect(store.state.bands).toEqual(before);
+  });
+
+  it('is a no-op that returns true when already in the target role', () => {
+    const store = new AppStore();
+    const id = addElementToNewBand(store, 'text', 'header')!;
+    const before = structuredClone(store.state.bands);
+    expect(moveElementToBandByRole(store, id, 'header')).toBe(true);
+    expect(store.state.bands).toEqual(before);
   });
 });

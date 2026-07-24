@@ -35,6 +35,7 @@ import {
   addElementToNewBand,
   removeBandElement,
   selectElement,
+  setDragType,
 } from '../../state/actions';
 import { ELEMENT_ROLES } from '../../constants/roles';
 import { BAND_ORDER, bandAccepts, type Band } from '../../models/bands';
@@ -326,7 +327,7 @@ export class PldBandView extends LitElement {
         const role = this.store.state.bands[bi]?.role;
         showToast(`band ${role ?? ''} ไม่รับ element ชนิด ${type} (#49)`, 'warning');
       }
-      this.store.dispatch((d) => { d.dragType = null; });
+      setDragType(this.store, null); // transient flag, not undoable (#129)
     } else if (this._dragElId) {
       moveElementToCell(this.store, this._dragElId, bi, ri, ci);
     }
@@ -342,7 +343,7 @@ export class PldBandView extends LitElement {
       if (id === null) {
         showToast(`band ${role} ไม่รับ element ชนิด ${type} (#49)`, 'warning');
       }
-      this.store.dispatch((d) => { d.dragType = null; });
+      setDragType(this.store, null); // transient flag, not undoable (#129)
     }
     this._dragElId = null;
   }

@@ -14,7 +14,7 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import type { ElementType } from '../../models/element';
 import type { PageSizeName } from '../../models/page';
-import { setPageSize, setOrientation } from '../../state/actions';
+import { setPageSize, setOrientation, setDragType } from '../../state/actions';
 
 // ─── Import panel components ───
 import '../panels/layers-panel';
@@ -365,7 +365,8 @@ export class PldSidebarLeft extends LitElement {
 
   private _onDragStart(e: DragEvent, type: ElementType) {
     e.dataTransfer?.setData('element-type', type);
-    this.store.dispatch((draft) => { draft.dragType = type; });
+    // Transient UI flag — must NOT be undoable (#129).
+    setDragType(this.store, type);
   }
 }
 

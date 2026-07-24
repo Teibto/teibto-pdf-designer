@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { AppStore } from '../../src/state/store';
 import { HistoryService } from '../../src/services/history.service';
 import { applyMiddleware, tagAction } from '../../src/state/middleware';
-import { addElement, removeElement, selectElement, setZoom, regenerateBands, splitColumn, setColumnWidth } from '../../src/state/actions';
+import { addElement, removeElement, selectElement, setZoom, regenerateBands, splitColumn, setColumnWidth, setDragType, addElementToNewBand } from '../../src/state/actions';
 
 function createStoreWithHistory() {
   const store = new AppStore();
@@ -132,6 +132,35 @@ describe('non-undoable actions', () => {
 
     // Should not have added any history entries for selections
     expect(history.stats.undoCount).toBe(undoCountAfterAdd);
+  });
+
+  // #129: dragType is a transient UI flag. When it was written untagged, each
+  // dragstart/drop-clear pushed a spurious snapshot, making the first Ctrl+Z a
+  // no-op. setDragType() must never touch the history stack.
+  it('setDragType does not record history (#129)', () => {
+    const { store, history } = createStoreWithHistory();
+
+    setDragType(store, 'text');
+    setDragType(store, null);
+
+    expect(history.canUndo).toBe(false);
+    expect(store.state.dragType).toBe(null);
+  });
+
+  // #129 end-to-end: a drop (dragstart → add → drop-clear) must leave exactly one
+  // undo point, so a single undo removes the freshly dropped element.
+  it('one undo removes a freshly dropped element (#129)', () => {
+    const { store, history } = createStoreWithHistory();
+
+    setDragType(store, 'text');            // palette dragstart (non-undoable)
+    addElementToNewBand(store, 'text', 'header'); // the drop's single undo point
+    setDragType(store, null);              // band-view drop clear (non-undoable)
+
+    expect(store.state.elements).toHaveLength(1);
+    expect(history.stats.undoCount).toBe(1);
+
+    history.undo();
+    expect(store.state.elements).toHaveLength(0);
   });
 });
 
