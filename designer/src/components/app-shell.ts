@@ -29,6 +29,7 @@ import './canvas/band-view';
 import './layout/sidebar-right';
 import './flow/flow-view';
 import './shared/toast-notification';
+import './shared/error-boundary';
 
 // ─── Import modals ───
 import './modals/column-config-modal';
@@ -204,11 +205,15 @@ export class PldAppShell extends LitElement {
       <div class="main-content">
         <pld-sidebar-left></pld-sidebar-left>
 
-        <div class="canvas-area ${this.view !== 'design' ? 'hidden' : ''}">
-          <pld-band-view></pld-band-view>
-        </div>
+        <!-- #145: contain a canvas/flow crash to an inline fallback + Retry
+             instead of taking down the whole app (error-boundary was dead code). -->
+        <pld-error-boundary label="พื้นที่ออกแบบ">
+          <div class="canvas-area ${this.view !== 'design' ? 'hidden' : ''}">
+            <pld-band-view></pld-band-view>
+          </div>
 
-        ${this.view === 'flow' ? html`<pld-flow-view></pld-flow-view>` : ''}
+          ${this.view === 'flow' ? html`<pld-flow-view></pld-flow-view>` : ''}
+        </pld-error-boundary>
 
         <pld-sidebar-right></pld-sidebar-right>
       </div>

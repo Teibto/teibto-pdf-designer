@@ -194,6 +194,17 @@ export function needsMigration(template: Record<string, unknown>): boolean {
   return compareVersions(version, CURRENT_VERSION) < 0;
 }
 
+/**
+ * True when a template was authored by a NEWER designer than this build (#145).
+ * needsMigration() is false for these (nothing to migrate up), so callers must
+ * check separately and warn — a future schema may carry fields this build
+ * silently drops or mis-reads, and accepting it quietly is a data-integrity risk.
+ */
+export function isFutureVersion(template: Record<string, unknown>): boolean {
+  const version = typeof template.version === 'string' ? template.version : '1.0.0';
+  return compareVersions(version, CURRENT_VERSION) > 0;
+}
+
 // ─── Version Comparison ───
 
 /**

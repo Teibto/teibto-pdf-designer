@@ -416,8 +416,11 @@ export class PldTemplateManagerModal extends LitElement {
   private async _loadTemplate(id: string) {
     if (!confirmDiscardUnsaved(this.store)) return;
     try {
-      await loadTemplate(this.store, id);
+      const { warnings } = await loadTemplate(this.store, id);
       showToast('Template loaded!', 'success');
+      // Surface migration / validation / future-schema warnings instead of
+      // discarding them (#145) — the user should know the template changed shape.
+      warnings.forEach((w) => showToast(w, 'warning'));
       this._close();
     } catch (err) {
       showToast(`Load failed: ${err}`, 'error');
@@ -544,8 +547,9 @@ export class PldTemplateManagerModal extends LitElement {
     if (!confirmDiscardUnsaved(this.store)) return;
 
     try {
-      importTemplateJson(this.store, this.importJson);
+      const { warnings } = importTemplateJson(this.store, this.importJson);
       showToast('Template imported!', 'success');
+      warnings.forEach((w) => showToast(w, 'warning')); // #145 — don't discard
       this._close();
     } catch (err) {
       showToast(`Import failed: ${err}`, 'error');

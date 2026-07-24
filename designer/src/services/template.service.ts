@@ -12,7 +12,7 @@ import type { AppStore } from '../state/store';
 import { createDefaultPage } from '../models/page';
 import { createDefaultPagination } from '../models/template';
 import { validateTemplate } from './validation.service';
-import { migrateTemplate, needsMigration, CURRENT_VERSION } from './migration.service';
+import { migrateTemplate, needsMigration, isFutureVersion, CURRENT_VERSION } from './migration.service';
 import { clearPaginationCache } from './pagination.service';
 import { elementsToBands } from './band-layout.service';
 import { extractJsonKeys } from '../state/actions';
@@ -175,6 +175,14 @@ export async function loadTemplate(
 
   const warnings: string[] = [];
 
+  // Newer-than-this-build schema: needsMigration() is false, so warn explicitly —
+  // a future field set may be dropped/mis-read silently otherwise (#145).
+  if (isFutureVersion(raw)) {
+    warnings.push(
+      `เทมเพลตนี้สร้างจาก designer เวอร์ชันใหม่กว่า (v${raw.version}) — บาง field อาจไม่รองรับและถูกละไว้`,
+    );
+  }
+
   // Step 1: Migrate if needed
   let data = raw;
   if (needsMigration(raw)) {
@@ -308,6 +316,13 @@ export function importTemplateJson(
   }
 
   const warnings: string[] = [];
+
+  // Newer-than-this-build schema — warn (needsMigration is false for these) (#145).
+  if (isFutureVersion(raw)) {
+    warnings.push(
+      `เทมเพลตนี้สร้างจาก designer เวอร์ชันใหม่กว่า (v${raw.version}) — บาง field อาจไม่รองรับและถูกละไว้`,
+    );
+  }
 
   // Step 1: Migrate if needed
   if (needsMigration(raw)) {
