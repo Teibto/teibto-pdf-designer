@@ -38,17 +38,15 @@ define([
   const TPL_FLD_IS_DEFAULT = 'custrecord_pld_tpl_default'; // Checkbox: default for this rectype
 
   function onRequest(context) {
-    var request  = context.request;
     var response = context.response;
+    var tel = newTelemetry(context.request); // observability (#149) — request-scoped
 
     try {
-      var action = request.parameters.action || 'render';
-
-      switch (action) {
+      switch (tel.action) {
         case 'render':
-          return renderPdf(context);
+          return renderPdf(context, tel);
         case 'preview':
-          return previewPdf(context);
+          return previewPdf(context, tel);
         case 'list':
           return listTemplates(context);
         case 'save':
@@ -58,22 +56,97 @@ define([
         case 'delete':
           return deleteTemplate(context);
         case 'preview-live':
-          return previewLivePdf(context);
+          return previewLivePdf(context, tel);
         case 'version':
           return getVersion(context);
         default:
-          return renderPdf(context);
+          return renderPdf(context, tel);
       }
 
     } catch (e) {
-      log.error({ title: 'PLD Render Error', details: e });
-      response.setHeader({ name: 'Content-Type', value: 'application/json' });
+      // Structured, correlated failure log (#149): one entry carrying full
+      // context — which action/template/record/subsidiary/account/stage failed —
+      // so a customer-reported "print ไม่ออก" is diagnosable straight from the
+      // Script Execution Log. errorId ties the user's on-screen ref to this line.
+      logRenderError(tel, e);
+      response.setHeader({ name: 'Content-Type', value: 'application/json; charset=utf-8' });
       response.write(JSON.stringify({
         error: true,
+        errorId: tel.errorId,
         message: e.message || String(e),
-        stack: e.stack || ''
+        stack: e.stack || '',
+        ref: 'เกิดข้อผิดพลาดในการสร้าง PDF — แจ้งทีม Teibto พร้อมรหัสอ้างอิง ' + tel.errorId
       }));
     }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // OBSERVABILITY (#149) — structured, correlated render telemetry via N/log
+  // (native sink only: no custom record / no render data stored on the customer
+  // account — data-classification-safe, zero write governance).
+  // ═══════════════════════════════════════════════════
+
+  /** Short, greppable correlation id shared between the on-screen error and the
+   *  server log line (e.g. "PLD-l8x2k-3f9"). */
+  function newErrorId() {
+    return 'PLD-' + Date.now().toString(36) + '-' +
+      Math.floor(Math.random() * 0x100000).toString(36);
+  }
+
+  /** Build the request-scoped telemetry context from what's known up front;
+   *  render paths fill in stage/subsidiaryId as they proceed. */
+  function newTelemetry(request) {
+    var p = (request && request.parameters) || {};
+    var user = {};
+    try { user = runtime.getCurrentUser() || {}; } catch (e) { user = {}; }
+    return {
+      errorId: newErrorId(),
+      action: p.action || 'render',
+      rectype: p.rectype || '',
+      recid: p.recid || '',
+      tplid: p.tplid || '',
+      subsidiaryId: '',
+      userId: user.id || '',
+      stage: 'init',
+      start: Date.now()
+    };
+  }
+
+  function telElapsedMs(tel) { return Date.now() - tel.start; }
+
+  /** Base structured payload common to the ok/error log lines. */
+  function telBase(tel) {
+    return {
+      errorId: tel.errorId,
+      action: tel.action,
+      rectype: tel.rectype,
+      recid: tel.recid,
+      tplid: tel.tplid,
+      subsidiaryId: tel.subsidiaryId,
+      userId: tel.userId,
+      elapsedMs: telElapsedMs(tel)
+    };
+  }
+
+  /** One audit line per successful render — lightweight latency/throughput
+   *  telemetry readable from the native Script Execution Log. */
+  function logRenderOk(tel, extra) {
+    var d = telBase(tel);
+    d.ok = true;
+    if (extra) {
+      for (var k in extra) { if (extra.hasOwnProperty(k)) d[k] = extra[k]; }
+    }
+    log.audit({ title: 'PLD render ok', details: d });
+  }
+
+  /** One error line per failure, correlated by errorId and tagged with the stage
+   *  it died in (template-load / load-record / render / copyset / write). */
+  function logRenderError(tel, e) {
+    var d = telBase(tel);
+    d.stage = tel.stage;
+    d.message = (e && e.message) || String(e);
+    d.stack = (e && e.stack) || '';
+    log.error({ title: 'PLD render failed [' + tel.errorId + ']', details: d });
   }
 
   // ═══════════════════════════════════════════════════
@@ -84,7 +157,7 @@ define([
    * Render PDF from template + record.
    * Params: rectype, recid, tplid (or uses default template)
    */
-  function renderPdf(context) {
+  function renderPdf(context, tel) {
     var params   = context.request.parameters;
     var recType  = params.rectype;
     var recId    = params.recid;
@@ -96,6 +169,7 @@ define([
     }
 
     // ─── 1. Load Template (XML + copy set from the record data, #92) ───
+    tel.stage = 'load-template';
     var tpl = tplId ? loadTemplateXml(tplId) : findDefaultTemplateXml(recType);
     var tplXml = tpl && tpl.xml;
     var tplCopies = tpl && tpl.copies;
@@ -105,6 +179,7 @@ define([
     }
 
     // ─── 2. Render (record + company + context) ───
+    tel.stage = 'render';
     // Invoices bind the curated schema (company/customer/document/totals/items)
     // built from SuiteQL — the SAME data source as live Preview (preview-live),
     // so Print == Preview. Without this, Print binds the raw record and the
@@ -112,15 +187,16 @@ define([
     // Invoices also print the statutory copy set (ต้นฉบับ + สำเนา, #15).
     // #91: every supported type binds curated data. #92: copy set comes from
     // the template record (data JSON), falling back to the invoice default.
-    var out;
+    var out, copiesCount = 1;
     if (invoiceData.isSupportedType(recType)) {
       var copies = resolveCopies(tplCopies, recType);
+      copiesCount = copies.length;
       out = copies.length > 1
-        ? renderCopiesPdf(tplXml, recType, recId, copies)
+        ? renderCopiesPdf(tplXml, recType, recId, copies, tel)
         : renderXmlWithRecord(tplXml, recType, recId,
-            invoiceData.buildTransactionData(recType, recId, copies[0].th, copies[0].en));
+            invoiceData.buildTransactionData(recType, recId, copies[0].th, copies[0].en), tel);
     } else {
-      out = renderXmlWithRecord(tplXml, recType, recId, null);
+      out = renderXmlWithRecord(tplXml, recType, recId, null, tel);
     }
 
     // ─── 3. Set filename from tranid ───
@@ -133,7 +209,11 @@ define([
     var fileName = recType + '_' + tranId + '.pdf';
     out.pdfFile.name = fileName;
 
+    // PDF built — record the success telemetry before we hand off the bytes (#149).
+    logRenderOk(tel, { copies: copiesCount });
+
     // ─── 4. Return PDF ───
+    tel.stage = 'write';
     context.response.setHeader({
       name: 'Content-Type',
       value: 'application/pdf'
@@ -155,7 +235,7 @@ define([
    * <#list record.items ...> resolve; otherwise bind the raw NetSuite record
    * (`rec`) so hand-written master templates (${record.tranid}) render unchanged.
    */
-  function makeRenderer(tplXml, curatedData, rec) {
+  function makeRenderer(tplXml, curatedData, rec, tel) {
     var renderer = render.create();
     renderer.templateContent = tplXml;
 
@@ -165,11 +245,15 @@ define([
       renderer.addRecord({ templateName: 'record', record: rec });
     }
 
-    // Company info (custom data source) — subsidiary-scoped (OneWorld, #144)
+    // Company info (custom data source) — subsidiary-scoped (OneWorld, #144).
+    // Capture the resolved subsidiary into telemetry (#149) so a failed render is
+    // traceable to the config record that fed ${company.*}.
+    var subsidiaryId = subsidiaryIdOf(curatedData, rec);
+    if (tel && subsidiaryId != null && subsidiaryId !== '') tel.subsidiaryId = String(subsidiaryId);
     renderer.addCustomDataSource({
       format: render.DataSource.OBJECT,
       alias: 'company',
-      data: loadCompanyInfo(subsidiaryIdOf(curatedData, rec))
+      data: loadCompanyInfo(subsidiaryId)
     });
 
     // Current date/user info
@@ -192,9 +276,11 @@ define([
    * Bind BFO XML to a real record and render a single-copy PDF (non-invoice
    * record types). Returns { pdfFile, rec } (caller names the file).
    */
-  function renderXmlWithRecord(tplXml, recType, recId, curatedData) {
+  function renderXmlWithRecord(tplXml, recType, recId, curatedData, tel) {
+    if (tel) tel.stage = 'load-record';
     var rec = record.load({ type: recType, id: recId });
-    return { pdfFile: makeRenderer(tplXml, curatedData, rec).renderAsPdf(), rec: rec };
+    if (tel) tel.stage = 'render';
+    return { pdfFile: makeRenderer(tplXml, curatedData, rec, tel).renderAsPdf(), rec: rec };
   }
 
   // Thai statutory copy set (#15) — default for invoices when the template
@@ -233,12 +319,13 @@ define([
    * resolved <pdf> documents render together with render.xmlToPdf.
    * Returns { pdfFile, tranId }.
    */
-  function renderCopiesPdf(tplXml, recType, recId, copies) {
+  function renderCopiesPdf(tplXml, recType, recId, copies, tel) {
+    if (tel) tel.stage = 'render';
     var tranId = '';
     var docs = copies.map(function (c) {
       var curated = invoiceData.buildTransactionData(recType, recId, c.th, c.en);
       tranId = tranId || (curated.document && curated.document.number) || '';
-      var resolved = makeRenderer(tplXml, curated, null).renderAsString();
+      var resolved = makeRenderer(tplXml, curated, null, tel).renderAsString();
       var start = resolved.indexOf('<pdf>');
       var end = resolved.lastIndexOf('</pdf>');
       if (start < 0 || end < 0) {
@@ -247,6 +334,7 @@ define([
       return resolved.substring(start, end + '</pdf>'.length);
     });
 
+    if (tel) tel.stage = 'copyset';
     var pdfFile = render.xmlToPdf({
       xmlString: '<?xml version="1.0"?>\n' +
         '<!DOCTYPE pdfset PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n' +
@@ -267,34 +355,44 @@ define([
    * buildInvoiceData — synthetic-data preview for QA/stress tests (#75); the
    * render pipeline (FreeMarker + BFO + copy set) stays the real one.
    */
-  function previewLivePdf(context) {
+  function previewLivePdf(context, tel) {
     if (context.request.method !== 'POST') {
       throw new Error('POST required for preview-live');
     }
 
+    tel.stage = 'parse-body';
     var body = JSON.parse(context.request.body || '{}');
     if (!body.xml)     throw new Error('preview-live requires xml (export BFO from the designer)');
     if (!body.rectype) throw new Error('preview-live requires rectype');
     if (!body.recid && !body.data) throw new Error('preview-live requires recid — open the designer from a record');
 
+    // Body carries the render context for a preview — reflect it into telemetry
+    // (#149) so a failed preview is as traceable as a failed print.
+    tel.rectype = body.rectype;
+    tel.recid = body.recid || '';
+
     // Designer templates bind the curated schema (company/customer/document/totals/
     // items). For invoices, build that from SuiteQL so preview shows REAL data —
     // including the statutory copy set (ต้นฉบับ + สำเนา), same as Print (#15).
-    var out;
+    tel.stage = 'render';
+    var out, copiesCount = 1;
     if (body.data) {
-      out = { pdfFile: makeRenderer(body.xml, body.data, null).renderAsPdf() };
+      out = { pdfFile: makeRenderer(body.xml, body.data, null, tel).renderAsPdf() };
     } else if (invoiceData.isSupportedType(body.rectype)) {
       // #92: unsaved designer state sends its copy set in the body
       var pvCopies = resolveCopies(parseCopies(body.copies), body.rectype);
+      copiesCount = pvCopies.length;
       out = pvCopies.length > 1
-        ? renderCopiesPdf(body.xml, body.rectype, body.recid, pvCopies)
+        ? renderCopiesPdf(body.xml, body.rectype, body.recid, pvCopies, tel)
         : renderXmlWithRecord(body.xml, body.rectype, body.recid,
-            invoiceData.buildTransactionData(body.rectype, body.recid, pvCopies[0].th, pvCopies[0].en));
+            invoiceData.buildTransactionData(body.rectype, body.recid, pvCopies[0].th, pvCopies[0].en), tel);
     } else {
-      out = renderXmlWithRecord(body.xml, body.rectype, body.recid, null);
+      out = renderXmlWithRecord(body.xml, body.rectype, body.recid, null, tel);
     }
     out.pdfFile.name = 'preview.pdf';
 
+    logRenderOk(tel, { copies: copiesCount });
+    tel.stage = 'write';
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
     context.response.setHeader({ name: 'Content-Disposition', value: 'inline; filename="preview.pdf"' });
     context.response.writeFile({ file: out.pdfFile, isInline: true });
@@ -304,10 +402,11 @@ define([
   // PREVIEW — Render with sample data
   // ═══════════════════════════════════════════════════
 
-  function previewPdf(context) {
+  function previewPdf(context, tel) {
     var tplId = context.request.parameters.tplid;
     if (!tplId) throw new Error('Missing tplid for preview');
 
+    tel.stage = 'load-template';
     var tplXml = loadTemplateXml(tplId);
 
     // Replace FreeMarker expressions with placeholder text for preview.
@@ -319,12 +418,15 @@ define([
       .replace(/<#[^>]*>/g, '')
       .replace(/<\/#[^>]*>/g, '');
 
+    tel.stage = 'render';
     var renderer = render.create();
     renderer.templateContent = previewXml;
 
     var pdfFile = renderer.renderAsPdf();
     pdfFile.name = 'preview.pdf';
 
+    logRenderOk(tel, { copies: 1 });
+    tel.stage = 'write';
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
     context.response.setHeader({ name: 'Content-Disposition', value: 'inline; filename="preview.pdf"' });
     context.response.writeFile({ file: pdfFile, isInline: true });
