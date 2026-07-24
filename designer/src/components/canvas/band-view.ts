@@ -48,6 +48,9 @@ export class PldBandView extends LitElement {
   private store!: AppStore;
 
   @state() private _tick = 0;
+  /** Dismissed the blank-doc onboarding CTA this session (#124 — user chose to
+   *  start from an empty template; don't nag again even if they clear it). */
+  @state() private _ctaDismissed = false;
   /** Id of the element currently being dragged between cells (band-local). */
   private _dragElId: string | null = null;
   private _onState = () => { this._tick++; };
@@ -119,6 +122,29 @@ export class PldBandView extends LitElement {
     .empty-slot { border-style: dashed; opacity: .7; }
     .empty-slot.drop { opacity: 1; border-style: solid; background: color-mix(in srgb, var(--band-color) 10%, transparent); }
     .empty-slot .slot-hint { padding: 12px; text-align: center; font-size: 11px; color: var(--color-text-dim, #8a8ca0); }
+
+    /* Blank-doc onboarding CTA (#124) */
+    .cta {
+      border: 1px solid var(--color-accent, #4f6ef7);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--color-accent, #4f6ef7) 10%, transparent);
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      text-align: center;
+    }
+    .cta h3 { margin: 0; font-size: 15px; color: var(--color-text, #e8e9f0); }
+    .cta p { margin: 0 0 8px; font-size: 12px; color: var(--color-text-dim, #8a8ca0); max-width: 460px; }
+    .cta-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .cta button {
+      width: auto; height: auto; padding: 8px 16px; font-size: 13px; border-radius: 6px;
+      border: 1px solid var(--color-border, #2a2c3a); background: var(--color-bg-hover, #222430);
+      color: var(--color-text, #e8e9f0); cursor: pointer;
+    }
+    .cta button.primary { border-color: var(--color-accent, #4f6ef7); background: var(--color-accent, #4f6ef7); color: #fff; font-weight: 600; }
+    .cta button:hover { filter: brightness(1.1); }
   `;
 
   render() {
@@ -129,8 +155,23 @@ export class PldBandView extends LitElement {
     // Always show all six role slots (BAND_ORDER): a populated band renders its
     // rows/cells; an empty role is a drop-zone so a blank template (or an unused
     // role) can receive its first element without a free canvas (#47 cutover).
+    // Blank-doc onboarding CTA (#124): when nothing has been added yet, offer a
+    // fast start (load a sample) or an explicit "start blank" — without forcing a
+    // workflow; the empty role drop-zones below stay usable either way.
+    const showCta = elements.length === 0 && !this._ctaDismissed;
+
     return html`
       <div class="doc">
+        ${showCta ? html`
+          <div class="cta">
+            <h3>เริ่มออกแบบเอกสาร</h3>
+            <p>โหลดเทมเพลตตัวอย่างเพื่อเริ่มได้เร็ว หรือเริ่มจากหน้าว่างแล้วลากองค์ประกอบจากแถบซ้ายมาวางในแต่ละส่วน</p>
+            <div class="cta-actions">
+              <button class="primary" @click=${this._loadSampleFromCta}>★ โหลดเทมเพลตตัวอย่าง</button>
+              <button @click=${() => { this._ctaDismissed = true; }}>เริ่มจากว่าง</button>
+            </div>
+          </div>
+        ` : nothing}
         <div class="toolbar">
           ${elements.length
             ? html`<button class="wide" title="สร้าง bands ใหม่จาก canvas (ทับ layout ปัจจุบัน)"
@@ -279,6 +320,12 @@ export class PldBandView extends LitElement {
     (e.target as HTMLElement).removeAttribute('dragging');
     this._dragElId = null;
   }
+  /** Blank-doc CTA (#124): load the built-in sample. Reuses the same bubbling
+   *  event the header ★ button fires, so there's one load-sample path. */
+  private _loadSampleFromCta() {
+    this.dispatchEvent(new CustomEvent('pld-load-sample', { bubbles: true, composed: true }));
+  }
+
   /** Shortcut from the Table band head (#119): select the item table and open
    *  its column config directly — no need to find and click the chip first. */
   private _openColumnConfig(elementId: string) {

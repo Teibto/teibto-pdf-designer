@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- **Onboarding CTA บนหน้าว่าง** (#124 ส่วนที่ 1) — เปิดแอปด้วยเทมเพลตว่างจะเห็นการ์ด CTA กลางพื้นที่ออกแบบ: ปุ่ม "★ โหลดเทมเพลตตัวอย่าง" (เริ่มเร็ว) + "เริ่มจากว่าง" (ปิด CTA) — ไม่ต้องไปหา ★ ตัวอย่าง มุมบนขวาเอง และไม่บังคับ workflow (drop-zone แต่ละ role ยังใช้ได้เหมือนเดิม); กด "เริ่มจากว่าง" แล้วไม่รบกวนซ้ำใน session นั้น
 - **Keyboard-shortcut cheatsheet** (#124 ส่วนที่ 3) — กด `?` (หรือปุ่ม ⌨ บน header) เปิดหน้าต่างรวมคีย์ลัดทั้งหมดที่ระบบรองรับจริง จัดกลุ่ม (แก้ไของค์ประกอบ / ประวัติ / จัดกลุ่ม & ลำดับชั้น / มุมมอง / ทั่วไป) — รายการ sync กับ `keyboard.service.ts` + undo/redo ใน app-shell, แสดง ⌘ บน Mac และ Ctrl บนอื่น ๆ; ปิดด้วย `?`/Esc/คลิกนอก. Undo/Redo toast เป็นไทย (ย้อนกลับ/ทำซ้ำ)
 - **Render observability** (#149) — engine `pld_sl_render_pdf.js` เพิ่ม structured telemetry ผ่าน native `N/log` (ไม่มี custom record/ข้อมูล render เก็บบน account ลูกค้า — data-classification-safe, ไม่มี write governance): render fail ยิง `log.error` หนึ่งบรรทัดพร้อม context ครบ (`errorId, action, rectype, recid, tplid, subsidiaryId, userId, stage, elapsedMs, message, stack`) — stage บอกว่าพังตอนไหน (template-load / load-record / render / copyset / write); JSON error ที่คืน caller แนบ `errorId` + ข้อความไทยให้ user แจ้งทีมพร้อมรหัสอ้างอิงตรงกับ log line; render สำเร็จยิง `log.audit` หนึ่งบรรทัด (`ok, copies, elapsedMs`) เป็น latency/throughput telemetry. happy-path output (PDF bytes/headers) ไม่เปลี่ยน
 - **Production-readiness รอบ P0/P1** (จาก review มุมผู้ใช้ก่อนเปิด production):
