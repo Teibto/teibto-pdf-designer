@@ -15,9 +15,10 @@ test.describe('Save', () => {
   test('saves via the 💾 บันทึก button (exactly once — #131)', async ({ page }) => {
     // Regression for #131: the header event is now handled by a single window
     // listener, so one click produces exactly one save toast (previously two:
-    // app-shell listened on both `this` and `window`).
+    // app-shell listened on both `this` and `window`). Outside NetSuite the 💾
+    // button saves locally (#137), toast "บันทึกในเครื่องนี้เท่านั้น".
     await headerBtn(page, 'บันทึก').click();
-    await expect(toast(page, 'saved')).toHaveCount(1);
+    await expect(toast(page, 'เครื่องนี้')).toHaveCount(1);
     await expect(page.locator(badge)).toHaveText(/Saved/);
   });
 
@@ -25,7 +26,7 @@ test.describe('Save', () => {
     await loadSample(page);
     await expect(page.locator(badge)).toHaveText(/Unsaved/);
     await page.keyboard.press('Control+s');
-    await expect(toast(page, 'saved')).toHaveCount(1);
+    await expect(toast(page, 'เครื่องนี้')).toHaveCount(1);
     await expect(page.locator(badge)).toHaveText(/Saved/);
   });
 });
