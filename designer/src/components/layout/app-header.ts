@@ -4,12 +4,13 @@
  *
  * @author Wichit Wongta
  */
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { switchView } from '../../state/actions';
 import { getTheme, toggleTheme, type Theme } from '../../services/theme.service';
+import { isNetSuiteEnv } from '../../services/netsuite-adapter.service';
 
 @customElement('pld-header')
 export class PldHeader extends LitElement {
@@ -193,6 +194,10 @@ export class PldHeader extends LitElement {
         </button>
         <button class="btn btn-sm" @click=${this._onTemplates}>📁 เทมเพลต</button>
         <button class="btn btn-sm" @click=${this._onSave}>💾 บันทึก</button>
+        ${isNetSuiteEnv() ? html`
+          <button class="btn btn-sm" title="เลือก record type + ตั้งเป็น default template"
+            @click=${this._onSaveSettings}>⚙ ตั้งค่าการบันทึก</button>
+        ` : nothing}
         <button class="btn btn-sm" @click=${this._onExportJson}>⟨/⟩ JSON</button>
         <button class="btn btn-sm" @click=${this._onSample}>★ ตัวอย่าง</button>
         <button class="btn btn-sm btn-bfo" @click=${this._onExportBfo}>🔶 NetSuite BFO</button>
@@ -212,6 +217,7 @@ export class PldHeader extends LitElement {
 
   private _onTemplates() { this._emit('pld-show-templates'); }
   private _onSave()      { this._emit('pld-save-template'); }
+  private _onSaveSettings() { this._emit('pld-show-save-ns'); }
   private _onExportJson(){ this._emit('pld-show-export-json'); }
   private _onSample()    { this._emit('pld-load-sample'); }
   private _onExportBfo() { this._emit('pld-show-bfo-export'); }

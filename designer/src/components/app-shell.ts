@@ -34,6 +34,7 @@ import './modals/column-config-modal';
 import './modals/template-manager-modal';
 import './modals/preview-modal';
 import './modals/bfo-export-modal';
+import './modals/save-ns-modal';
 
 @customElement('pld-app-shell')
 export class PldAppShell extends LitElement {
@@ -55,6 +56,7 @@ export class PldAppShell extends LitElement {
   @state() private columnConfigElementId = '';
   @state() private showPreview = false;
   @state() private showBfoExport = false;
+  @state() private showSaveNs = false;
 
   static styles = css`
     :host {
@@ -148,6 +150,7 @@ export class PldAppShell extends LitElement {
     this.addEventListener('pld-show-export-json', () => this._exportJson());
     this.addEventListener('pld-load-sample', () => this._loadSample());
     this.addEventListener('pld-show-bfo-export', () => { this.showBfoExport = true; });
+    this.addEventListener('pld-show-save-ns', () => { this.showSaveNs = true; });
     this.addEventListener('pld-show-preview', () => { this.showPreview = true; });
 
     // Column config event from sidebar
@@ -230,6 +233,11 @@ export class PldAppShell extends LitElement {
         .open=${this.showBfoExport}
         @close=${() => (this.showBfoExport = false)}
       ></pld-bfo-export-modal>
+
+      <pld-save-ns-modal
+        .open=${this.showSaveNs}
+        @close=${() => (this.showSaveNs = false)}
+      ></pld-save-ns-modal>
 
       <pld-toast></pld-toast>
     `;

@@ -82,6 +82,20 @@ describe('saveTemplateToNetSuite (#137)', () => {
     expect((savedBodies[0] as { rectype: string }).rectype).toBe('invoice');
   });
 
+  it('opts.rectype + opts.isDefault override the context default (#138 save dialog)', async () => {
+    const store = storeWithContent();
+    await saveTemplateToNetSuite(store, { rectype: 'purchaseorder', isDefault: true });
+    const body = savedBodies[0] as { rectype: string; isDefault: boolean };
+    expect(body.rectype).toBe('purchaseorder');
+    expect(body.isDefault).toBe(true);
+  });
+
+  it('opts.isDefault false is passed through (save without hijacking the print default)', async () => {
+    const store = storeWithContent();
+    await saveTemplateToNetSuite(store, { rectype: 'invoice', isDefault: false });
+    expect((savedBodies[0] as { isDefault: boolean }).isDefault).toBe(false);
+  });
+
   it('marks the template clean and records the returned id', async () => {
     const store = storeWithContent();
     expect(store.state.template.isDirty).toBe(true);

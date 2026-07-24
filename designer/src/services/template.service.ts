@@ -92,10 +92,14 @@ export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
  * to a silent local write (R4: no silent fallback).
  *
  * rectype defaults to the record the designer was opened from (nsContext), so a
- * plain save associates the template with that transaction type. Setting it as the
- * print default stays an explicit action in the BFO export modal.
+ * plain 💾 save associates the template with that transaction type. The Save
+ * dialog (#138) overrides it and may flag the template as the record type's print
+ * default via opts.
  */
-export async function saveTemplateToNetSuite(store: AppStore): Promise<{ id: string }> {
+export async function saveTemplateToNetSuite(
+  store: AppStore,
+  opts: { rectype?: string; isDefault?: boolean } = {},
+): Promise<{ id: string }> {
   const state = store.state;
   const ctx = getNsContext();
 
@@ -123,7 +127,8 @@ export async function saveTemplateToNetSuite(store: AppStore): Promise<{ id: str
     name: state.template.name || 'Untitled Template',
     data: designerJson,
     xml,
-    rectype: ctx?.recordType || undefined,
+    rectype: opts.rectype ?? ctx?.recordType ?? undefined,
+    isDefault: opts.isDefault,
   });
 
   store.dispatch((d) => {
