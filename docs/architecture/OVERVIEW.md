@@ -1,6 +1,8 @@
 # Architecture Overview — teibto-pdf-designer
 
 > อัปเดตล่าสุด: 2026-07-16 · สรุปจาก code review ตั้งต้นของ codebase `pdf-layout-designer-v3.2`
+>
+> จะลงมือแก้โค้ด (ลูป PR + verify gate + กับดักเฉพาะ repo): อ่าน [`docs/RUNBOOK.md`](../RUNBOOK.md)
 
 ## หลักการออกแบบ (ตัดสินแล้ว — เปลี่ยนต้องคุยใน Issue)
 
