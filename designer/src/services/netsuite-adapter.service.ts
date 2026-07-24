@@ -10,6 +10,20 @@
  * @author Wichit Wongta
  */
 
+/**
+ * Thrown when a Suitelet call comes back as a login/interstitial page instead of
+ * JSON — i.e. the NetSuite session has expired mid-use (#139). A distinct type so
+ * callers/UI can show a re-open-from-NetSuite prompt rather than a raw parse error.
+ */
+export class SessionExpiredError extends Error {
+  constructor(
+    message = 'เซสชัน NetSuite หมดอายุหรือถูก redirect ไปหน้า login — เปิด designer ใหม่จาก NetSuite แล้วบันทึกอีกครั้ง',
+  ) {
+    super(message);
+    this.name = 'SessionExpiredError';
+  }
+}
+
 /** NetSuite context injected by the Suitelet */
 export interface NsContext {
   userId: number;
@@ -104,7 +118,22 @@ async function suiteletFetch(
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        return await response.json();
+        // NetSuite returns HTTP 200 + an HTML login page when the session has
+        // expired (not 401), so a naive response.json() would throw a cryptic
+        // "Unexpected token '<'". Detect the redirect/HTML and surface a clear
+        // session-expired error instead (#139).
+        const text = await response.text();
+        const head = text.trimStart().slice(0, 200).toLowerCase();
+        const looksLikeHtml = head.startsWith('<');
+        if (response.redirected || looksLikeHtml) {
+          throw new SessionExpiredError();
+        }
+        try {
+          return JSON.parse(text);
+        } catch {
+          // 200 but not valid JSON — almost always a login/interstitial page.
+          throw new SessionExpiredError();
+        }
       }
 
       // Non-retryable error

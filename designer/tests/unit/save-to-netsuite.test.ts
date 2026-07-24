@@ -104,6 +104,22 @@ describe('saveTemplateToNetSuite (#137)', () => {
     expect(store.state.template.isDirty).toBe(false);
   });
 
+  it('surfaces a session-expired error when NetSuite returns 200 + HTML login (#139)', async () => {
+    // Session expiry: NetSuite answers 200 with an HTML login page, not 401/JSON.
+    globalThis.fetch = vi.fn(async () =>
+      new Response('<!DOCTYPE html><html><body>Please log in</body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      }),
+    ) as typeof fetch;
+
+    const store = storeWithContent();
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow(/เซสชัน NetSuite หมดอายุ|session/i);
+    // must NOT be marked saved — the work is still unpersisted
+    expect(store.state.template.isDirty).toBe(true);
+    expect(store.state.template.id).toBeNull();
+  });
+
   it('THROWS on a server error — no silent local fallback (R4)', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ error: 'RECORD_SAVE_FAILED' }), { status: 200 }),
