@@ -12,6 +12,7 @@
  *   ?action=render&rectype=invoice&recid=123&tplid=456&download=T
  *   ?action=preview&tplid=456                    ← preview with sample data
  *   ?action=list&rectype=invoice                 ← list available templates
+ *   ?action=delete&tplid=456 (POST)               ← delete a template record
  *
  * @author Wichit Wongta
  */
@@ -54,6 +55,8 @@ define([
           return saveTemplate(context);
         case 'get':
           return getTemplate(context);
+        case 'delete':
+          return deleteTemplate(context);
         case 'preview-live':
           return previewLivePdf(context);
         case 'version':
@@ -162,11 +165,11 @@ define([
       renderer.addRecord({ templateName: 'record', record: rec });
     }
 
-    // Company info (custom data source)
+    // Company info (custom data source) — subsidiary-scoped (OneWorld, #144)
     renderer.addCustomDataSource({
       format: render.DataSource.OBJECT,
       alias: 'company',
-      data: loadCompanyInfo()
+      data: loadCompanyInfo(subsidiaryIdOf(curatedData, rec))
     });
 
     // Current date/user info
@@ -461,6 +464,43 @@ define([
     sendJson(context, { id: savedId, success: true });
   }
 
+  /**
+   * Delete template (POST).
+   * Params: tplid
+   * #142: the SPA previously had no way to delete an NS template at all
+   * (only Load + Duplicate) — a stale/wrong record could never be removed.
+   * The record IS deleted even when it's the record type's default (a user
+   * may deliberately be removing a broken default), but the response flags
+   * wasDefault:true so the caller can warn that the record type is now left
+   * without a default template (Print falls back to "no template found",
+   * see renderPdf/findDefaultTemplateXml — no silent fallback, R4).
+   */
+  function deleteTemplate(context) {
+    if (context.request.method !== 'POST') {
+      throw new Error('POST required for delete');
+    }
+
+    var tplId = context.request.parameters.tplid;
+    if (!tplId) throw new Error('Missing tplid');
+
+    var wasDefault = false;
+    try {
+      wasDefault = record.lookupFields({
+        type: TPL_RECORD_TYPE,
+        id: tplId,
+        columns: [TPL_FLD_IS_DEFAULT]
+      })[TPL_FLD_IS_DEFAULT] === true;
+    } catch (e) {
+      // Record already gone / unreadable — let record.delete below surface
+      // the real error (R4: no silent swallow).
+      wasDefault = false;
+    }
+
+    record.delete({ type: TPL_RECORD_TYPE, id: tplId });
+
+    sendJson(context, { success: true, wasDefault: wasDefault });
+  }
+
   // ═══════════════════════════════════════════════════
   // HELPERS
   // ═══════════════════════════════════════════════════
@@ -550,9 +590,26 @@ define([
    * Load company info from the PLD config custom record (#9).
    * Single source of ${company.*}: shared loader pld_lib_company_config.js —
    * per-account setup is one config record, no template edits, no script params.
+   *
+   * @param {string|number} [subsidiaryId] - transaction's subsidiary (OneWorld,
+   *   #144); undefined when there's no record context (synthetic preview data).
    */
-  function loadCompanyInfo() {
-    return companyConfig.load();
+  function loadCompanyInfo(subsidiaryId) {
+    return companyConfig.load(subsidiaryId);
+  }
+
+  /**
+   * Resolve the subsidiary id to scope ${company.*} by (#144), preferring the
+   * curated data's own subsidiaryId (set by pld_lib_invoice_data from the
+   * transaction it already loaded) and falling back to the raw record `rec`
+   * when curatedData wasn't built by that library (non-invoice record types).
+   * Returns undefined when neither is available (no record context) — load()
+   * then falls back to the global/first-active config, unchanged behavior.
+   */
+  function subsidiaryIdOf(curatedData, rec) {
+    if (curatedData && curatedData.subsidiaryId) return curatedData.subsidiaryId;
+    if (!rec) return undefined;
+    try { return rec.getValue({ fieldId: 'subsidiary' }); } catch (e) { return undefined; }
   }
 
   function sendJson(context, data) {

@@ -62,3 +62,17 @@ jobs:
           npm ci
           npm run lint --if-present
           npm test --if-present
+
+      # 5) Playwright e2e (#146) — save/render flows had no automated regression coverage in CI
+      # playwright.config.ts มี webServer block ที่ auto-start `npm run dev` เอง — ไม่ต้อง start server เอง
+      # chromium เท่านั้น (ไม่ครบทุก browser) เพื่อความเร็ว — blocking เหมือน lint/test ข้างบน ห้าม || true
+      # หมายเหตุ: history.spec.ts (#129 undo) และ inspector.spec.ts (#127 role desync) ตรึงเป็น
+      # `test.fail()` โดยตั้งใจ — เขียว (passed) ตราบใดที่บั๊กยังไม่ถูกแก้ ห้าม unpin ใน workflow นี้
+      # server-side render ผ่าน N/render จริง + save-to-NetSuite parity ยัง automate ใน CI ไม่ได้
+      # (ต้องมี live NetSuite session) — คงเป็น manual QA บน SB2 ต่อไป ดู designer/tests/e2e/FINDINGS.md
+      - name: Node — e2e (Playwright, designer/)
+        if: hashFiles('designer/package.json') != ''
+        working-directory: designer
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e

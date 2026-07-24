@@ -7,12 +7,15 @@
  */
 import { get, set, del, keys } from 'idb-keyval';
 import { nanoid } from 'nanoid';
-import type { DocumentTemplate } from '../models/template';
+import type { DocumentTemplate, TemplateCopy, PaginationConfig } from '../models/template';
 import type { AppStore } from '../state/store';
+import type { PageConfig } from '../models/page';
+import type { CanvasElement } from '../models/element';
+import type { Band } from '../models/bands';
 import { createDefaultPage } from '../models/page';
 import { createDefaultPagination } from '../models/template';
 import { validateTemplate } from './validation.service';
-import { migrateTemplate, needsMigration, CURRENT_VERSION } from './migration.service';
+import { migrateTemplate, needsMigration, isFutureVersion, CURRENT_VERSION } from './migration.service';
 import { clearPaginationCache } from './pagination.service';
 import { elementsToBands } from './band-layout.service';
 import { extractJsonKeys } from '../state/actions';
@@ -20,6 +23,23 @@ import { exportBfoXml, type BfoExportOptions } from './bfo-export.service';
 import { saveNsTemplate, getNsContext } from './netsuite-adapter.service';
 
 const TEMPLATE_PREFIX = 'pld-template-';
+
+// NetSuite Long Text (CLOBTEXT) fields cap at ~1,000,000 characters. Both the
+// designer JSON and the BFO XML land in such a field, and embedded images live
+// as base64 in BOTH — so a few large images silently overflow and the server
+// save fails with an opaque error. Guard client-side with headroom (#143).
+const CLOBTEXT_MAX = 1_000_000;
+const CLOBTEXT_SAFE = 990_000;
+
+/** Throw a clear, actionable error before POST when a CLOBTEXT payload is too big (#143). */
+function assertClobSize(label: string, value: string): void {
+  if (value.length > CLOBTEXT_SAFE) {
+    throw new Error(
+      `${label} ใหญ่เกินไป (${Math.round(value.length / 1000)}K ตัวอักษร, จำกัด ~${CLOBTEXT_MAX / 1000}K) — ` +
+        'รูปที่ฝังในเทมเพลตถูกเก็บเป็น base64 ซึ่งกินพื้นที่มาก ลดขนาด/จำนวนรูปแล้วบันทึกใหม่',
+    );
+  }
+}
 
 // ═══════════════════════════════════════
 // LIST
@@ -122,6 +142,11 @@ export async function saveTemplateToNetSuite(
     copies: state.copies && state.copies.length ? state.copies : undefined,
   });
 
+  // Fail before the POST with an actionable message, rather than let the server
+  // reject an over-cap CLOBTEXT with an opaque error (#143).
+  assertClobSize('ข้อมูลเทมเพลต (Designer Data)', designerJson);
+  assertClobSize('BFO XML', xml);
+
   const result = await saveNsTemplate({
     id: state.template.id || undefined,
     name: state.template.name || 'Untitled Template',
@@ -152,6 +177,14 @@ export async function loadTemplate(
   if (!raw) throw new Error(`Template not found: ${templateId}`);
 
   const warnings: string[] = [];
+
+  // Newer-than-this-build schema: needsMigration() is false, so warn explicitly —
+  // a future field set may be dropped/mis-read silently otherwise (#145).
+  if (isFutureVersion(raw)) {
+    warnings.push(
+      `เทมเพลตนี้สร้างจาก designer เวอร์ชันใหม่กว่า (v${raw.version}) — บาง field อาจไม่รองรับและถูกละไว้`,
+    );
+  }
 
   // Step 1: Migrate if needed
   let data = raw;
@@ -287,6 +320,13 @@ export function importTemplateJson(
 
   const warnings: string[] = [];
 
+  // Newer-than-this-build schema — warn (needsMigration is false for these) (#145).
+  if (isFutureVersion(raw)) {
+    warnings.push(
+      `เทมเพลตนี้สร้างจาก designer เวอร์ชันใหม่กว่า (v${raw.version}) — บาง field อาจไม่รองรับและถูกละไว้`,
+    );
+  }
+
   // Step 1: Migrate if needed
   if (needsMigration(raw)) {
     const migResult = migrateTemplate(raw);
@@ -329,4 +369,65 @@ export function importTemplateJson(
   });
 
   return { warnings };
+}
+
+// ═══════════════════════════════════════
+// DRAFT (autosave + recovery, #140)
+// ═══════════════════════════════════════
+
+/** Fixed IndexedDB key for the single in-progress autosave slot. Only one draft
+ *  is ever kept — a newer autosave overwrites the previous one. */
+export const DRAFT_KEY = 'pld-draft-current';
+
+/** Shape of an autosaved draft — enough to fully restore an in-progress edit
+ *  after a crash, session timeout, or accidental tab close (#140). */
+export interface TemplateDraft {
+  templateId: string | null;
+  templateName: string;
+  page: PageConfig;
+  pagination: PaginationConfig;
+  elements: CanvasElement[];
+  bands?: Band[];
+  copies?: TemplateCopy[] | null;
+  jsonData?: Record<string, unknown> | null;
+  /** ISO timestamp of the autosave. Passed in by the caller — app-shell uses
+   *  new Date().toISOString() — so this module stays free of nondeterministic
+   *  time calls and is straightforward to unit test. */
+  savedAt: string;
+}
+
+/**
+ * Autosave the current in-progress design to IndexedDB (#140).
+ * `now` is supplied by the caller rather than computed here (no Date.now()/
+ * new Date() inside this function) so saveDraft stays pure and deterministic
+ * for unit tests.
+ */
+export async function saveDraft(store: AppStore, now: string): Promise<void> {
+  const state = store.state;
+
+  const draft: TemplateDraft = {
+    templateId: state.template.id,
+    templateName: state.template.name,
+    page: structuredClone(state.page),
+    pagination: structuredClone(state.pagination),
+    elements: structuredClone(state.elements),
+    bands: state.bands.length ? structuredClone(state.bands) : undefined,
+    copies: state.copies && state.copies.length ? structuredClone(state.copies) : undefined,
+    jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
+    savedAt: now,
+  };
+
+  await set(DRAFT_KEY, draft);
+}
+
+/** Return the autosaved draft, or null when none exists. */
+export async function getDraft(): Promise<TemplateDraft | null> {
+  const draft = await get<TemplateDraft>(DRAFT_KEY);
+  return draft ?? null;
+}
+
+/** Delete the autosaved draft — call after a successful save, a restore, or a
+ *  discard so a stale draft never resurfaces on the next load (#140). */
+export async function clearDraft(): Promise<void> {
+  await del(DRAFT_KEY);
 }

@@ -13,12 +13,23 @@ import { AppStore, storeContext } from '../state/store';
 import { HistoryService } from '../services/history.service';
 import { registerKeyboardShortcuts } from '../services/keyboard.service';
 import { applyPagination, clearPaginationCache } from '../services/pagination.service';
-import { saveTemplate, saveTemplateToNetSuite } from '../services/template.service';
+import {
+  saveTemplate,
+  saveTemplateToNetSuite,
+  saveDraft,
+  getDraft,
+  clearDraft,
+  type TemplateDraft,
+} from '../services/template.service';
 import { showToast } from './shared/toast-notification';
 import { getSampleTemplates } from '../constants/sample-templates';
 import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext } from '../services/netsuite-adapter.service';
 import { loadJsonData, extractJsonKeys } from '../state/actions';
+import { confirmDiscardUnsaved } from '../utils/unsaved-guard';
 import { applyMiddleware } from '../state/middleware';
+import { debounce } from '../utils/debounce';
+import { elementsToBands } from '../services/band-layout.service';
+import { createDefaultPagination } from '../models/template';
 
 // ─── Import all child components ───
 import './layout/app-header';
@@ -28,6 +39,7 @@ import './canvas/band-view';
 import './layout/sidebar-right';
 import './flow/flow-view';
 import './shared/toast-notification';
+import './shared/error-boundary';
 
 // ─── Import modals ───
 import './modals/column-config-modal';
@@ -47,6 +59,13 @@ export class PldAppShell extends LitElement {
   private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
   private _saveHandler: (() => void) | null = null;
+  // Autosave (#140): debounced draft write, cleaned up like the other listeners.
+  private _autosaveHandler: (() => void) | null = null;
+  private _autosaveDebounced: (() => void) & { cancel(): void } = debounce(() => {
+    saveDraft(this.store, new Date().toISOString()).catch((err) => {
+      console.warn('Autosave draft failed:', err);
+    });
+  }, 1500);
 
   @state() private view: 'design' | 'flow' = 'design';
 
@@ -57,6 +76,11 @@ export class PldAppShell extends LitElement {
   @state() private showPreview = false;
   @state() private showBfoExport = false;
   @state() private showSaveNs = false;
+
+  // Draft recovery banner (#140) — non-blocking, shown when a leftover autosave
+  // is found on mount that the freshly-loaded state doesn't already reflect.
+  @state() private showDraftBanner = false;
+  private _pendingDraft: TemplateDraft | null = null;
 
   static styles = css`
     :host {
@@ -85,6 +109,38 @@ export class PldAppShell extends LitElement {
 
     .canvas-area.hidden {
       display: none;
+    }
+
+    /* Draft recovery banner (#140) */
+    .draft-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: var(--color-bg-panel);
+      color: var(--color-warning);
+      border-bottom: 1px solid var(--color-border);
+      font-size: 13px;
+    }
+
+    .draft-banner span {
+      flex: 1;
+    }
+
+    .draft-banner button {
+      border: 1px solid var(--color-border);
+      background: transparent;
+      color: var(--color-text);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .draft-banner button.primary {
+      background: var(--color-accent);
+      color: var(--color-bg-deep);
+      border-color: transparent;
     }
   `;
 
@@ -141,6 +197,42 @@ export class PldAppShell extends LitElement {
       }
     });
 
+    // Autosave (#140): debounced draft write to IndexedDB while the user has
+    // unsaved changes, so a crash/timeout/closed tab doesn't lose the in-progress
+    // edit. Named + removed on disconnect, same pattern as the other listeners.
+    this._autosaveHandler = () => {
+      if (this.store.state.template.isDirty) {
+        this._autosaveDebounced();
+      }
+    };
+    this.store.addEventListener('state-changed', this._autosaveHandler);
+
+    // Draft recovery (#140): a leftover autosave from a previous session that
+    // never got a real save. Offer to restore it via a non-blocking banner
+    // (never window.confirm) rather than silently discarding or auto-applying it.
+    getDraft().then((draft) => {
+      if (!draft) return;
+      const hasContent = draft.elements.length > 0 || !!(draft.bands && draft.bands.length) || !!draft.jsonData;
+      if (!hasContent) return;
+
+      // Only offer recovery when it actually differs from the freshly-loaded
+      // state — at this point in connectedCallback the store is still the
+      // blank initial state (or, in NetSuite mode, about to be filled in by
+      // autoLoadRecordIfAvailable below), so any draft with real content
+      // qualifies.
+      const current = this.store.state;
+      const isBlankState =
+        !current.template.isDirty &&
+        current.elements.length === 0 &&
+        !current.jsonData;
+      if (!isBlankState) return;
+
+      this._pendingDraft = draft;
+      this.showDraftBanner = true;
+    }).catch((err) => {
+      console.warn('Failed to read autosave draft:', err);
+    });
+
     // Wire global events from header buttons.
     // NOTE (#131): pld-save-template is handled by the window listener below ONLY.
     // The header dispatches it bubbles+composed, so it reaches window on its own;
@@ -193,6 +285,8 @@ export class PldAppShell extends LitElement {
     if (this._keyHandler) window.removeEventListener('keydown', this._keyHandler);
     if (this._beforeUnloadHandler) window.removeEventListener('beforeunload', this._beforeUnloadHandler);
     if (this._saveHandler) window.removeEventListener('pld-save-template', this._saveHandler);
+    if (this._autosaveHandler) this.store.removeEventListener('state-changed', this._autosaveHandler);
+    this._autosaveDebounced.cancel();
   }
 
   render() {
@@ -200,14 +294,28 @@ export class PldAppShell extends LitElement {
       <pld-header></pld-header>
       <pld-template-bar></pld-template-bar>
 
+      ${this.showDraftBanner
+        ? html`
+            <div class="draft-banner">
+              <span>พบงานที่บันทึกอัตโนมัติไว้ (ยังไม่ได้กดบันทึก) — ต้องการกู้คืนหรือไม่?</span>
+              <button class="primary" @click=${() => this._restoreDraft()}>กู้คืนงาน</button>
+              <button @click=${() => this._discardDraft()}>ละทิ้ง</button>
+            </div>
+          `
+        : ''}
+
       <div class="main-content">
         <pld-sidebar-left></pld-sidebar-left>
 
-        <div class="canvas-area ${this.view !== 'design' ? 'hidden' : ''}">
-          <pld-band-view></pld-band-view>
-        </div>
+        <!-- #145: contain a canvas/flow crash to an inline fallback + Retry
+             instead of taking down the whole app (error-boundary was dead code). -->
+        <pld-error-boundary label="พื้นที่ออกแบบ">
+          <div class="canvas-area ${this.view !== 'design' ? 'hidden' : ''}">
+            <pld-band-view></pld-band-view>
+          </div>
 
-        ${this.view === 'flow' ? html`<pld-flow-view></pld-flow-view>` : ''}
+          ${this.view === 'flow' ? html`<pld-flow-view></pld-flow-view>` : ''}
+        </pld-error-boundary>
 
         <pld-sidebar-right></pld-sidebar-right>
       </div>
@@ -254,6 +362,8 @@ export class PldAppShell extends LitElement {
       try {
         const { id } = await saveTemplateToNetSuite(this.store);
         showToast(`บันทึกเข้า NetSuite แล้ว (ID: ${id})`, 'success');
+        // A real save landed — the autosave draft is now stale (#140).
+        clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
       } catch (err) {
         // No IndexedDB fallback — a failed NetSuite save must be visible, not
         // masked by a silent local write (R4: no silent fallback).
@@ -266,9 +376,48 @@ export class PldAppShell extends LitElement {
     try {
       await saveTemplate(this.store);
       showToast('บันทึกในเครื่องนี้เท่านั้น (ยังไม่เข้า NetSuite)', 'info');
+      // A real save landed — the autosave draft is now stale (#140).
+      clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
     } catch (err) {
       showToast(`บันทึกไม่สำเร็จ: ${err}`, 'error');
     }
+  }
+
+  /** Restore the pending autosave draft into the store (#140). */
+  private _restoreDraft() {
+    const draft = this._pendingDraft;
+    if (!draft) return;
+
+    clearPaginationCache();
+    this.store.dispatch((d) => {
+      d.elements = draft.elements;
+      d.bands = draft.bands ?? elementsToBands(draft.elements);
+      d.copies = draft.copies ?? null;
+      d.page = draft.page;
+      d.pagination = { ...createDefaultPagination(), ...draft.pagination };
+      d.jsonData = draft.jsonData ?? null;
+      d.jsonKeys = draft.jsonData ? extractJsonKeys(draft.jsonData) : [];
+      d.template.id = draft.templateId;
+      d.template.name = draft.templateName;
+      // Restored content never matches what's saved on disk — mark dirty so
+      // the user is prompted to save it for real (#140).
+      d.template.isDirty = true;
+      d.selectedId = null;
+      d.multiSelect = [];
+      d.currentPage = 1;
+    });
+
+    this._pendingDraft = null;
+    this.showDraftBanner = false;
+    clearDraft().catch((err) => console.warn('Failed to clear draft after restore:', err));
+    showToast('กู้คืนงานที่บันทึกอัตโนมัติแล้ว', 'success');
+  }
+
+  /** Discard the pending autosave draft without restoring it (#140). */
+  private _discardDraft() {
+    this._pendingDraft = null;
+    this.showDraftBanner = false;
+    clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
   }
 
   private _exportJson() {
@@ -281,6 +430,7 @@ export class PldAppShell extends LitElement {
   private _loadSample() {
     const samples = getSampleTemplates();
     if (samples.length === 0) return;
+    if (!confirmDiscardUnsaved(this.store)) return;
     const tpl = samples[0];
 
     clearPaginationCache();

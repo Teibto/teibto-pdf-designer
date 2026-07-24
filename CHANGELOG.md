@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Added
+- **Production-readiness รอบ P0/P1** (จาก review มุมผู้ใช้ก่อนเปิด production):
+  - **Autosave + draft recovery** (#140) — เขียน draft ลง IndexedDB แบบ debounce ระหว่างแก้ (ทั้งโหมด NS/local); เปิดใหม่หลัง crash/timeout/ปิด tab มี banner "กู้คืนงาน/ละทิ้ง" — งานไม่หาย
+  - **ลบ NS template ได้ + เตือน record type ไม่มี default** (#142) — engine action `delete`, ปุ่ม Delete บน NetSuite tab (เตือนถ้าลบ default), banner เตือน record type ที่ไม่มี default, badge ★ default; ปิดช่องที่ Print throw "No template found"
 - Dialog "บันทึกเข้า NetSuite" (`pld-save-ns-modal`) เรียกจากปุ่ม ⚙ ข้าง 💾 บันทึก บน header (เฉพาะโหมด NetSuite) — เลือก record type + ตั้งเป็น default template ของ record type นั้น แล้วบันทึกเข้า `customrecord_pld_template`. ย้าย save action (record type + set-default) ออกจากโมดัล 🔶 BFO ที่เหลือหน้าที่ export/preview XML อย่างเดียว; `RECORD_TYPES` ยกไป `constants/record-types.ts` ใช้ร่วมกัน (ต่อยอด #137) (#138)
 - Multi-account deploy pipeline `scripts/deploy.sh` — deploy SDF engine เข้าหลาย sandbox ด้วยคำสั่งเดียว (วน authid จาก `engine/deploy-targets.txt` เขียน `defaultAuthId` ต่อ account เพราะ `project:deploy` ไม่มี `--authid`, สรุปผล PASS/FAIL ต่อ account, คืน `project.json` เสมอ) + version stamp (`engine/VERSION` + git sha + UTC → `pld_version.txt` ใน File Cabinet) ตรวจได้จาก account ผ่าน `?action=version` — พิสูจน์สดบน Teibto SB2 (deploy จริง + endpoint คืน stamp ตรง) (#11)
 - Master templates อีก 5 ฟอร์มครบชุด Standard Template Pack: `invoice`, `purchase-order`, `delivery-note`, `receipt`, `quotation` ใน `templates/master/` + sample สังเคราะห์ต่อฟอร์มใน `templates/samples/` — โครง/CSS/macro/font pattern เดียวกับ `tax-invoice.xml` ทุกไฟล์ ทั้ง 5 ฟอร์ม render จริงผ่านบน Teibto SB2 (#8)
@@ -13,6 +16,13 @@
 - Designer test coverage รอบ band-model: E2E Playwright 77 tests ครอบทุกปุ่ม/ฟิลด์/action (`designer/tests/e2e/`) + jsdom component harness ที่ mount `pld-app-shell` จริงแล้วขับผ่าน shadow DOM 35 tests (`designer/tests/component/`) — รวม vitest 493 + Playwright 77 เขียว; `#127` (role selector) + `#129` (undo) ตรึงเป็น `test.fail` รอ design/refactor (#123)
 
 ### Fixed
+- **Production-readiness รอบ P0/P1** (data-safety + resilience ก่อนเปิด production):
+  - session NetSuite หมดอายุคืน HTTP 200 + HTML login → `suiteletFetch` เดิม `json()` แล้วโยน "Unexpected token '<'" งง; เพิ่ม `SessionExpiredError` detect redirect/HTML แล้วบอก "เปิด designer ใหม่จาก NetSuite" (#139)
+  - โหลด template/sample/import เขียนทับงานที่ยังไม่บันทึกโดยไม่เตือน → `confirmDiscardUnsaved` guard 5 จุด (#141)
+  - รูป base64 ล้น CLOBTEXT (~1M) ทำ save พังฝั่ง server เงียบ → `assertClobSize` เช็ค designer JSON + BFO XML ก่อน POST เตือนชัด (#143)
+  - company config ไม่ scope subsidiary → OneWorld หลาย sub พิมพ์บริษัทเดียวทุกใบ; `load(subsidiaryId)` เลือกตาม subsidiary → global → first (backward-compat) (#144)
+  - template version ใหม่กว่า current ถูกรับเงียบ + migration/validation warnings ถูกทิ้ง + error-boundary ไม่ถูก wire → `isFutureVersion` เตือน, modal โชว์ warnings, wrap canvas ด้วย error-boundary (#145)
+  - CI รัน vitest อย่างเดียว → เพิ่ม Playwright e2e (chromium, blocking) ใน quality-gate; แก้ Save spec ให้ตรง toast โหมด local ของ #137 (#146)
 - ปุ่ม 💾 บันทึก บันทึกแค่ IndexedDB แม้อยู่ในโหมด NetSuite — ผู้ใช้เห็น "Template saved!" แต่ `customrecord_pld_template` ไม่มี record เพิ่ม (พบจริงบน SB2 ระหว่าง QA #135). ในโหมด NetSuite ปุ่ม 💾 + Ctrl+S บันทึกเข้า record ผ่าน `saveTemplateToNetSuite` (gen BFO XML จาก band layout + `saveNsTemplate`) แล้ว error ให้เห็นเมื่อล้มเหลว ไม่ตกลง IndexedDB เงียบ (R4); โหมด local บอกชัด "บันทึกในเครื่องนี้เท่านั้น" — rectype default จาก record ที่เปิด designer มา (#137)
 - `removeBandRow` (ปุ่ม ✕ ลบแถว) ลบ row ทิ้งโดยไม่จัดการ element ในนั้น → element ค้างเป็น orphan ใน pool มองไม่เห็นทุก view ติดไปกับ save. ให้ลบ element ในแถวออกจาก pool พร้อมแถว + เคลียร์ selection/multiSelect/ref; band editor ถาม confirm ก่อนลบแถวที่ยังมี element (#136)
 - Designer `list-templates` (Template Manager) พังด้วย `An nlobjSearchColumn contains an invalid column ... custrecord_pld_tpl_type` — `listSavedTemplates` ใน `pld_sl_designer.js` ใช้ field ที่ไม่มีในนิยาม record (ตัวจริงคือ `custrecord_pld_tpl_rectype`) แก้ 4 จุดใน list path (filter/column/getValue/comment); save path เดียวกัน + render + UE button ใช้ชื่อถูกอยู่แล้ว. account SB2 ถูก hotfix ตรงไปก่อนแล้ว — หลังแก้ hash ไฟล์ local ตรงกับที่ deploy เป๊ะ ไม่ต้อง redeploy (#132)
