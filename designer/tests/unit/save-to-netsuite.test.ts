@@ -120,6 +120,25 @@ describe('saveTemplateToNetSuite (#137)', () => {
     expect(store.state.template.id).toBeNull();
   });
 
+  it('rejects BEFORE POST when a huge embedded image overflows the CLOBTEXT cap (#143)', async () => {
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const store = storeWithContent();
+    // inject an image element carrying ~1.1M chars of base64 (over the ~990K guard)
+    store.dispatch((d) => {
+      d.elements.push({
+        id: 'imgbig', type: 'image', name: 'big', role: 'content',
+        w: 100, h: 100, zIndex: 1, locked: false, visible: true,
+        objectFit: 'contain', imageData: 'A'.repeat(1_100_000),
+      } as never);
+    });
+
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow(/ใหญ่เกินไป|จำกัด/);
+    expect(fetchSpy).not.toHaveBeenCalled();        // never hit the server
+    expect(store.state.template.isDirty).toBe(true); // not marked saved
+  });
+
   it('THROWS on a server error — no silent local fallback (R4)', async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ error: 'RECORD_SAVE_FAILED' }), { status: 200 }),

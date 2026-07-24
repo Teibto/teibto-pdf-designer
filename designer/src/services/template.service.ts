@@ -21,6 +21,23 @@ import { saveNsTemplate, getNsContext } from './netsuite-adapter.service';
 
 const TEMPLATE_PREFIX = 'pld-template-';
 
+// NetSuite Long Text (CLOBTEXT) fields cap at ~1,000,000 characters. Both the
+// designer JSON and the BFO XML land in such a field, and embedded images live
+// as base64 in BOTH — so a few large images silently overflow and the server
+// save fails with an opaque error. Guard client-side with headroom (#143).
+const CLOBTEXT_MAX = 1_000_000;
+const CLOBTEXT_SAFE = 990_000;
+
+/** Throw a clear, actionable error before POST when a CLOBTEXT payload is too big (#143). */
+function assertClobSize(label: string, value: string): void {
+  if (value.length > CLOBTEXT_SAFE) {
+    throw new Error(
+      `${label} ใหญ่เกินไป (${Math.round(value.length / 1000)}K ตัวอักษร, จำกัด ~${CLOBTEXT_MAX / 1000}K) — ` +
+        'รูปที่ฝังในเทมเพลตถูกเก็บเป็น base64 ซึ่งกินพื้นที่มาก ลดขนาด/จำนวนรูปแล้วบันทึกใหม่',
+    );
+  }
+}
+
 // ═══════════════════════════════════════
 // LIST
 // ═══════════════════════════════════════
@@ -121,6 +138,11 @@ export async function saveTemplateToNetSuite(
     bands: state.bands.length ? state.bands : undefined,
     copies: state.copies && state.copies.length ? state.copies : undefined,
   });
+
+  // Fail before the POST with an actionable message, rather than let the server
+  // reject an over-cap CLOBTEXT with an opaque error (#143).
+  assertClobSize('ข้อมูลเทมเพลต (Designer Data)', designerJson);
+  assertClobSize('BFO XML', xml);
 
   const result = await saveNsTemplate({
     id: state.template.id || undefined,
