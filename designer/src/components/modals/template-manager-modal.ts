@@ -30,6 +30,7 @@ import { elementsToBands } from '../../services/band-layout.service';
 import { getSampleTemplates } from '../../constants/sample-templates';
 import { clearPaginationCache } from '../../services/pagination.service';
 import { showToast } from '../shared/toast-notification';
+import { confirmDiscardUnsaved } from '../../utils/unsaved-guard';
 import '../shared/modal';
 
 @customElement('pld-template-manager-modal')
@@ -413,6 +414,7 @@ export class PldTemplateManagerModal extends LitElement {
   }
 
   private async _loadTemplate(id: string) {
+    if (!confirmDiscardUnsaved(this.store)) return;
     try {
       await loadTemplate(this.store, id);
       showToast('Template loaded!', 'success');
@@ -423,6 +425,7 @@ export class PldTemplateManagerModal extends LitElement {
   }
 
   private _loadSample(tpl: DocumentTemplate) {
+    if (!confirmDiscardUnsaved(this.store)) return;
     clearPaginationCache();
     this.store.dispatch((draft) => {
       draft.elements = structuredClone(tpl.elements);
@@ -474,6 +477,7 @@ export class PldTemplateManagerModal extends LitElement {
    * creating a new one. Keeps the currently loaded record data (jsonData).
    */
   private async _loadNsTemplate(id: string) {
+    if (!confirmDiscardUnsaved(this.store)) return;
     try {
       const src = await getNsTemplate(id);
       let data: Partial<DocumentTemplate>;
@@ -537,6 +541,7 @@ export class PldTemplateManagerModal extends LitElement {
       showToast('Please paste template JSON first', 'warning');
       return;
     }
+    if (!confirmDiscardUnsaved(this.store)) return;
 
     try {
       importTemplateJson(this.store, this.importJson);

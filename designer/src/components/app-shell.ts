@@ -18,6 +18,7 @@ import { showToast } from './shared/toast-notification';
 import { getSampleTemplates } from '../constants/sample-templates';
 import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext } from '../services/netsuite-adapter.service';
 import { loadJsonData, extractJsonKeys } from '../state/actions';
+import { confirmDiscardUnsaved } from '../utils/unsaved-guard';
 import { applyMiddleware } from '../state/middleware';
 
 // ─── Import all child components ───
@@ -281,6 +282,7 @@ export class PldAppShell extends LitElement {
   private _loadSample() {
     const samples = getSampleTemplates();
     if (samples.length === 0) return;
+    if (!confirmDiscardUnsaved(this.store)) return;
     const tpl = samples[0];
 
     clearPaginationCache();
