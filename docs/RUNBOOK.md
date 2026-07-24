@@ -56,7 +56,7 @@ master XML อยู่ที่ `templates/master/<doc>.xml` คือ source o
 Skeleton บังคับ copy จาก `templates/master/tax-invoice.xml` ที่พิสูจน์แล้ว:
 
 - `<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">`
-- ฟอนต์ไทยจาก config layer เท่านั้น: `<link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />`
+- ฟอนต์ไทยจาก config layer เท่านั้น: `<link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />` — `name` เป็นแค่ identifier · URL จริงต้องชี้ THSarabunPSK (ดู recipe company config)
 - header/footer ซ้ำทุกหน้าใช้ `<macrolist>` + `<macro id="nlheader">` กับ `nlfooter` · เลขหน้าใช้ `<pagenumber/> / <totalpages/>` (BFO ไม่รองรับ CSS `@page` counter)
 - `<body header="nlheader" header-height="120pt" footer="nlfooter" footer-height="26pt" size="A4" padding="0.35in">`
 - binding ทุกตัวมาจาก `${company.*}` (config record `customrecord_pld_config` ต่อ account) จึง save เข้า account ได้ตรง ๆ ไม่ต้องแก้ต่อ account
@@ -78,6 +78,44 @@ Validate แล้ว smoke-test:
 - render จริง: save XML เข้า `customrecord_pld_template` แล้วเปิด `?action=render&rectype=<doc>&recid=<n>&tplid=<id>` · ตรวจฟอนต์ไทยไม่เป็น □ และ header/footer ซ้ำทุกหน้า
 
 facts เต็มเรื่อง BFO/FreeMarker (font embedding · `?then` vs ternary · macrolist multi-page · zero-test-data smoke) อยู่ที่ skill `netsuite-bfo-pdf` และ `docs/TOOLSTACK.md` ไม่ทำซ้ำที่นี่.
+
+## 🧰 Recipe ต่อ account และ onboarding
+
+### ตั้ง company config ต่อ account
+
+config record `customrecord_pld_config` คือจุดตั้งค่า per-account จุดเดียว จ่าย `${company.*}` ให้ทุก template.
+
+1. สร้าง 1 record ต่อ subsidiary หรือ 1 record global (เว้น `custrecord_pld_cfg_subsidiary` ว่าง = fallback) · field: `_name` `_name_en` `_taxid` `_branch` `_address` `_address_en` `_phone` `_email` `_logo_url` `_theme_color` `_font_regular` `_font_bold` `_subsidiary`
+2. ฟอนต์ไทยต้องชี้ URL ไป **THSarabunPSK เท่านั้น ห้าม THSarabunNew (#32)** — BFO ไม่ apply GPOS จึงทำวรรณยุกต์/สระของ THSarabunNew ลอยหลุดฐาน · ฟอนต์ที่ไม่ embed (Noto/Tahoma) glyph ไทย drop เงียบใน PDF
+3. font URL มี token `h=...` ที่หมดอายุเมื่อ re-save ไฟล์ฟอนต์ใน File Cabinet → refresh แล้วอัปเดต config
+4. `load()` เลือก config 3-tier: subsidiary ตรง → global (subsidiary ว่าง) → record แรก · เต็ม: `engine/DEPLOYMENT.md §Company Config`
+
+### เพิ่ม document type ใหม่ end-to-end
+
+1. engine — เพิ่ม rectype ใน `DOC_TITLES` (`pld_lib_invoice_data.js`) เป็น `{th, en}` · ฝั่งซื้อเพิ่มใน `PURCHASE_SIDE` (คุมเครื่องหมายจำนวนเงิน) · รองรับตอนนี้: `invoice` `creditmemo` `estimate` `salesorder` `purchaseorder`
+2. designer — เพิ่มใน `RECORD_TYPES` (`designer/src/constants/record-types.ts`) โดย `value` = ค่าที่ลงใน `custrecord_pld_tpl_rectype`
+3. template — `templates/master/<doc>.xml` (copy skeleton) + `templates/samples/<doc>.sample.json` สังเคราะห์
+4. ตั้ง default template ต่อ rectype บน account ผ่านปุ่ม `⚙ ตั้งค่าการบันทึก` ไม่งั้น Print คืน `No template found` (R4)
+
+### deploy ไฟล์เดียวเข้า account (hotfix File Cabinet)
+
+- SuiteScript หรือ HTML ไฟล์เดียว: skill `netsuite-qa-browser` → `references/deploy.md` (`ns-deploy-lib.sh` upload + hash-verify)
+- engine เต็มชุด (script + object + version stamp): `scripts/deploy.sh`
+- ห้าม hotfix ตรงบน account โดยไม่ sync กลับ repo — repo คือ source of truth
+
+### onboarding วิศวกรใหม่
+
+```bash
+git clone <repo> && cd teibto-pdf-designer
+cd designer && npm install && npx playwright install chromium
+npm run dev            # http://localhost:5173
+npm test               # vitest · npx playwright test = e2e
+```
+
+- secret-scan ก่อน commit แรก: `bash scripts/secret-scan.sh`
+- อ่าน `CLAUDE.md` (กติกา repo) + ลูปลงมือแก้ด้านบนของไฟล์นี้
+- engine deploy ต้องมี suitecloud authid (Teibto sandbox เท่านั้น): `suitecloud account:setup` (skill `netsuite-sdf-authoring`)
+- ห้าม commit `project.json` (authid จริง) · `.env` · `.qa-profiles/` · ข้อมูลจริงของลูกค้า
 
 ## 🧭 หลักสถาปัตยกรรมที่ห้ามละเมิด
 
