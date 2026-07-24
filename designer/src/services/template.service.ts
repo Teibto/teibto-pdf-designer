@@ -7,8 +7,11 @@
  */
 import { get, set, del, keys } from 'idb-keyval';
 import { nanoid } from 'nanoid';
-import type { DocumentTemplate } from '../models/template';
+import type { DocumentTemplate, TemplateCopy, PaginationConfig } from '../models/template';
 import type { AppStore } from '../state/store';
+import type { PageConfig } from '../models/page';
+import type { CanvasElement } from '../models/element';
+import type { Band } from '../models/bands';
 import { createDefaultPage } from '../models/page';
 import { createDefaultPagination } from '../models/template';
 import { validateTemplate } from './validation.service';
@@ -366,4 +369,65 @@ export function importTemplateJson(
   });
 
   return { warnings };
+}
+
+// ═══════════════════════════════════════
+// DRAFT (autosave + recovery, #140)
+// ═══════════════════════════════════════
+
+/** Fixed IndexedDB key for the single in-progress autosave slot. Only one draft
+ *  is ever kept — a newer autosave overwrites the previous one. */
+export const DRAFT_KEY = 'pld-draft-current';
+
+/** Shape of an autosaved draft — enough to fully restore an in-progress edit
+ *  after a crash, session timeout, or accidental tab close (#140). */
+export interface TemplateDraft {
+  templateId: string | null;
+  templateName: string;
+  page: PageConfig;
+  pagination: PaginationConfig;
+  elements: CanvasElement[];
+  bands?: Band[];
+  copies?: TemplateCopy[] | null;
+  jsonData?: Record<string, unknown> | null;
+  /** ISO timestamp of the autosave. Passed in by the caller — app-shell uses
+   *  new Date().toISOString() — so this module stays free of nondeterministic
+   *  time calls and is straightforward to unit test. */
+  savedAt: string;
+}
+
+/**
+ * Autosave the current in-progress design to IndexedDB (#140).
+ * `now` is supplied by the caller rather than computed here (no Date.now()/
+ * new Date() inside this function) so saveDraft stays pure and deterministic
+ * for unit tests.
+ */
+export async function saveDraft(store: AppStore, now: string): Promise<void> {
+  const state = store.state;
+
+  const draft: TemplateDraft = {
+    templateId: state.template.id,
+    templateName: state.template.name,
+    page: structuredClone(state.page),
+    pagination: structuredClone(state.pagination),
+    elements: structuredClone(state.elements),
+    bands: state.bands.length ? structuredClone(state.bands) : undefined,
+    copies: state.copies && state.copies.length ? structuredClone(state.copies) : undefined,
+    jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
+    savedAt: now,
+  };
+
+  await set(DRAFT_KEY, draft);
+}
+
+/** Return the autosaved draft, or null when none exists. */
+export async function getDraft(): Promise<TemplateDraft | null> {
+  const draft = await get<TemplateDraft>(DRAFT_KEY);
+  return draft ?? null;
+}
+
+/** Delete the autosaved draft — call after a successful save, a restore, or a
+ *  discard so a stale draft never resurfaces on the next load (#140). */
+export async function clearDraft(): Promise<void> {
+  await del(DRAFT_KEY);
 }
