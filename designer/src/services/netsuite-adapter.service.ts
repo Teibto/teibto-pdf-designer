@@ -238,6 +238,21 @@ export async function getNsTemplate(
 }
 
 /**
+ * Delete a NetSuite template record (#142). Server-side guard reports whether
+ * the deleted record WAS this record type's default, so the caller can warn
+ * that the record type is now left without a default (Print falls back to
+ * "no template found" until a new default is set).
+ */
+export async function deleteNsTemplate(
+  tplId: string,
+): Promise<{ success: boolean; wasDefault?: boolean }> {
+  const baseUrl = getRendererUrl() || getDesignerUrl();
+  const result = await suiteletFetch(baseUrl, 'delete', { tplid: tplId }, 'POST');
+  if ((result as any).error) throw new Error((result as any).error);
+  return result as { success: boolean; wasDefault?: boolean };
+}
+
+/**
  * Duplicate a NetSuite template record server-side (#105): read the source
  * record's designer JSON + BFO XML and save them as a NEW record named
  * "<name> (copy)". The default flag is never copied — a fresh copy must not

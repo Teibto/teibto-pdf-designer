@@ -56,6 +56,16 @@ export class PldSaveNsModal extends LitElement {
     }
     .check-item { display: flex; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
     .hint { font-size: 12px; color: var(--color-text-dim, #8a8ca0); line-height: 1.5; }
+    .no-default-hint {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--color-warning, #f5a623);
+      background: rgba(245, 166, 35, 0.1);
+      border: 1px solid var(--color-warning, #f5a623);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-top: 8px;
+    }
     .footer-btns { display: flex; gap: 8px; justify-content: flex-end; }
     .btn {
       padding: 8px 16px; border-radius: 6px; border: 1px solid var(--color-border, #2a2c3a);
@@ -89,6 +99,12 @@ export class PldSaveNsModal extends LitElement {
               ปุ่ม Print PDF บน transaction โหลด default template ของ record type อัตโนมัติ (ไม่ระบุ tplid).
               ปิดถ้าต้องการเก็บเป็นทางเลือกโดยไม่แทนที่ตัวที่พิมพ์อยู่.
             </p>
+            ${!this.setAsDefault ? html`
+              <p class="no-default-hint">
+                ⚠ ไม่ตั้ง default → ปุ่ม Print จะไม่เลือกเทมเพลตนี้อัตโนมัติ
+                (ถ้า record type นี้ยังไม่มี default เลย ปุ่ม Print จะขึ้น "No template found").
+              </p>
+            ` : nothing}
           </div>
         </div>
         <div slot="footer">

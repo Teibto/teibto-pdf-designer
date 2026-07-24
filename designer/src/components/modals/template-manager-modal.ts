@@ -24,6 +24,7 @@ import {
   listNsTemplates,
   getNsTemplate,
   duplicateNsTemplate,
+  deleteNsTemplate,
   type NsTemplate,
 } from '../../services/netsuite-adapter.service';
 import { elementsToBands } from '../../services/band-layout.service';
@@ -232,6 +233,17 @@ export class PldTemplateManagerModal extends LitElement {
       gap: 8px;
       justify-content: space-between;
     }
+
+    .ns-no-default-warning {
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--color-danger, #ef4444);
+      border-radius: 8px;
+      color: var(--color-danger, #ef4444);
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
   `;
 
   /** Load templates when modal opens */
@@ -355,12 +367,36 @@ export class PldTemplateManagerModal extends LitElement {
     `;
   }
 
+  /**
+   * Record types present in the loaded NS list that have NO row flagged as
+   * default (#142 root cause — Print for that record type throws "No template
+   * found"). Purely a client-side view of the currently loaded list; a rectype
+   * with zero templates at all never shows here (nothing to warn about from
+   * this modal) — only ones that HAVE templates but none marked default.
+   */
+  private _rectypesMissingDefault(): string[] {
+    const byRectype = new Map<string, boolean>();
+    for (const tpl of this.nsTemplates) {
+      const rt = tpl.rectype || '';
+      if (!rt) continue;
+      byRectype.set(rt, byRectype.get(rt) || tpl.isDefault);
+    }
+    return [...byRectype.entries()].filter(([, hasDefault]) => !hasDefault).map(([rt]) => rt);
+  }
+
   private _renderNetsuite() {
     if (this.nsTemplates.length === 0) {
       return html`<div class="empty-msg">No templates saved in NetSuite yet.<br />Use "Save to NetSuite" in the BFO Export dialog.</div>`;
     }
 
+    const missingDefault = this._rectypesMissingDefault();
+
     return html`
+      ${missingDefault.length > 0 ? html`
+        <div class="ns-no-default-warning">
+          ⚠ No default template — ${missingDefault.join(', ')}. Print for ${missingDefault.length > 1 ? 'these record types' : 'this record type'} will fail with "No template found" until a default is set.
+        </div>
+      ` : nothing}
       <div class="template-grid">
         ${this.nsTemplates.map((tpl) => html`
           <div class="template-card">
@@ -373,6 +409,7 @@ export class PldTemplateManagerModal extends LitElement {
             <div class="tpl-actions">
               <button class="tpl-btn primary" @click=${() => this._loadNsTemplate(tpl.id)}>Load</button>
               <button class="tpl-btn" @click=${() => this._duplicateNsTemplate(tpl.id)}>Duplicate</button>
+              <button class="tpl-btn danger" @click=${() => this._deleteNsTemplate(tpl.id, tpl.name)}>Delete</button>
             </div>
           </div>
         `)}
@@ -471,6 +508,30 @@ export class PldTemplateManagerModal extends LitElement {
       showToast(`Duplicated in NetSuite as "${copy.name}" (ID: ${copy.id})`, 'success');
     } catch (err) {
       showToast(`Duplicate failed: ${(err as Error).message}`, 'error');
+    }
+  }
+
+  /**
+   * Delete a NetSuite template record (#142). The record type is left with
+   * NO default template when the deleted record was its default — the server
+   * still deletes it (a user may be removing a broken default on purpose) but
+   * flags wasDefault so we can warn: Print for that record type will now fail
+   * with "No template found" until a new default is saved.
+   */
+  private async _deleteNsTemplate(id: string, name: string) {
+    if (!confirm(`Delete "${name}" from NetSuite? This cannot be undone.`)) return;
+    try {
+      const { wasDefault } = await deleteNsTemplate(id);
+      await this._refreshNs();
+      showToast('Deleted from NetSuite', 'info');
+      if (wasDefault) {
+        showToast(
+          `"${name}" was the default template — this record type now has NO default. Print will fail until a new default is set.`,
+          'warning',
+        );
+      }
+    } catch (err) {
+      showToast(`Delete failed: ${(err as Error).message}`, 'error');
     }
   }
 

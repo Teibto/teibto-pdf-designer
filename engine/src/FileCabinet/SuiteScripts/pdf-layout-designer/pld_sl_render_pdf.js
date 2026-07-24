@@ -12,6 +12,7 @@
  *   ?action=render&rectype=invoice&recid=123&tplid=456&download=T
  *   ?action=preview&tplid=456                    ← preview with sample data
  *   ?action=list&rectype=invoice                 ← list available templates
+ *   ?action=delete&tplid=456 (POST)               ← delete a template record
  *
  * @author Wichit Wongta
  */
@@ -54,6 +55,8 @@ define([
           return saveTemplate(context);
         case 'get':
           return getTemplate(context);
+        case 'delete':
+          return deleteTemplate(context);
         case 'preview-live':
           return previewLivePdf(context);
         case 'version':
@@ -459,6 +462,43 @@ define([
     var savedId = rec.save();
 
     sendJson(context, { id: savedId, success: true });
+  }
+
+  /**
+   * Delete template (POST).
+   * Params: tplid
+   * #142: the SPA previously had no way to delete an NS template at all
+   * (only Load + Duplicate) — a stale/wrong record could never be removed.
+   * The record IS deleted even when it's the record type's default (a user
+   * may deliberately be removing a broken default), but the response flags
+   * wasDefault:true so the caller can warn that the record type is now left
+   * without a default template (Print falls back to "no template found",
+   * see renderPdf/findDefaultTemplateXml — no silent fallback, R4).
+   */
+  function deleteTemplate(context) {
+    if (context.request.method !== 'POST') {
+      throw new Error('POST required for delete');
+    }
+
+    var tplId = context.request.parameters.tplid;
+    if (!tplId) throw new Error('Missing tplid');
+
+    var wasDefault = false;
+    try {
+      wasDefault = record.lookupFields({
+        type: TPL_RECORD_TYPE,
+        id: tplId,
+        columns: [TPL_FLD_IS_DEFAULT]
+      })[TPL_FLD_IS_DEFAULT] === true;
+    } catch (e) {
+      // Record already gone / unreadable — let record.delete below surface
+      // the real error (R4: no silent swallow).
+      wasDefault = false;
+    }
+
+    record.delete({ type: TPL_RECORD_TYPE, id: tplId });
+
+    sendJson(context, { success: true, wasDefault: wasDefault });
   }
 
   // ═══════════════════════════════════════════════════
