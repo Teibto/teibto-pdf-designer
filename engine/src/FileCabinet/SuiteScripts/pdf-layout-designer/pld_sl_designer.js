@@ -148,9 +148,11 @@ define([
     const script = runtime.getCurrentScript();
     // Font URLs for embedding Thai in exported BFO XML: prefer script params, else
     // fall back to the company-config record (which stores them) so Thai renders
-    // without needing the deployment params set.
+    // without needing the deployment params set. No specific transaction is open
+    // here (this is app bootstrap, not a record's data), so scope by the current
+    // user's own subsidiary (OneWorld, #144) — the best available context.
     var cfg = {};
-    try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
+    try { cfg = companyConfig.load(user.subsidiary); } catch (e) { cfg = {}; }
 
     const ctx = {
       userId: user.id,
@@ -230,8 +232,11 @@ define([
     }
 
     // ─── Company Info (customrecord_pld_config — single source, #9) ───
+    // Subsidiary-scoped (OneWorld, #144) from the record already loaded above.
     try {
-      data.company = companyConfig.load();
+      var recSubsidiary;
+      try { recSubsidiary = rec.getValue({ fieldId: 'subsidiary' }); } catch (e2) { recSubsidiary = undefined; }
+      data.company = companyConfig.load(recSubsidiary);
     } catch (e) {
       data.company = {};
     }

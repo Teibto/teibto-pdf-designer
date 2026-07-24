@@ -162,11 +162,11 @@ define([
       renderer.addRecord({ templateName: 'record', record: rec });
     }
 
-    // Company info (custom data source)
+    // Company info (custom data source) — subsidiary-scoped (OneWorld, #144)
     renderer.addCustomDataSource({
       format: render.DataSource.OBJECT,
       alias: 'company',
-      data: loadCompanyInfo()
+      data: loadCompanyInfo(subsidiaryIdOf(curatedData, rec))
     });
 
     // Current date/user info
@@ -550,9 +550,26 @@ define([
    * Load company info from the PLD config custom record (#9).
    * Single source of ${company.*}: shared loader pld_lib_company_config.js —
    * per-account setup is one config record, no template edits, no script params.
+   *
+   * @param {string|number} [subsidiaryId] - transaction's subsidiary (OneWorld,
+   *   #144); undefined when there's no record context (synthetic preview data).
    */
-  function loadCompanyInfo() {
-    return companyConfig.load();
+  function loadCompanyInfo(subsidiaryId) {
+    return companyConfig.load(subsidiaryId);
+  }
+
+  /**
+   * Resolve the subsidiary id to scope ${company.*} by (#144), preferring the
+   * curated data's own subsidiaryId (set by pld_lib_invoice_data from the
+   * transaction it already loaded) and falling back to the raw record `rec`
+   * when curatedData wasn't built by that library (non-invoice record types).
+   * Returns undefined when neither is available (no record context) — load()
+   * then falls back to the global/first-active config, unchanged behavior.
+   */
+  function subsidiaryIdOf(curatedData, rec) {
+    if (curatedData && curatedData.subsidiaryId) return curatedData.subsidiaryId;
+    if (!rec) return undefined;
+    try { return rec.getValue({ fieldId: 'subsidiary' }); } catch (e) { return undefined; }
   }
 
   function sendJson(context, data) {

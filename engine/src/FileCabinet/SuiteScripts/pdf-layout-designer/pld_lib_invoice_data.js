@@ -260,7 +260,11 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       prevMemo = memo;
     });
 
-    var cfg = companyConfig.load();
+    // Subsidiary scoping (OneWorld, issue #144): the transaction's own subsidiary
+    // body field decides which customrecord_pld_config row companyConfig.load()
+    // matches — empty/absent (non-OneWorld) falls back to the global config.
+    var subsidiaryId = bodyValue(rec, 'subsidiary') || '';
+    var cfg = companyConfig.load(subsidiaryId);
 
     // Bordered key/value grids rendered as PLD tables (ShapeElement has no border,
     // so the doc-info and summary boxes are 2-column tables bound to these arrays).
@@ -284,6 +288,10 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     ];
 
     return {
+      // Exposed so callers that render from this curated object without their own
+      // record handle (e.g. renderCopiesPdf, #144) can still subsidiary-scope the
+      // top-level ${company.*} data source — not itself bound by any template.
+      subsidiaryId: subsidiaryId,
       company: {
         name: cfg.name, nameEn: cfg.nameEn, address: cfg.address, addressEn: cfg.addressEn,
         phone: cfg.phone, email: cfg.email, taxId: cfg.taxId,
