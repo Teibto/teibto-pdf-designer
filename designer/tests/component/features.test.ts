@@ -50,7 +50,7 @@ describe('header + page settings', () => {
     click(letter);
     await h.flush();
     expect(h.store.state.page.size).toBe('Letter');
-    const land = allInShadow(left, '.page-size-btn').find((b) => b.textContent?.includes('Landscape'));
+    const land = allInShadow(left, '.page-size-btn').find((b) => b.textContent?.includes('แนวนอน'));
     click(land);
     await h.flush();
     expect(h.store.state.page.orientation).toBe('landscape');
@@ -69,14 +69,14 @@ describe('pagination panel (Settings tab)', () => {
     allInShadow(panel, '.field').find((f: any) => f.textContent?.includes(label))?.querySelector(tag);
 
   it('mode toggle rows → height updates the store', async () => {
-    const heightBtn = allInShadow(panel, '.mode-btn').find((b: any) => b.textContent?.includes('Height-based'));
+    const heightBtn = allInShadow(panel, '.mode-btn').find((b: any) => b.textContent?.includes('ตามความสูง'));
     click(heightBtn);
     await h.flush();
     expect(h.store.state.pagination.mode).toBe('height');
   });
 
   it('rows per page reaches the store', async () => {
-    setValue(pfield('Rows per Page'), '25');
+    setValue(pfield('จำนวนแถวต่อหน้า'), '25');
     await h.flush();
     expect(h.store.state.pagination.rowsPerPage).toBe(25);
   });

@@ -522,7 +522,7 @@ export class PldColumnConfigModal extends LitElement {
         <!-- Properties Panel -->
         <div class="props-area">
           ${selCol ? this._renderColumnProps(selCol, this.selectedColIdx) : html`
-            <div class="props-empty">Select a column to edit its properties</div>
+            <div class="props-empty">เลือกคอลัมน์เพื่อแก้ไขคุณสมบัติ</div>
           `}
 
           <!-- Live Preview -->

@@ -250,7 +250,7 @@ export class PldSidebarRight extends LitElement {
       return html`
         <div class="empty">
           <div class="empty-icon">◇</div>
-          <div>Select an element<br />to edit its properties</div>
+          <div>เลือก element<br />เพื่อแก้ไขคุณสมบัติ</div>
         </div>
       `;
     }
@@ -260,10 +260,10 @@ export class PldSidebarRight extends LitElement {
     return html`
       <!-- Element Info -->
       <div class="group">
-        <div class="group-title">Element</div>
+        <div class="group-title">องค์ประกอบ (Element)</div>
         <div class="row">
           <div class="field">
-            <label>Name</label>
+            <label>ชื่อ (Name)</label>
             <input
               type="text"
               .value=${el.name}
@@ -273,7 +273,7 @@ export class PldSidebarRight extends LitElement {
         </div>
         <div class="row">
           <div class="field">
-            <label>Type</label>
+            <label>ชนิด (Type)</label>
             <input type="text" .value=${el.type} disabled />
           </div>
         </div>
@@ -283,15 +283,15 @@ export class PldSidebarRight extends LitElement {
            W/H still size the element's content and the table's declared
            height; band row heights control header/footer macro height. -->
       <div class="group">
-        <div class="group-title">Size</div>
+        <div class="group-title">ขนาด (Size)</div>
         <div class="row">
           <div class="field">
-            <label>Width</label>
+            <label>ความกว้าง (Width)</label>
             <input type="number" .value=${String(Math.round(el.w))}
               @change=${(e: Event) => this._resize(Number((e.target as HTMLInputElement).value), el.h)} />
           </div>
           <div class="field">
-            <label>Height</label>
+            <label>ความสูง (Height)</label>
             <input type="number" .value=${String(Math.round(el.h))}
               @change=${(e: Event) => this._resize(el.w, Number((e.target as HTMLInputElement).value))} />
           </div>
@@ -382,10 +382,10 @@ export class PldSidebarRight extends LitElement {
   private _renderTextProps(el: TextElement) {
     return html`
       <div class="group">
-        <div class="group-title">Text Style</div>
+        <div class="group-title">รูปแบบข้อความ (Text Style)</div>
         <div class="row">
           <div class="field">
-            <label>Content</label>
+            <label>เนื้อหา (Content)</label>
             <textarea
               .value=${el.content}
               @change=${(e: Event) => this._update('content', (e.target as HTMLTextAreaElement).value)}
@@ -394,32 +394,32 @@ export class PldSidebarRight extends LitElement {
         </div>
         <div class="row">
           <div class="field">
-            <label>Font Size</label>
+            <label>ขนาดตัวอักษร (Font Size)</label>
             <input type="number" .value=${String(el.fontSize)} min="6" max="72"
               @change=${(e: Event) => this._update('fontSize', Number((e.target as HTMLInputElement).value))} />
           </div>
           <div class="field">
-            <label>Weight</label>
+            <label>น้ำหนัก (Weight)</label>
             <select .value=${el.fontWeight}
               @change=${(e: Event) => this._update('fontWeight', (e.target as HTMLSelectElement).value)}>
-              <option value="normal">Normal</option>
-              <option value="bold">Bold</option>
+              <option value="normal">ปกติ</option>
+              <option value="bold">หนา</option>
             </select>
           </div>
         </div>
         <div class="row">
           <div class="field">
-            <label>Color</label>
+            <label>สี (Color)</label>
             <input type="color" .value=${el.color}
               @input=${(e: Event) => this._update('color', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>Align</label>
+            <label>จัดแนว (Align)</label>
             <select .value=${el.textAlign}
               @change=${(e: Event) => this._update('textAlign', (e.target as HTMLSelectElement).value)}>
-              <option value="left">Left</option>
-              <option value="center">Center</option>
-              <option value="right">Right</option>
+              <option value="left">ซ้าย</option>
+              <option value="center">กึ่งกลาง</option>
+              <option value="right">ขวา</option>
             </select>
           </div>
         </div>
@@ -430,11 +430,11 @@ export class PldSidebarRight extends LitElement {
   private _renderImageProps(el: ImageElement) {
     return html`
       <div class="group">
-        <div class="group-title">Image</div>
+        <div class="group-title">รูปภาพ (Image)</div>
         <!-- Upload/Clear buttons -->
         <div class="row">
           <button class="action-btn primary" style="flex:1" @click=${() => openImagePicker(this.store, el.id)}>
-            ${el.imageData ? '⟳ Replace Image' : '⬆ Upload Image'}
+            ${el.imageData ? '⟳ เปลี่ยนรูป' : '⬆ อัปโหลดรูป'}
           </button>
           ${el.imageData
             ? html`<button class="action-btn danger" @click=${() => clearElementImage(this.store, el.id)}>✕</button>`
@@ -451,17 +451,17 @@ export class PldSidebarRight extends LitElement {
           : nothing
         }
         <!-- URL -->
-        <label class="field-label">Image URL</label>
+        <label class="field-label">ที่อยู่รูปภาพ (Image URL)</label>
         <input class="field-input" type="text" .value=${el.src ?? ''} placeholder="https://..."
           @change=${(e: Event) => this._update('src', (e.target as HTMLInputElement).value)} />
         <!-- Object Fit — BFO ignores object-fit (truth table); screen-only (#50) -->
-        <label class="field-label" title="มีผลเฉพาะบนจอออกแบบ — BFO/PDF ไม่รองรับ object-fit (ภาพใน PDF ยืดตามกรอบเสมอ)">Fit Mode (screen only)</label>
+        <label class="field-label" title="มีผลเฉพาะบนจอออกแบบ — BFO/PDF ไม่รองรับ object-fit (ภาพใน PDF ยืดตามกรอบเสมอ)">โหมดจัดรูป (Fit Mode) — จอเท่านั้น</label>
         <select class="field-select"
           .value=${el.objectFit}
           @change=${(e: Event) => this._update('objectFit', (e.target as HTMLSelectElement).value)}>
-          <option value="contain">Contain</option>
-          <option value="cover">Cover</option>
-          <option value="fill">Fill / Stretch</option>
+          <option value="contain">พอดีกรอบ (Contain)</option>
+          <option value="cover">เต็มกรอบ (Cover)</option>
+          <option value="fill">ยืดเต็ม (Fill)</option>
         </select>
       </div>
     `;
@@ -470,22 +470,22 @@ export class PldSidebarRight extends LitElement {
   private _renderShapeProps(el: ShapeElement) {
     return html`
       <div class="group">
-        <div class="group-title">Shape Style</div>
+        <div class="group-title">รูปแบบรูปทรง (Shape Style)</div>
         <div class="row">
           <div class="field">
-            <label>Background</label>
+            <label>พื้นหลัง (Background)</label>
             <input type="color" .value=${el.bgColor}
               @input=${(e: Event) => this._update('bgColor', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>Radius</label>
+            <label>ความโค้งมุม (Radius)</label>
             <input type="number" .value=${String(el.borderRadius)} min="0" max="200"
               @change=${(e: Event) => this._update('borderRadius', Number((e.target as HTMLInputElement).value))} />
           </div>
         </div>
         <div class="row">
           <div class="field">
-            <label>Opacity</label>
+            <label>ความทึบ (Opacity)</label>
             <input type="number" .value=${String(el.opacity)} min="0" max="1" step="0.1"
               @change=${(e: Event) => this._update('opacity', Number((e.target as HTMLInputElement).value))} />
           </div>
@@ -497,15 +497,15 @@ export class PldSidebarRight extends LitElement {
   private _renderLineProps(el: LineElement) {
     return html`
       <div class="group">
-        <div class="group-title">Line Style</div>
+        <div class="group-title">รูปแบบเส้น (Line Style)</div>
         <div class="row">
           <div class="field">
-            <label>Color</label>
+            <label>สี (Color)</label>
             <input type="color" .value=${el.lineColor}
               @input=${(e: Event) => this._update('lineColor', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>Width</label>
+            <label>ความหนา (Width)</label>
             <input type="number" .value=${String(el.lineWidth)} min="0.5" max="10" step="0.5"
               @change=${(e: Event) => this._update('lineWidth', Number((e.target as HTMLInputElement).value))} />
           </div>
@@ -517,7 +517,7 @@ export class PldSidebarRight extends LitElement {
   private _renderTableProps(el: TableElement) {
     return html`
       <div class="group">
-        <div class="group-title">Table</div>
+        <div class="group-title">ตาราง (Table)</div>
         <div class="row">
           <div class="field">
             <label>คอลัมน์: ${el.columns.length}</label>
@@ -536,17 +536,17 @@ export class PldSidebarRight extends LitElement {
         </div>
         <div class="row">
           <div class="field">
-            <label>Header Bg</label>
+            <label>สีพื้นหัวตาราง (Header Bg)</label>
             <input type="color" .value=${el.headerBgColor}
               @input=${(e: Event) => this._update('headerBgColor', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>Header Text</label>
+            <label>สีข้อความหัว (Header Text)</label>
             <input type="color" .value=${el.headerTextColor}
               @input=${(e: Event) => this._update('headerTextColor', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>Border</label>
+            <label>เส้นขอบ (Border)</label>
             <input type="color" .value=${el.borderColor}
               @input=${(e: Event) => this._update('borderColor', (e.target as HTMLInputElement).value)} />
           </div>
@@ -558,17 +558,17 @@ export class PldSidebarRight extends LitElement {
   private _renderBarcodeProps(el: BarcodeElement) {
     return html`
       <div class="group">
-        <div class="group-title">Barcode</div>
+        <div class="group-title">บาร์โค้ด (Barcode)</div>
         <div class="row">
           <div class="field">
-            <label>Value</label>
+            <label>ค่า (Value)</label>
             <input type="text" .value=${el.value}
               @change=${(e: Event) => this._update('value', (e.target as HTMLInputElement).value)} />
           </div>
         </div>
         <div class="row">
           <div class="field">
-            <label>Type</label>
+            <label>ชนิด (Type)</label>
             <select .value=${el.barcodeType}
               @change=${(e: Event) => this._update('barcodeType', (e.target as HTMLSelectElement).value)}>
               <option value="code128">Code 128</option>
@@ -585,10 +585,10 @@ export class PldSidebarRight extends LitElement {
   private _renderListProps(el: ListElement) {
     return html`
       <div class="group">
-        <div class="group-title">List</div>
+        <div class="group-title">รายการ (List)</div>
         <div class="row">
           <div class="field">
-            <label>Items (one per line)</label>
+            <label>รายการ (Items) — บรรทัดละหนึ่งรายการ</label>
             <textarea
               .value=${el.items.join('\n')}
               @change=${(e: Event) => this._update('items',
@@ -598,12 +598,12 @@ export class PldSidebarRight extends LitElement {
         </div>
         <div class="row">
           <div class="field">
-            <label>Style</label>
+            <label>รูปแบบ (Style)</label>
             <select .value=${el.listStyle}
               @change=${(e: Event) => this._update('listStyle', (e.target as HTMLSelectElement).value)}>
-              <option value="bullet">• Bullet</option>
-              <option value="number">1. Number</option>
-              <option value="dash">– Dash</option>
+              <option value="bullet">• จุด</option>
+              <option value="number">1. ตัวเลข</option>
+              <option value="dash">– ขีด</option>
             </select>
           </div>
         </div>

@@ -73,7 +73,7 @@ test.describe('Page settings', () => {
   });
 
   test('changes orientation', async ({ page }) => {
-    const landscape = page.locator('pld-sidebar-left .page-size-btn', { hasText: 'Landscape' });
+    const landscape = page.locator('pld-sidebar-left .page-size-btn', { hasText: 'แนวนอน' });
     await landscape.click();
     await expect(landscape).toHaveClass(/active/);
   });

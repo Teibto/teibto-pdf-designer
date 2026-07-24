@@ -204,8 +204,8 @@ export class PldDataForm extends LitElement {
     if (!this.jsonData || Object.keys(this.jsonData).length === 0) {
       return html`
         <div class="empty">
-          No data loaded.<br />
-          Use <strong>Sample</strong> or paste JSON in <strong>JSON</strong> view.
+          ยังไม่ได้โหลดข้อมูล<br />
+          ใช้ <strong>★ ตัวอย่าง</strong> หรือวาง JSON ในมุมมอง <strong>JSON</strong>
         </div>
       `;
     }

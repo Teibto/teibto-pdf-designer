@@ -233,18 +233,18 @@ export class PldPaginationPanel extends LitElement {
       <div class="mode-toggle">
         <button class="mode-btn ${this.config.mode === 'rows' ? 'active' : ''}"
           @click=${() => this._setMode('rows')}>
-          Row-based
+          ตามจำนวนแถว
         </button>
         <button class="mode-btn ${this.config.mode === 'height' ? 'active' : ''}"
           @click=${() => this._setMode('height')}>
-          Height-based
+          ตามความสูง
         </button>
       </div>
 
       ${this.config.mode === 'rows' ? html`
         <div class="field-row">
           <div class="field">
-            <label title="Maximum number of data rows displayed on each page">Rows per Page</label>
+            <label title="จำนวนแถวข้อมูลสูงสุดที่แสดงในแต่ละหน้า">จำนวนแถวต่อหน้า</label>
             <input type="number" .value=${String(this.config.rowsPerPage)} min="1" max="100"
               @change=${(e: Event) => this._update('rowsPerPage', Number((e.target as HTMLInputElement).value))} />
           </div>
@@ -252,12 +252,12 @@ export class PldPaginationPanel extends LitElement {
       ` : html`
         <div class="field-row">
           <div class="field">
-            <label title="Default height of a single data row in points. Rows with wrapped text may be taller.">Base Row Height (pt)</label>
+            <label title="ความสูงเริ่มต้นของแถวข้อมูลหนึ่งแถว (จุด) — แถวที่ข้อความตัดบรรทัดอาจสูงกว่านี้">ความสูงแถวพื้นฐาน (pt)</label>
             <input type="number" .value=${String(this.config.baseRowHeight)} min="10" max="100"
               @change=${(e: Event) => this._update('baseRowHeight', Number((e.target as HTMLInputElement).value))} />
           </div>
           <div class="field">
-            <label title="Line height used to estimate text wrapping in height-based mode">Line Height (px)</label>
+            <label title="ความสูงบรรทัดที่ใช้ประมาณการตัดบรรทัดในโหมดตามความสูง">ความสูงบรรทัด (px)</label>
             <input type="number" .value=${String(this.config.lineHeightPx)} min="10" max="50"
               @change=${(e: Event) => this._update('lineHeightPx', Number((e.target as HTMLInputElement).value))} />
           </div>
@@ -300,7 +300,7 @@ export class PldPaginationPanel extends LitElement {
             <input type="text" placeholder="EN e.g. Original" .value=${c.en}
               @change=${(e: Event) => this._updateCopy(i, 'en', (e.target as HTMLInputElement).value)} />
           </div>
-          <button class="mode-btn" title="Remove copy" @click=${() => this._removeCopy(i)}>✕</button>
+          <button class="mode-btn" title="ลบสำเนา" @click=${() => this._removeCopy(i)}>✕</button>
         </div>
       `)}
       <div class="field-row">
@@ -315,14 +315,14 @@ export class PldPaginationPanel extends LitElement {
       <div class="divider"></div>
       <div class="section-header" @click=${() => { this._layoutOpen = !this._layoutOpen; }}>
         <span class="collapse-icon ${this._layoutOpen ? 'open' : ''}">▶</span>
-        <div class="section-title" style="margin-bottom:0"><span>⚙️</span> Layout Control</div>
+        <div class="section-title" style="margin-bottom:0"><span>⚙️</span> ควบคุมเลย์เอาต์</div>
       </div>
 
       <div class="section-body ${this._layoutOpen ? 'open' : ''}">
 
       <div class="field-row">
         <div class="field">
-          <label title="Minimum number of rows on the first or last page. Prevents a single lonely row at the end/start of a page.">Orphan/Widow Min Rows</label>
+          <label title="จำนวนแถวขั้นต่ำบนหน้าแรกหรือหน้าสุดท้าย — กันไม่ให้มีแถวโดดเดี่ยวแถวเดียวตกค้างต้น/ท้ายหน้า">แถวขั้นต่ำกันแถวโดดเดี่ยว</label>
           <input type="number" .value=${String(this.config.orphanWidowMinRows ?? 2)} min="0" max="10"
             @change=${(e: Event) => this._update('orphanWidowMinRows', Number((e.target as HTMLInputElement).value))} />
         </div>
@@ -330,12 +330,12 @@ export class PldPaginationPanel extends LitElement {
 
       <div class="field-row">
         <div class="field">
-          <label title="Controls whether summary elements start on a new page. Auto: break only when space is insufficient. Always: dedicated summary page. Same page: never break.">Summary Break</label>
+          <label title="ควบคุมว่าบล็อกสรุปจะขึ้นหน้าใหม่หรือไม่ — อัตโนมัติ: ขึ้นหน้าใหม่เมื่อพื้นที่ไม่พอ, ขึ้นหน้าใหม่เสมอ: แยกหน้าสรุปเฉพาะ, หน้าเดียวกัน: ไม่ขึ้นหน้าใหม่">การขึ้นหน้าใหม่ของสรุป</label>
           <select .value=${this.config.summaryBreak ?? 'auto'}
             @change=${(e: Event) => this._update('summaryBreak', (e.target as HTMLSelectElement).value)}>
-            <option value="auto">Auto (fit or break)</option>
-            <option value="always">Always new page</option>
-            <option value="samePage">Same page only</option>
+            <option value="auto">อัตโนมัติ (พอดีหรือขึ้นหน้าใหม่)</option>
+            <option value="always">ขึ้นหน้าใหม่เสมอ</option>
+            <option value="samePage">หน้าเดียวกันเท่านั้น</option>
           </select>
         </div>
       </div>
@@ -346,14 +346,14 @@ export class PldPaginationPanel extends LitElement {
       <div class="divider"></div>
       <div class="section-header" @click=${() => { this._breaksOpen = !this._breaksOpen; }}>
         <span class="collapse-icon ${this._breaksOpen ? 'open' : ''}">▶</span>
-        <div class="section-title" style="margin-bottom:0"><span>✂️</span> Page Breaks</div>
+        <div class="section-title" style="margin-bottom:0"><span>✂️</span> จุดแบ่งหน้า</div>
       </div>
 
       <div class="section-body ${this._breaksOpen ? 'open' : ''}">
 
       <div class="field-row">
         <div class="field">
-          <label title="Insert a page break before specific row numbers. Uses visible row numbers (1 = first data row). Breaks inside a keep-together group are ignored.">Force Break Before Row # (1-based, comma-separated)</label>
+          <label title="แทรกการขึ้นหน้าใหม่ก่อนแถวที่ระบุ ใช้เลขแถวที่เห็น (1 = แถวข้อมูลแรก) — การแบ่งภายในกลุ่มที่จัดไว้ด้วยกันจะถูกข้าม">บังคับขึ้นหน้าใหม่ก่อนแถวที่ # (เริ่มจาก 1, คั่นด้วยจุลภาค)</label>
           <input type="text"
             .value=${(this.config.forceBreakBeforeRows ?? []).map((n) => n + 1).join(', ')}
             placeholder="e.g. 5, 15, 25"
@@ -371,10 +371,10 @@ export class PldPaginationPanel extends LitElement {
 
       <div class="field-row">
         <div class="field">
-          <label title="JSON field that groups rows together. Consecutive rows with the same value will never be split across pages.">Keep-Together Field</label>
+          <label title="ฟิลด์ JSON ที่ใช้จัดกลุ่มแถวเข้าด้วยกัน — แถวติดกันที่มีค่าเดียวกันจะไม่ถูกแยกข้ามหน้า">ฟิลด์จัดกลุ่มไม่ให้แยกหน้า</label>
           <select .value=${this.config.keepTogetherField ?? ''}
             @change=${(e: Event) => this._update('keepTogetherField', (e.target as HTMLSelectElement).value)}>
-            <option value="">-- None --</option>
+            <option value="">-- ไม่มี --</option>
             ${this.jsonKeys.map((k) => html`<option value=${k} ?selected=${k === this.config.keepTogetherField}>${k}</option>`)}
           </select>
         </div>
@@ -382,19 +382,19 @@ export class PldPaginationPanel extends LitElement {
 
       <div class="field-row">
         <div class="field">
-          <label title="Controls which pages show the header element. 'First only' hides it on continuation pages. 'First + Last' shows on first and last page only.">Header Mode</label>
+          <label title="ควบคุมว่าหน้าใดจะแสดงหัวตาราง — 'หน้าแรกเท่านั้น' ซ่อนในหน้าถัดไป, 'หน้าแรก + หน้าสุดท้าย' แสดงเฉพาะหน้าแรกและหน้าสุดท้าย">โหมดหัวตาราง</label>
           <select .value=${this.config.headerMode ?? 'all'}
             @change=${(e: Event) => this._update('headerMode', (e.target as HTMLSelectElement).value)}>
-            <option value="all">All pages</option>
-            <option value="firstOnly">First page only</option>
-            <option value="firstLast">First + Last page</option>
+            <option value="all">ทุกหน้า</option>
+            <option value="firstOnly">หน้าแรกเท่านั้น</option>
+            <option value="firstLast">หน้าแรก + หน้าสุดท้าย</option>
           </select>
         </div>
       </div>
 
       <div class="field-row">
         <div class="field">
-          <label title="JSON field used to identify section header rows. When truthy, the row renders as a single full-width merged cell with bold text.">Column Span Field</label>
+          <label title="ฟิลด์ JSON ที่ใช้ระบุแถวหัวข้อ section — เมื่อมีค่า แถวนั้นจะแสดงเป็นเซลล์รวมเต็มความกว้างตัวหนา">ฟิลด์คั่น section (Column Span)</label>
           <select .value=${this.config.columnSpanField ?? ''}
             @change=${(e: Event) => this._update('columnSpanField', (e.target as HTMLSelectElement).value)}>
             <option value="">-- None --</option>
@@ -413,7 +413,7 @@ export class PldPaginationPanel extends LitElement {
         ${this.config.sectionSubtotal ? html`
           <div class="field-row">
             <div class="field">
-              <label title="ข้อความในเซลล์แรกของแถวรวมย่อย (ว่าง = รวม)">Subtotal Label</label>
+              <label title="ข้อความในเซลล์แรกของแถวรวมย่อย (ว่าง = รวม)">ป้ายแถวรวมย่อย (Subtotal Label)</label>
               <input type="text" placeholder="รวม" .value=${this.config.sectionSubtotalLabel ?? ''}
                 @change=${(e: Event) => this._update('sectionSubtotalLabel', (e.target as HTMLInputElement).value)} />
             </div>

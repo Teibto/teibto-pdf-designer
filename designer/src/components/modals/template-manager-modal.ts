@@ -323,7 +323,7 @@ export class PldTemplateManagerModal extends LitElement {
 
   private _renderSaved() {
     if (this.savedTemplates.length === 0) {
-      return html`<div class="empty-msg">No saved templates yet.<br />Save your current design or load a sample template.</div>`;
+      return html`<div class="empty-msg">ยังไม่มีเทมเพลตที่บันทึกไว้<br />บันทึกงานปัจจุบัน หรือโหลดเทมเพลตตัวอย่าง</div>`;
     }
 
     return html`
@@ -386,7 +386,7 @@ export class PldTemplateManagerModal extends LitElement {
 
   private _renderNetsuite() {
     if (this.nsTemplates.length === 0) {
-      return html`<div class="empty-msg">No templates saved in NetSuite yet.<br />Use "Save to NetSuite" in the BFO Export dialog.</div>`;
+      return html`<div class="empty-msg">ยังไม่มีเทมเพลตที่บันทึกใน NetSuite<br />ใช้ "บันทึกเข้า NetSuite" ในกล่อง BFO Export</div>`;
     }
 
     const missingDefault = this._rectypesMissingDefault();
@@ -394,7 +394,7 @@ export class PldTemplateManagerModal extends LitElement {
     return html`
       ${missingDefault.length > 0 ? html`
         <div class="ns-no-default-warning">
-          ⚠ No default template — ${missingDefault.join(', ')}. Print for ${missingDefault.length > 1 ? 'these record types' : 'this record type'} will fail with "No template found" until a default is set.
+          ⚠ ไม่มีเทมเพลตค่าเริ่มต้น — ${missingDefault.join(', ')}. การพิมพ์${missingDefault.length > 1 ? 'ประเภทเอกสารเหล่านี้' : 'ประเภทเอกสารนี้'}จะล้มเหลวด้วย "No template found" จนกว่าจะตั้งค่าเริ่มต้น
         </div>
       ` : nothing}
       <div class="template-grid">
@@ -402,8 +402,8 @@ export class PldTemplateManagerModal extends LitElement {
           <div class="template-card">
             <div class="tpl-name">${tpl.isDefault ? '★ ' : ''}${tpl.name}</div>
             <div class="tpl-meta">
-              <span>Record type: ${tpl.rectype || '—'}${tpl.isDefault ? ' (default)' : ''}</span>
-              <span>Modified: ${tpl.modified}</span>
+              <span>ประเภทเอกสาร: ${tpl.rectype || '—'}${tpl.isDefault ? ' (ค่าเริ่มต้น)' : ''}</span>
+              <span>แก้ไขล่าสุด: ${tpl.modified}</span>
             </div>
             <div class="tpl-elements">NetSuite ID: ${tpl.id}</div>
             <div class="tpl-actions">

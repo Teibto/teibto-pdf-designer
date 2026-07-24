@@ -19,17 +19,17 @@ test.describe('Pagination panel', () => {
   });
 
   test('switches between row-based and height-based modes', async ({ page }) => {
-    await expect(field(page, 'Rows per Page')).toBeVisible();
-    await panel(page).locator('.mode-btn', { hasText: 'Height-based' }).click();
-    await expect(field(page, 'Base Row Height')).toBeVisible();
-    await expect(field(page, 'Rows per Page')).toBeHidden();
+    await expect(field(page, 'จำนวนแถวต่อหน้า')).toBeVisible();
+    await panel(page).locator('.mode-btn', { hasText: 'ตามความสูง' }).click();
+    await expect(field(page, 'ความสูงแถวพื้นฐาน')).toBeVisible();
+    await expect(field(page, 'จำนวนแถวต่อหน้า')).toBeHidden();
     const mode = await storeState(page, (s) => s.pagination.mode);
     expect(mode).toBe('height');
   });
 
   test('edits rows per page', async ({ page }) => {
-    await field(page, 'Rows per Page').locator('input').fill('25');
-    await field(page, 'Rows per Page').locator('input').blur();
+    await field(page, 'จำนวนแถวต่อหน้า').locator('input').fill('25');
+    await field(page, 'จำนวนแถวต่อหน้า').locator('input').blur();
     const n = await storeState(page, (s) => s.pagination.rowsPerPage);
     expect(n).toBe(25);
   });
@@ -59,14 +59,14 @@ test.describe('Pagination panel', () => {
     const firstTh = await storeState(page, (s) => s.copies[0].th);
     expect(firstTh).toBe('ต้นฉบับ (ลูกค้า)');
 
-    await panel(page).locator('.mode-btn[title="Remove copy"]').first().click();
+    await panel(page).locator('.mode-btn[title="ลบสำเนา"]').first().click();
     const after = await storeState(page, (s) => s.copies?.length ?? 0);
     expect(after).toBe(1);
   });
 
   test('expands the collapsible advanced sections and sets header mode', async ({ page }) => {
-    await panel(page).locator('.section-header', { hasText: 'Page Breaks' }).click();
-    const headerMode = field(page, 'Header Mode').locator('select');
+    await panel(page).locator('.section-header', { hasText: 'จุดแบ่งหน้า' }).click();
+    const headerMode = field(page, 'โหมดหัวตาราง').locator('select');
     await expect(headerMode).toBeVisible();
     await headerMode.selectOption('firstOnly');
     const mode = await storeState(page, (s) => s.pagination.headerMode);
@@ -74,8 +74,8 @@ test.describe('Pagination panel', () => {
   });
 
   test('parses force-break row numbers to 0-based (#84)', async ({ page }) => {
-    await panel(page).locator('.section-header', { hasText: 'Page Breaks' }).click();
-    const input = field(page, 'Force Break Before Row').locator('input');
+    await panel(page).locator('.section-header', { hasText: 'จุดแบ่งหน้า' }).click();
+    const input = field(page, 'บังคับขึ้นหน้าใหม่ก่อนแถวที่').locator('input');
     await input.fill('5, 15');
     await input.blur();
     const rows = await storeState(page, (s) => s.pagination.forceBreakBeforeRows);
