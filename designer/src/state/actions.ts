@@ -884,12 +884,26 @@ export function setRowHeight(store: AppStore, bandIdx: number, rowIdx: number, h
   }, { name: 'setRowHeight', undoable: true }));
 }
 
-/** Remove a row from a band. */
+/** Remove a row from a band, deleting the elements it holds (#136). */
 export function removeBandRow(store: AppStore, bandIdx: number, rowIdx: number): void {
   store.dispatch(tagAction((draft) => {
     const band = draft.bands[bandIdx];
-    if (!band?.rows[rowIdx]) return;
+    const row = band?.rows[rowIdx];
+    if (!row) return;
+    // The row owns its elements — deleting the row deletes them from the pool too
+    // (#136). Leaving them behind stranded invisible orphans, since bands are the
+    // layout source of truth after #47 and an element with no cell renders nowhere.
+    const ids = row.columns.flatMap((c) => c.elementIds);
+    if (ids.length) {
+      const drop = new Set(ids);
+      draft.elements = draft.elements.filter((e) => !drop.has(e.id));
+      if (draft.selectedId && drop.has(draft.selectedId)) draft.selectedId = null;
+      draft.multiSelect = draft.multiSelect.filter((id) => !drop.has(id));
+      // Clear any stray ref in another cell before the row itself goes.
+      stripBandRefs(draft, ids);
+    }
     band.rows.splice(rowIdx, 1);
+    draft.template.isDirty = true;
   }, { name: 'removeBandRow', undoable: true }));
 }
 

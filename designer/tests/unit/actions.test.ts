@@ -526,12 +526,11 @@ describe('band sync — pasteElements (Ctrl+V)', () => {
     removeBandRow(store, bandIdx, 0);
     pasteElements(store);
 
-    // The clone still lands in a cell of its role band, not in the pool alone.
-    // (removeBandRow itself strands the originals in the pool — separate bug,
-    // tracked on its own; assert on the clone only.)
+    // The clone still lands in a cell of its role band (a fresh row, since
+    // removeBandRow cleared the original), not in the pool alone.
     const clone = store.state.selectedId as string;
     expect(bandIds(store)).toContain(clone);
-    expect(orphanIds(store)).not.toContain(clone);
+    expect(orphanIds(store)).toEqual([]);
     expect(danglingIds(store)).toEqual([]);
   });
 
@@ -560,6 +559,46 @@ describe('band sync — pasteElements (Ctrl+V)', () => {
     expect(orphanIds(store)).toEqual([]);
     expect(danglingIds(store)).toEqual([]);
     expect(store.state.multiSelect).toHaveLength(2);
+  });
+});
+
+describe('band sync — removeBandRow (#136)', () => {
+  it('deletes the elements the row held, leaving no orphan in the pool', () => {
+    const { store, a, b } = createBandStore(); // a, b stacked in content row 0 col 0
+    const bandIdx = store.state.bands.findIndex((x) => x.role === 'content');
+    removeBandRow(store, bandIdx, 0);
+
+    expect(store.state.elements).toHaveLength(0);
+    expect(orphanIds(store)).toEqual([]);
+    expect(danglingIds(store)).toEqual([]);
+    expect(store.state.bands[bandIdx]?.rows ?? []).toHaveLength(0);
+    expect([a, b].every((id) => !store.state.elements.some((e) => e.id === id))).toBe(true);
+  });
+
+  it('clears selection/multiSelect for elements removed with the row', () => {
+    const { store, a, b } = createBandStore();
+    toggleMultiSelect(store, a);
+    toggleMultiSelect(store, b);
+    const bandIdx = store.state.bands.findIndex((x) => x.role === 'content');
+    removeBandRow(store, bandIdx, 0);
+
+    expect(store.state.selectedId).toBeNull();
+    expect(store.state.multiSelect).toEqual([]);
+  });
+
+  it('leaves other rows and their elements untouched', () => {
+    const { store, a } = createBandStore();
+    const bandIdx = store.state.bands.findIndex((x) => x.role === 'content');
+    // add a second row with its own element
+    addBandRow(store, bandIdx);
+    const c = addElementToCell(store, 'text', bandIdx, 1, 0) as string;
+
+    removeBandRow(store, bandIdx, 0); // drop the first row (holds a, b)
+
+    expect(store.state.elements.map((e) => e.id)).toContain(c);
+    expect(store.state.elements.map((e) => e.id)).not.toContain(a);
+    expect(bandIds(store)).toEqual([c]);
+    expect(orphanIds(store)).toEqual([]);
   });
 });
 
