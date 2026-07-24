@@ -77,7 +77,7 @@ export class PldBandView extends LitElement {
     .band-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--color-bg-card, #1a1b25); }
     .rowwrap { display: flex; align-items: stretch; gap: 6px; }
     .row { display: flex; gap: 8px; flex: 1; }
-    .rowtools { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
+    .rowtools { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
     .row-h {
       width: 48px;
       background: var(--color-bg-deep, #0a0b10);
@@ -106,17 +106,24 @@ export class PldBandView extends LitElement {
       outline-offset: -2px;
       cursor: not-allowed;
     }
-    .cell-w { display: flex; align-items: center; gap: 4px; font-size: 10px; font-family: var(--font-mono, monospace); color: var(--color-text-dim, #8a8ca0); }
+    .cell-w { display: flex; align-items: center; gap: 6px; font-size: 10px; font-family: var(--font-mono, monospace); color: var(--color-text-dim, #8a8ca0); }
     .cell-w .sp { flex: 1; }
-    button { width: 18px; height: 18px; line-height: 1; border: 1px solid var(--color-border, #2a2c3a); border-radius: 3px; background: var(--color-bg-hover, #222430); color: var(--color-text, #e8e9f0); cursor: pointer; padding: 0; font-size: 11px; }
-    button:disabled { opacity: .35; cursor: default; }
-    button.wide { width: auto; padding: 0 8px; height: 20px; font-size: 11px; }
-    .cell-w button { width: 16px; height: 16px; }
+    button { width: 22px; height: 22px; line-height: 1; border: 1px solid var(--color-border, #2a2c3a); border-radius: 4px; background: var(--color-bg-hover, #222430); color: var(--color-text, #e8e9f0); cursor: pointer; padding: 0; font-size: 12px; transition: background 0.1s, border-color 0.1s; }
+    button:hover:not(:disabled) { background: color-mix(in srgb, var(--band-color, #4f6ef7) 24%, var(--color-bg-hover, #222430)); border-color: var(--band-color, #4f6ef7); }
+    button:disabled { opacity: .3; cursor: default; }
+    button.wide { width: auto; padding: 0 10px; height: 24px; font-size: 11px; }
+    /* Segmented groups (#124): width −/%/+ and the column merge/split ops read as
+       two distinct control clusters instead of a dense button row. */
+    .wgroup, .cgroup { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--color-border, #2a2c3a); border-radius: 6px; background: var(--color-bg-deep, #0a0b10); }
+    .wgroup .pct { min-width: 32px; text-align: center; font-size: 10px; }
+    .cell-w button { width: 20px; height: 20px; font-size: 11px; }
     .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text, #e8e9f0); background: var(--color-bg-hover, #222430); border-radius: 4px; padding: 2px 4px 2px 6px; cursor: grab; border: 1px solid transparent; }
     .chip.sel { border-color: var(--band-color, #4f6ef7); background: color-mix(in srgb, var(--band-color) 22%, transparent); }
     .chip[dragging] { opacity: .4; }
-    .chip .del { width: 14px; height: 14px; font-size: 9px; border-color: transparent; background: transparent; color: var(--color-text-dim, #8a8ca0); }
-    .chip .del:hover { color: #e74c8b; background: var(--color-bg-deep, #0a0b10); }
+    .chip .del { width: 18px; height: 18px; font-size: 10px; border-color: transparent; background: transparent; color: var(--color-text-dim, #8a8ca0); }
+    .chip .del:hover { color: #fff; background: #e74c8b; border-color: #e74c8b; }
+    /* Destructive controls flush danger on hover, not on the neutral band tint. */
+    button.danger:hover:not(:disabled) { background: var(--color-danger, #ef4444); border-color: var(--color-danger, #ef4444); color: #fff; }
     .chip .t { color: var(--color-text-dim, #8a8ca0); font-family: var(--font-mono, monospace); font-size: 10px; }
     .empty { color: var(--color-text-dim, #8a8ca0); font-size: 13px; text-align: center; padding: 40px; }
     .empty-slot { border-style: dashed; opacity: .7; }
@@ -232,14 +239,18 @@ export class PldBandView extends LitElement {
                           @drop=${(e: DragEvent) => this._onDrop(e, bi, ri, ci)}
                           style="flex: ${col.widthPct} 1 0;">
                           <span class="cell-w">
-                            ${row.columns.length > 1 ? html`
-                              <button ?disabled=${col.widthPct <= 5} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct - 5)}>−</button>
-                              <span>${col.widthPct}%</span>
-                              <button ?disabled=${col.widthPct >= 95} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct + 5)}>+</button>
-                            ` : html`<span>${col.widthPct}%</span>`}
+                            <span class="wgroup">
+                              ${row.columns.length > 1 ? html`
+                                <button title="ลดความกว้าง 5%" ?disabled=${col.widthPct <= 5} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct - 5)}>−</button>
+                                <span class="pct">${col.widthPct}%</span>
+                                <button title="เพิ่มความกว้าง 5%" ?disabled=${col.widthPct >= 95} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct + 5)}>+</button>
+                              ` : html`<span class="pct">${col.widthPct}%</span>`}
+                            </span>
                             <span class="sp"></span>
-                            ${ci > 0 ? html`<button title="รวมกับคอลัมน์ซ้าย" @click=${() => mergeColumn(this.store, bi, ri, ci)}>⇤</button>` : nothing}
-                            <button title="แยกคอลัมน์" @click=${() => splitColumn(this.store, bi, ri, ci)}>⇥</button>
+                            <span class="cgroup">
+                              ${ci > 0 ? html`<button title="รวมกับคอลัมน์ซ้าย" @click=${() => mergeColumn(this.store, bi, ri, ci)}>⇤</button>` : nothing}
+                              <button title="แยกคอลัมน์" @click=${() => splitColumn(this.store, bi, ri, ci)}>⇥</button>
+                            </span>
                           </span>
                           ${col.elementIds.length
                             ? col.elementIds.map((id) => {
@@ -275,7 +286,7 @@ export class PldBandView extends LitElement {
                       ` : nothing}
                       <button title="เลื่อนขึ้น" ?disabled=${ri === 0} @click=${() => moveBandRow(this.store, bi, ri, -1)}>↑</button>
                       <button title="เลื่อนลง" ?disabled=${ri === band.rows.length - 1} @click=${() => moveBandRow(this.store, bi, ri, 1)}>↓</button>
-                      <button title="ลบแถว" @click=${() => this._removeRow(bi, ri)}>✕</button>
+                      <button class="danger" title="ลบแถว" @click=${() => this._removeRow(bi, ri)}>✕</button>
                     </div>
                   </div>
                 `)}
