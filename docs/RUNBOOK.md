@@ -49,6 +49,36 @@ CI `quality-gate` รัน lint + vitest + e2e + template validator + secret-sc
 - data classification (Internal) — account ลูกค้าห้ามแตะแม้ dryrun · deploy เฉพาะ Teibto sandbox เท่านั้น
 - verify engine change — `node --check` + review + QA สดบน SB2 (skill `netsuite-qa-browser`)
 
+## 📄 เขียนหรือแก้ BFO template
+
+master XML อยู่ที่ `templates/master/<doc>.xml` คือ source of truth (ไม่ใช่ designer JSON) · sample คู่กันที่ `templates/samples/<doc>.sample.json` ใช้ข้อมูลสังเคราะห์เท่านั้น (Internal). designer เป็นเครื่อง scaffold ร่างแรก · แก้รอบหลังที่ XML ผ่าน PR ไม่แก้ใน UI ของ account ลูกค้า.
+
+Skeleton บังคับ copy จาก `templates/master/tax-invoice.xml` ที่พิสูจน์แล้ว:
+
+- `<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">`
+- ฟอนต์ไทยจาก config layer เท่านั้น: `<link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />`
+- header/footer ซ้ำทุกหน้าใช้ `<macrolist>` + `<macro id="nlheader">` กับ `nlfooter` · เลขหน้าใช้ `<pagenumber/> / <totalpages/>` (BFO ไม่รองรับ CSS `@page` counter)
+- `<body header="nlheader" header-height="120pt" footer="nlfooter" footer-height="26pt" size="A4" padding="0.35in">`
+- binding ทุกตัวมาจาก `${company.*}` (config record `customrecord_pld_config` ต่อ account) จึง save เข้า account ได้ตรง ๆ ไม่ต้องแก้ต่อ account
+
+กฎที่ `scripts/validate-templates.sh` บังคับ (จับตั้งแต่ PR):
+
+| ห้าม | ใช้แทน | # |
+|---|---|---|
+| C-ternary `${a ? b : c}` | `?then(a,b)` หรือ `<#if>` | 1 |
+| binding ไม่ null-safe `${record.x}` | `${record.x!""}` ทุกตัว | 2 |
+| bake URL หรือฟอนต์ต่อ template | `${company.fontRegular}` ผ่าน `?xml` — BFO ไม่ apply GPOS ฟอนต์ผิดพังเงียบ | 32 |
+| CSS `object-fit` `text-overflow` `@page` margin box `counter(page)` | หลีกเลี่ยง (BFO เมินเงียบ) | 3, 5 |
+| `<div>` ระดับ body | `<p>` หรือ `<table>` (BFO ทิ้ง div ทั้ง element เงียบ) | 10 |
+| สตริงไทยยาวตัดกลางคำ | แทรก ZWSP `\x200B` ระหว่างหน่วย (BFO ไม่มี Thai word-break) | 35 |
+
+Validate แล้ว smoke-test:
+
+- local + CI: `bash scripts/validate-templates.sh`
+- render จริง: save XML เข้า `customrecord_pld_template` แล้วเปิด `?action=render&rectype=<doc>&recid=<n>&tplid=<id>` · ตรวจฟอนต์ไทยไม่เป็น □ และ header/footer ซ้ำทุกหน้า
+
+facts เต็มเรื่อง BFO/FreeMarker (font embedding · `?then` vs ternary · macrolist multi-page · zero-test-data smoke) อยู่ที่ skill `netsuite-bfo-pdf` และ `docs/TOOLSTACK.md` ไม่ทำซ้ำที่นี่.
+
 ## 🧭 หลักสถาปัตยกรรมที่ห้ามละเมิด
 
 - BFO เป็น render engine เดียว · template XML ใน `templates/master/` คือ source of truth · BFO generator มีที่เดียวคือ `designer/src/services/bfo-export.service.ts` — รายละเอียดเต็มและเหตุผลอยู่ใน `CLAUDE.md`
