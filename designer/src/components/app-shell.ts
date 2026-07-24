@@ -13,7 +13,7 @@ import { AppStore, storeContext } from '../state/store';
 import { HistoryService } from '../services/history.service';
 import { registerKeyboardShortcuts } from '../services/keyboard.service';
 import { applyPagination, clearPaginationCache } from '../services/pagination.service';
-import { saveTemplate } from '../services/template.service';
+import { saveTemplate, saveTemplateToNetSuite } from '../services/template.service';
 import { showToast } from './shared/toast-notification';
 import { getSampleTemplates } from '../constants/sample-templates';
 import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext } from '../services/netsuite-adapter.service';
@@ -240,11 +240,26 @@ export class PldAppShell extends LitElement {
   // ═══════════════════════════════════════
 
   private async _saveTemplate() {
+    // Inside NetSuite the 💾 button (and Ctrl+S) must persist to the customrecord.
+    // Saving only to IndexedDB looked successful but never reached the account (#137).
+    if (isNetSuiteEnv()) {
+      try {
+        const { id } = await saveTemplateToNetSuite(this.store);
+        showToast(`บันทึกเข้า NetSuite แล้ว (ID: ${id})`, 'success');
+      } catch (err) {
+        // No IndexedDB fallback — a failed NetSuite save must be visible, not
+        // masked by a silent local write (R4: no silent fallback).
+        showToast(`บันทึกเข้า NetSuite ไม่สำเร็จ: ${(err as Error).message}`, 'error');
+      }
+      return;
+    }
+    // Local (non-NetSuite) mode — persist to this browser and say so plainly so
+    // the user does not mistake it for a NetSuite save.
     try {
       await saveTemplate(this.store);
-      showToast('Template saved!', 'success');
+      showToast('บันทึกในเครื่องนี้เท่านั้น (ยังไม่เข้า NetSuite)', 'info');
     } catch (err) {
-      showToast(`Save failed: ${err}`, 'error');
+      showToast(`บันทึกไม่สำเร็จ: ${err}`, 'error');
     }
   }
 
