@@ -6,8 +6,10 @@
  * @author Wichit Wongta
  */
 import { nanoid } from 'nanoid';
-import { current } from 'immer';
+import { current, type Draft } from 'immer';
 import type { AppStore } from './store';
+import type { AppState, ClipboardOrigin } from './app-state';
+import type { BandColumn } from '../models/bands';
 import type {
   CanvasElement,
   ElementType,
@@ -27,6 +29,99 @@ import { elementsToBands, redistributeRowWidths } from '../services/band-layout.
 import { BAND_ORDER, bandAccepts } from '../models/bands';
 import type { ElementRoleType } from '../models/element';
 import { tagAction } from './middleware';
+
+// ═══════════════════════════════════════
+// BAND ↔ POOL SYNC HELPERS (#126 / #135)
+// ═══════════════════════════════════════
+// Bands hold only id references (#49 model B); element properties live on the
+// shared `state.elements`. So every action that adds to or removes from the pool
+// must mirror the change into `state.bands`, or the two desync — a removed
+// element leaves a dangling id that rides along through save/undo, and an added
+// element never shows up in the band editor / preview / BFO export.
+
+/** Drop `ids` from every band cell. Same cleanup as removeBandElement, for a set. */
+function stripBandRefs(draft: Draft<AppState>, ids: readonly string[]): void {
+  if (ids.length === 0) return;
+  const drop = new Set(ids);
+  for (const band of draft.bands) {
+    for (const row of band.rows) {
+      for (const col of row.columns) {
+        // filter, not indexOf+splice: also clears an id repeated in one cell
+        if (col.elementIds.some((id) => drop.has(id))) {
+          col.elementIds = col.elementIds.filter((id) => !drop.has(id));
+        }
+      }
+    }
+  }
+}
+
+/** Locate the band cell holding `id` — null when the element sits in no band. */
+function findBandCell(
+  draft: Draft<AppState>,
+  id: string,
+): { col: Draft<BandColumn>; index: number; origin: ClipboardOrigin } | null {
+  for (const band of draft.bands) {
+    for (let rowIdx = 0; rowIdx < band.rows.length; rowIdx++) {
+      const row = band.rows[rowIdx];
+      for (let colIdx = 0; colIdx < row.columns.length; colIdx++) {
+        const col = row.columns[colIdx];
+        const index = col.elementIds.indexOf(id);
+        if (index >= 0) {
+          return { col, index, origin: { role: band.role, rowIdx, colIdx, index } };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Put a pasted `el` into a band cell (#135), preferring the cell it was copied
+ * from. Returns false when no band accepts it — the caller then skips the
+ * element rather than leaving an orphan in the pool.
+ *
+ * Order: the recorded origin cell → the element's own role band (created, with
+ * a row, if missing — mirrors addElementToNewBand). Acceptance matrix (#49)
+ * applies because a paste is a NEW addition.
+ */
+function placePastedElement(
+  draft: Draft<AppState>,
+  el: Draft<CanvasElement>,
+  sourceId: string,
+  origin: ClipboardOrigin | undefined,
+): boolean {
+  // 1. The exact cell it came from, if it still exists and accepts the type.
+  if (origin) {
+    const band = draft.bands.find((b) => b.role === origin.role);
+    const col = band?.rows[origin.rowIdx]?.columns[origin.colIdx];
+    if (band && col && bandAccepts(band.role, el.type)) {
+      el.role = band.role;
+      // After a copy the source is still in the cell → sit right after it (same
+      // convention as duplicateElement). After a cut it is gone → reuse its slot.
+      const at = col.elementIds.indexOf(sourceId);
+      const insertAt = at >= 0 ? at + 1 : Math.min(origin.index, col.elementIds.length);
+      col.elementIds.splice(insertAt, 0, el.id);
+      return true;
+    }
+  }
+
+  // 2. Fall back to the element's own role band.
+  if (!bandAccepts(el.role, el.type)) return false;
+
+  let band = draft.bands.find((b) => b.role === el.role);
+  if (!band) {
+    band = { role: el.role, rows: [] };
+    const order = BAND_ORDER.indexOf(el.role);
+    const at = draft.bands.findIndex((b) => BAND_ORDER.indexOf(b.role) > order);
+    if (at === -1) draft.bands.push(band);
+    else draft.bands.splice(at, 0, band);
+  }
+
+  const firstCol = band.rows[0]?.columns[0];
+  if (firstCol) firstCol.elementIds.push(el.id);
+  else band.rows.push({ id: nanoid(8), columns: [{ id: nanoid(8), widthPct: 100, elementIds: [el.id] }] });
+  return true;
+}
 
 // ═══════════════════════════════════════
 // ELEMENT ACTIONS
@@ -154,15 +249,8 @@ export function removeElement(store: AppStore, id: string): void {
   store.dispatch((draft) => {
     draft.elements = draft.elements.filter((e) => e.id !== id);
     // Drop any band reference too (#126) — otherwise a dangling id survives in
-    // state.bands and rides along through save/undo. Mirrors removeBandElement.
-    for (const band of draft.bands) {
-      for (const row of band.rows) {
-        for (const col of row.columns) {
-          const i = col.elementIds.indexOf(id);
-          if (i >= 0) col.elementIds.splice(i, 1);
-        }
-      }
-    }
+    // state.bands and rides along through save/undo.
+    stripBandRefs(draft, [id]);
     if (draft.selectedId === id) {
       draft.selectedId = null;
     }
@@ -239,17 +327,8 @@ export function duplicateElement(store: AppStore, id: string): void {
     // Mirror into the band structure (#125): place the clone right after the
     // source in its band cell, so it's visible in the editor/preview/export
     // (bands are the layout source of truth after #47).
-    outer: for (const band of draft.bands) {
-      for (const row of band.rows) {
-        for (const col of row.columns) {
-          const i = col.elementIds.indexOf(id);
-          if (i >= 0) {
-            col.elementIds.splice(i + 1, 0, clone.id);
-            break outer;
-          }
-        }
-      }
-    }
+    const cell = findBandCell(draft, id);
+    if (cell) cell.col.elementIds.splice(cell.index + 1, 0, clone.id);
 
     draft.selectedId = clone.id;
     draft.template.isDirty = true;
@@ -506,13 +585,19 @@ export function sendBackward(store: AppStore, id: string): void {
 // CLIPBOARD ACTIONS
 // ═══════════════════════════════════════
 
-/** Copy selected elements to clipboard */
+/**
+ * Copy selected elements to clipboard, recording each one's band cell (#135)
+ * so paste can put the clone back where it came from.
+ */
 export function copyElements(store: AppStore): void {
   const ids = getSelectedIds(store);
   store.dispatch((draft) => {
     draft.clipboard = draft.elements
       .filter((e) => ids.includes(e.id))
-      .map((e) => structuredClone(current(e)) as CanvasElement);
+      .map((e) => ({
+        el: structuredClone(current(e)) as CanvasElement,
+        origin: findBandCell(draft, e.id)?.origin,
+      }));
   });
 }
 
@@ -521,7 +606,11 @@ export function cutElements(store: AppStore): void {
   copyElements(store);
   const ids = getSelectedIds(store);
   store.dispatch((draft) => {
+    // Locked elements survive the cut, so only clear band refs for the ones
+    // that actually leave the pool (#135) — same desync as #126 otherwise.
+    const cutIds = draft.elements.filter((e) => ids.includes(e.id) && !e.locked).map((e) => e.id);
     draft.elements = draft.elements.filter((e) => !ids.includes(e.id) || e.locked);
+    stripBandRefs(draft, cutIds);
     draft.selectedId = null;
     draft.multiSelect = [];
     draft.template.isDirty = true;
@@ -534,16 +623,34 @@ export function pasteElements(store: AppStore): void {
     if (draft.clipboard.length === 0) return;
 
     const newIds: string[] = [];
-    for (const orig of draft.clipboard) {
+    for (const entry of draft.clipboard) {
+      const orig = entry.el;
       const clone = structuredClone(current(orig)) as CanvasElement;
       clone.id = nanoid(10);
       clone.name = `${orig.name}_paste`;
       if (clone.x != null) clone.x += 15;
       if (clone.y != null) clone.y += 15;
       clone.zIndex = draft.elements.length;
+
+      // Bands are the layout source of truth (#47): an element that lands in no
+      // cell is invisible in the editor/preview/export. Rather than paste an
+      // orphan (#135), skip it — same call as addElementToCell returning null
+      // when the acceptance matrix (#49) rejects the type.
       draft.elements.push(clone);
+      const placed = placePastedElement(
+        draft,
+        draft.elements[draft.elements.length - 1],
+        orig.id,
+        entry.origin ? current(entry.origin) : undefined,
+      );
+      if (!placed) {
+        draft.elements.pop();
+        continue;
+      }
       newIds.push(clone.id);
     }
+
+    if (newIds.length === 0) return;
 
     draft.selectedId = newIds[newIds.length - 1];
     draft.multiSelect = newIds.length > 1 ? newIds : [];
@@ -687,6 +794,9 @@ export function deleteSelected(store: AppStore): void {
 
   store.dispatch((draft) => {
     draft.elements = draft.elements.filter((e) => !deletableIds.includes(e.id));
+    // Keyboard/multi-select delete must clear band refs too (#135) — the same
+    // dangling-id desync #126 fixed for the inspector's ✕ ลบ button.
+    stripBandRefs(draft, deletableIds);
     if (draft.selectedId && deletableIds.includes(draft.selectedId)) {
       draft.selectedId = null;
     }

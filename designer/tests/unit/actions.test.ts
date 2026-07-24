@@ -58,6 +58,39 @@ function createStoreWithElements(count = 3): AppStore {
   return store;
 }
 
+// ─── Band ↔ pool invariants (#125/#126/#135) ───
+// Bands hold only id references (#49 model B), so the two structures can drift
+// apart in either direction. These helpers assert both directions, which is what
+// the original #125/#126 regression tests were missing.
+
+/** Every element id referenced anywhere in the band structure. */
+function bandIds(store: AppStore): string[] {
+  return store.state.bands.flatMap((b) =>
+    b.rows.flatMap((r) => r.columns.flatMap((c) => c.elementIds)),
+  );
+}
+
+/** Ids bands still point at that no longer exist in the pool (#126). */
+function danglingIds(store: AppStore): string[] {
+  const pool = new Set(store.state.elements.map((e) => e.id));
+  return bandIds(store).filter((id) => !pool.has(id));
+}
+
+/** Pool elements that no band cell references — invisible in editor/export (#125). */
+function orphanIds(store: AppStore): string[] {
+  const inBands = new Set(bandIds(store));
+  return store.state.elements.filter((e) => !inBands.has(e.id)).map((e) => e.id);
+}
+
+/** Two text elements stacked in ONE cell of the content band. */
+function createBandStore(): { store: AppStore; a: string; b: string } {
+  const store = new AppStore();
+  const a = addElementToNewBand(store, 'text', 'content') as string;
+  const bandIdx = store.state.bands.findIndex((x) => x.role === 'content');
+  const b = addElementToCell(store, 'text', bandIdx, 0, 0) as string;
+  return { store, a, b };
+}
+
 // ═══════════════════════════════════════
 // ELEMENT CRUD
 // ═══════════════════════════════════════
@@ -385,6 +418,148 @@ describe('clipboard actions', () => {
     pasteElements(store);
 
     expect(store.state.elements).toHaveLength(1);
+  });
+});
+
+// ═══════════════════════════════════════
+// BAND ↔ POOL SYNC (#135)
+// ═══════════════════════════════════════
+// The keyboard/clipboard paths mutate the element pool, so each one must mirror
+// into state.bands. #125/#126 fixed only the inspector buttons; these lock down
+// Delete / Ctrl+X / Ctrl+V so the gap cannot come back.
+
+describe('band sync — deleteSelected (Delete key)', () => {
+  it('clears the band reference, leaving no dangling id (#135)', () => {
+    const { store, a } = createBandStore();
+    selectElement(store, a);
+    deleteSelected(store);
+
+    expect(store.state.elements.map((e) => e.id)).not.toContain(a);
+    expect(bandIds(store)).not.toContain(a);
+    expect(danglingIds(store)).toEqual([]);
+  });
+
+  it('clears band references for a multi-select delete (#135)', () => {
+    const { store, a, b } = createBandStore();
+    toggleMultiSelect(store, a);
+    toggleMultiSelect(store, b);
+    deleteSelected(store);
+
+    expect(store.state.elements).toHaveLength(0);
+    expect(bandIds(store)).toEqual([]);
+    expect(danglingIds(store)).toEqual([]);
+  });
+
+  it('keeps the band reference of a locked element it refused to delete', () => {
+    const { store, a, b } = createBandStore();
+    toggleLock(store, a);
+    selectAll(store);
+    deleteSelected(store);
+
+    expect(store.state.elements.map((e) => e.id)).toEqual([a]);
+    expect(bandIds(store)).toEqual([a]);
+    expect(danglingIds(store)).toEqual([]);
+    expect(orphanIds(store)).toEqual([]);
+    expect(bandIds(store)).not.toContain(b);
+  });
+});
+
+describe('band sync — cutElements (Ctrl+X)', () => {
+  it('clears the band reference, leaving no dangling id (#135)', () => {
+    const { store, a } = createBandStore();
+    selectElement(store, a);
+    cutElements(store);
+
+    expect(store.state.elements.map((e) => e.id)).not.toContain(a);
+    expect(bandIds(store)).not.toContain(a);
+    expect(danglingIds(store)).toEqual([]);
+  });
+
+  it('keeps the band reference of a locked element that survives the cut', () => {
+    const { store, a } = createBandStore();
+    toggleLock(store, a);
+    selectElement(store, a);
+    cutElements(store);
+
+    expect(store.state.elements.map((e) => e.id)).toContain(a);
+    expect(bandIds(store)).toContain(a);
+    expect(danglingIds(store)).toEqual([]);
+  });
+});
+
+describe('band sync — pasteElements (Ctrl+V)', () => {
+  it('places the clone in the source cell, right after the source (#135)', () => {
+    const { store, a, b } = createBandStore();
+    selectElement(store, a);
+    copyElements(store);
+    pasteElements(store);
+
+    const clone = store.state.selectedId as string;
+    expect(store.state.elements).toHaveLength(3);
+    expect(orphanIds(store)).toEqual([]);
+    // a, clone, b — the clone sits directly after the element it came from
+    expect(bandIds(store)).toEqual([a, clone, b]);
+  });
+
+  it('cut → paste puts the element back in its original cell (round-trip move)', () => {
+    const { store, a, b } = createBandStore();
+    selectElement(store, a);
+    cutElements(store);
+    expect(bandIds(store)).toEqual([b]);
+
+    pasteElements(store);
+    const clone = store.state.selectedId as string;
+    expect(store.state.elements).toHaveLength(2);
+    expect(orphanIds(store)).toEqual([]);
+    expect(danglingIds(store)).toEqual([]);
+    // reuses the slot the cut element vacated, ahead of b
+    expect(bandIds(store)).toEqual([clone, b]);
+  });
+
+  it('falls back to the role band when the source cell is gone (#135)', () => {
+    const { store, a } = createBandStore();
+    selectElement(store, a);
+    copyElements(store);
+
+    // drop the row holding the source cell, then paste
+    const bandIdx = store.state.bands.findIndex((x) => x.role === 'content');
+    removeBandRow(store, bandIdx, 0);
+    pasteElements(store);
+
+    // The clone still lands in a cell of its role band, not in the pool alone.
+    // (removeBandRow itself strands the originals in the pool — separate bug,
+    // tracked on its own; assert on the clone only.)
+    const clone = store.state.selectedId as string;
+    expect(bandIds(store)).toContain(clone);
+    expect(orphanIds(store)).not.toContain(clone);
+    expect(danglingIds(store)).toEqual([]);
+  });
+
+  it('skips an element no band accepts instead of pasting an orphan (#49/#135)', () => {
+    // watermark accepts nothing (BAND_ACCEPTS), and there is no band to fall
+    // back into — the paste must add nothing rather than a pool-only element.
+    const store = new AppStore();
+    const id = addElement(store, 'text');
+    updateElement(store, id, 'role', 'watermark');
+    selectElement(store, id);
+    copyElements(store);
+    pasteElements(store);
+
+    expect(store.state.elements).toHaveLength(1);
+    expect(store.state.elements[0].id).toBe(id);
+  });
+
+  it('multi-element paste keeps every clone reachable from a band', () => {
+    const { store, a, b } = createBandStore();
+    toggleMultiSelect(store, a);
+    toggleMultiSelect(store, b);
+    copyElements(store);
+    pasteElements(store);
+
+    expect(store.state.elements).toHaveLength(4);
+    expect(orphanIds(store)).toEqual([]);
+    expect(danglingIds(store)).toEqual([]);
+    expect(store.state.multiSelect).toHaveLength(2);
   });
 });
 

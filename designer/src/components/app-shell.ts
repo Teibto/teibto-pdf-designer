@@ -45,6 +45,7 @@ export class PldAppShell extends LitElement {
   private _cleanupMiddleware: (() => void) | null = null;
   private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
+  private _saveHandler: (() => void) | null = null;
 
   @state() private view: 'design' | 'flow' = 'design';
 
@@ -158,7 +159,11 @@ export class PldAppShell extends LitElement {
 
     // Sole save handler (#131): catches both Ctrl+S (dispatched on window by
     // keyboard.service) and the header button (bubbles+composed up to window).
-    window.addEventListener('pld-save-template', () => this._saveTemplate());
+    // Named + removed on disconnect (#135) — an inline arrow could not be
+    // unregistered, so every remount stacked another listener and brought the
+    // #131 double-save straight back.
+    this._saveHandler = () => this._saveTemplate();
+    window.addEventListener('pld-save-template', this._saveHandler);
 
     // ─── NetSuite Auto-load ───
     if (isNetSuiteEnv()) {
@@ -184,6 +189,7 @@ export class PldAppShell extends LitElement {
     if (this._cleanupMiddleware) this._cleanupMiddleware();
     if (this._keyHandler) window.removeEventListener('keydown', this._keyHandler);
     if (this._beforeUnloadHandler) window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+    if (this._saveHandler) window.removeEventListener('pld-save-template', this._saveHandler);
   }
 
   render() {
