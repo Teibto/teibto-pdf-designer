@@ -202,6 +202,7 @@ export class PldHeader extends LitElement {
         <button class="btn btn-sm" @click=${this._onSample}>★ ตัวอย่าง</button>
         <button class="btn btn-sm btn-bfo" @click=${this._onExportBfo}>🔶 NetSuite BFO</button>
         <button class="btn btn-sm btn-primary" @click=${this._onPreview}>▶ พรีวิว</button>
+        <button class="btn btn-sm" title="คีย์ลัด (กด ?)" @click=${this._onShortcuts}>⌨</button>
       </div>
     `;
   }
@@ -222,6 +223,7 @@ export class PldHeader extends LitElement {
   private _onSample()    { this._emit('pld-load-sample'); }
   private _onExportBfo() { this._emit('pld-show-bfo-export'); }
   private _onPreview()   { this._emit('pld-show-preview'); }
+  private _onShortcuts() { this._emit('pld-show-shortcuts'); }
 }
 
 declare global {

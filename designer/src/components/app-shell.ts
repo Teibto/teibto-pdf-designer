@@ -47,6 +47,7 @@ import './modals/template-manager-modal';
 import './modals/preview-modal';
 import './modals/bfo-export-modal';
 import './modals/save-ns-modal';
+import './modals/shortcuts-modal';
 
 @customElement('pld-app-shell')
 export class PldAppShell extends LitElement {
@@ -76,6 +77,7 @@ export class PldAppShell extends LitElement {
   @state() private showPreview = false;
   @state() private showBfoExport = false;
   @state() private showSaveNs = false;
+  @state() private showShortcuts = false;
 
   // Draft recovery banner (#140) — non-blocking, shown when a leftover autosave
   // is found on mount that the freshly-loaded state doesn't already reflect.
@@ -164,11 +166,17 @@ export class PldAppShell extends LitElement {
 
       if (isMod && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        if (this._history.undo()) showToast('Undo', 'info');
+        if (this._history.undo()) showToast('ย้อนกลับ', 'info');
       }
       if ((isMod && e.shiftKey && e.key === 'z') || (isMod && e.key === 'y')) {
         e.preventDefault();
-        if (this._history.redo()) showToast('Redo', 'info');
+        if (this._history.redo()) showToast('ทำซ้ำ', 'info');
+      }
+      // `?` (Shift+/) toggles the keyboard-shortcut cheatsheet (#124). No modifier;
+      // the input guard above keeps it from firing while typing.
+      if (!isMod && e.key === '?') {
+        e.preventDefault();
+        this.showShortcuts = !this.showShortcuts;
       }
     };
     window.addEventListener('keydown', this._keyHandler);
@@ -244,6 +252,7 @@ export class PldAppShell extends LitElement {
     this.addEventListener('pld-show-bfo-export', () => { this.showBfoExport = true; });
     this.addEventListener('pld-show-save-ns', () => { this.showSaveNs = true; });
     this.addEventListener('pld-show-preview', () => { this.showPreview = true; });
+    this.addEventListener('pld-show-shortcuts', () => { this.showShortcuts = true; });
 
     // Column config event from sidebar
     this.addEventListener('pld-open-column-config', (e: Event) => {
@@ -346,6 +355,11 @@ export class PldAppShell extends LitElement {
         .open=${this.showSaveNs}
         @close=${() => (this.showSaveNs = false)}
       ></pld-save-ns-modal>
+
+      <pld-shortcuts-modal
+        .open=${this.showShortcuts}
+        @close=${() => (this.showShortcuts = false)}
+      ></pld-shortcuts-modal>
 
       <pld-toast></pld-toast>
     `;
