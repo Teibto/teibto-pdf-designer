@@ -274,7 +274,7 @@ define([
    * Custom Record: customrecord_pld_template
    *   - custrecord_pld_tpl_name (Text)
    *   - custrecord_pld_tpl_data (Long Text / File)
-   *   - custrecord_pld_tpl_type (Text) — record type filter
+   *   - custrecord_pld_tpl_rectype (Text) — record type filter
    */
   function listSavedTemplates(context) {
     try {
@@ -285,7 +285,7 @@ define([
       ];
       if (recType) {
         filters.push('AND');
-        filters.push(['custrecord_pld_tpl_type', 'is', recType]);
+        filters.push(['custrecord_pld_tpl_rectype', 'is', recType]);
       }
 
       const results = [];
@@ -294,7 +294,7 @@ define([
         filters: filters,
         columns: [
           'custrecord_pld_tpl_name',
-          'custrecord_pld_tpl_type',
+          'custrecord_pld_tpl_rectype',
           'created',
           'lastmodified',
         ],
@@ -302,7 +302,7 @@ define([
         results.push({
           id: result.id,
           name: result.getValue('custrecord_pld_tpl_name'),
-          type: result.getValue('custrecord_pld_tpl_type'),
+          type: result.getValue('custrecord_pld_tpl_rectype'),
           created: result.getValue('created'),
           modified: result.getValue('lastmodified'),
         });
