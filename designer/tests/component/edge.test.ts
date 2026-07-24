@@ -53,7 +53,7 @@ describe('inspector — barcode edit', () => {
     const right = h.comp('pld-sidebar-right');
     const fields = allInShadow(right, '.field');
     const valueInput = fields.find((x: any) => x.textContent?.includes('Value'))?.querySelector('input');
-    const typeSelect = fields.find((x: any) => x.textContent?.trim().startsWith('Type') && x.querySelector('select'))?.querySelector('select');
+    const typeSelect = fields.find((x: any) => x.textContent?.includes('Type') && x.querySelector('select'))?.querySelector('select');
     expect(valueInput).toBeTruthy();
     expect(typeSelect).toBeTruthy();
     setValue(valueInput, 'ABC-123');
@@ -85,7 +85,7 @@ describe('pagination — copy set full CRUD + page breaks', () => {
     await h.flush();
     expect(h.store.state.copies[0].th).toBe('ต้นฉบับ (ลูกค้า)');
 
-    const removeBtn = allInShadow(panel, '.mode-btn').find((b: any) => b.getAttribute('title') === 'Remove copy');
+    const removeBtn = allInShadow(panel, '.mode-btn').find((b: any) => b.getAttribute('title') === 'ลบสำเนา');
     click(removeBtn);
     await h.flush();
     expect((h.store.state.copies ?? []).length).toBe(1);
@@ -93,9 +93,9 @@ describe('pagination — copy set full CRUD + page breaks', () => {
 
   it('force-break rows parse 1-based input to 0-based store (#84)', async () => {
     // expand the Page Breaks collapsible
-    click(allInShadow(panel, '.section-header').find((s: any) => s.textContent?.includes('Page Breaks')));
+    click(allInShadow(panel, '.section-header').find((s: any) => s.textContent?.includes('จุดแบ่งหน้า')));
     await h.flush();
-    const fb = allInShadow(panel, '.field').find((f: any) => f.textContent?.includes('Force Break Before Row'))?.querySelector('input');
+    const fb = allInShadow(panel, '.field').find((f: any) => f.textContent?.includes('บังคับขึ้นหน้าใหม่ก่อนแถวที่'))?.querySelector('input');
     setValue(fb, '5, 15');
     await h.flush();
     expect(h.store.state.pagination.forceBreakBeforeRows).toEqual([4, 14]);

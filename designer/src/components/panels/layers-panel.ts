@@ -359,7 +359,7 @@ export class PldLayersPanel extends LitElement {
 
       <div class="layer-list" @dragover=${this._onListDragOver} @drop=${this._onListDrop}>
         ${sorted.length === 0
-          ? html`<div class="empty-state">Drag elements to canvas<br>to create layers</div>`
+          ? html`<div class="empty-state">ลาก element ลงพื้นที่ออกแบบ<br>เพื่อสร้างเลเยอร์</div>`
           : sorted.map((el) => this._renderLayer(el))
         }
       </div>

@@ -412,16 +412,16 @@ export class PldPreviewModal extends LitElement {
   private _renderServerBody() {
     return html`
       <div class="preview-toolbar">
-        <span class="server-hint">Rendered by NetSuite N/render — identical to Print PDF</span>
-        <button class="export-btn" @click=${this._printServer}>📄 Open / Download PDF</button>
+        <span class="server-hint">เรนเดอร์โดย NetSuite N/render — ตรงกับ Print PDF ทุกจุด</span>
+        <button class="export-btn" @click=${this._printServer}>📄 เปิด / ดาวน์โหลด PDF</button>
       </div>
 
       ${this.serverLoading
-        ? html`<div class="server-status"><div class="spinner"></div><span>Rendering PDF…</span></div>`
+        ? html`<div class="server-status"><div class="spinner"></div><span>กำลังเรนเดอร์ PDF…</span></div>`
         : this.serverError
           ? html`<div class="server-status error">
-              <span>Render failed: ${this.serverError}</span>
-              <button class="nav-btn" style="width:auto;padding:0 12px;" @click=${this._loadServerPreview}>↻ Retry</button>
+              <span>เรนเดอร์ล้มเหลว: ${this.serverError}</span>
+              <button class="nav-btn" style="width:auto;padding:0 12px;" @click=${this._loadServerPreview}>↻ ลองใหม่</button>
             </div>`
           : this.serverPdfUrl
             ? html`<iframe class="server-frame" src=${this.serverPdfUrl} title="PDF Preview"></iframe>`
@@ -651,7 +651,7 @@ export class PldPreviewModal extends LitElement {
 
   private _renderTablePreview(el: TableElement, jsonData: Record<string, unknown> | null, pageNum: number) {
     const cols = el.columns.filter((c) => !c.hidden);
-    if (cols.length === 0) return html`<div style="color: #999; font-size: 10px; padding: 8px;">No columns configured</div>`;
+    if (cols.length === 0) return html`<div style="color: #999; font-size: 10px; padding: 8px;">ยังไม่ได้ตั้งค่าคอลัมน์</div>`;
 
     let rows: Record<string, unknown>[] = [];
     if (jsonData && el.binding) {
@@ -724,7 +724,7 @@ export class PldPreviewModal extends LitElement {
               </tr>
             `;
             }) : html`
-              <tr><td colspan=${cols.length} style="text-align: center; color: #999; padding: 8px;">No data</td></tr>
+              <tr><td colspan=${cols.length} style="text-align: center; color: #999; padding: 8px;">ไม่มีข้อมูล</td></tr>
             `}
           </tbody>
         </table>

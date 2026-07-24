@@ -278,7 +278,7 @@ export class PldSidebarLeft extends LitElement {
   private _renderElementsTab() {
     return html`
       <div class="section">
-        <div class="section-title"><span>◈</span> Drag to Canvas</div>
+        <div class="section-title"><span>◈</span> ลากวางองค์ประกอบ</div>
         <div class="element-grid">
           ${this._elItem('header', 'H', 'Header')}
           ${this._elItem('text', 'T', 'Text')}
@@ -292,7 +292,7 @@ export class PldSidebarLeft extends LitElement {
       </div>
 
       <div class="section">
-        <div class="section-title"><span>▦</span> Page Settings</div>
+        <div class="section-title"><span>▦</span> ตั้งค่าหน้ากระดาษ</div>
         <div class="page-sizes">
           ${(['A4', 'Letter', 'A3', 'A5', 'Custom'] as PageSizeName[]).map(
             (size) => html`
@@ -307,11 +307,11 @@ export class PldSidebarLeft extends LitElement {
           <button
             class="page-size-btn ${this.orientation === 'portrait' ? 'active' : ''}"
             @click=${() => setOrientation(this.store, 'portrait')}
-          >↕ Portrait</button>
+          >↕ แนวตั้ง</button>
           <button
             class="page-size-btn ${this.orientation === 'landscape' ? 'active' : ''}"
             @click=${() => setOrientation(this.store, 'landscape')}
-          >↔ Landscape</button>
+          >↔ แนวนอน</button>
         </div>
       </div>
     `;

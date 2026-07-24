@@ -290,7 +290,7 @@ export class PldJsonEditor extends LitElement {
         <button
           class="view-btn ${this.viewMode === 'form' ? 'active' : ''}"
           @click=${() => this._switchView('form')}
-        >Form</button>
+        >ฟอร์ม</button>
         <button
           class="view-btn ${this.viewMode === 'json' ? 'active' : ''}"
           @click=${() => this._switchView('json')}

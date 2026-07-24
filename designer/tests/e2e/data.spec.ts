@@ -38,7 +38,7 @@ test.describe('Data tab — JSON editor', () => {
     await editor(page).locator('textarea').fill('{ not valid json ');
     await expect(editor(page).locator('.badge.invalid')).toBeVisible();
 
-    await editor(page).locator('.view-btn', { hasText: 'Form' }).click();
+    await editor(page).locator('.view-btn', { hasText: 'ฟอร์ม' }).click();
     await expect(page.locator('pld-toast')).toContainText('Fix JSON errors');
     await expect(editor(page).locator('.view-btn', { hasText: 'JSON' })).toHaveClass(/active/);
   });
