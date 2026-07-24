@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- **Render observability** (#149) — engine `pld_sl_render_pdf.js` เพิ่ม structured telemetry ผ่าน native `N/log` (ไม่มี custom record/ข้อมูล render เก็บบน account ลูกค้า — data-classification-safe, ไม่มี write governance): render fail ยิง `log.error` หนึ่งบรรทัดพร้อม context ครบ (`errorId, action, rectype, recid, tplid, subsidiaryId, userId, stage, elapsedMs, message, stack`) — stage บอกว่าพังตอนไหน (template-load / load-record / render / copyset / write); JSON error ที่คืน caller แนบ `errorId` + ข้อความไทยให้ user แจ้งทีมพร้อมรหัสอ้างอิงตรงกับ log line; render สำเร็จยิง `log.audit` หนึ่งบรรทัด (`ok, copies, elapsedMs`) เป็น latency/throughput telemetry. happy-path output (PDF bytes/headers) ไม่เปลี่ยน
 - **Production-readiness รอบ P0/P1** (จาก review มุมผู้ใช้ก่อนเปิด production):
   - **Autosave + draft recovery** (#140) — เขียน draft ลง IndexedDB แบบ debounce ระหว่างแก้ (ทั้งโหมด NS/local); เปิดใหม่หลัง crash/timeout/ปิด tab มี banner "กู้คืนงาน/ละทิ้ง" — งานไม่หาย
   - **ลบ NS template ได้ + เตือน record type ไม่มี default** (#142) — engine action `delete`, ปุ่ม Delete บน NetSuite tab (เตือนถ้าลบ default), banner เตือน record type ที่ไม่มี default, badge ★ default; ปิดช่องที่ Print throw "No template found"
