@@ -19,6 +19,7 @@
 - Designer test coverage รอบ band-model: E2E Playwright 77 tests ครอบทุกปุ่ม/ฟิลด์/action (`designer/tests/e2e/`) + jsdom component harness ที่ mount `pld-app-shell` จริงแล้วขับผ่าน shadow DOM 35 tests (`designer/tests/component/`) — รวม vitest 493 + Playwright 77 เขียว; `#127` (role selector) + `#129` (undo) ตรึงเป็น `test.fail` รอ design/refactor — ภายหลังแก้แล้วและปลดเป็น regression test ปกติ (#123)
 
 ### Changed
+- **band/column controls อ่าน/คลิกง่ายขึ้น** (#124 ส่วนที่ 4) — ปุ่มใน band editor จัดเป็น 2 กลุ่มชัด: ปรับความกว้าง `[− % +]` และคำสั่งคอลัมน์ `[⇤ ⇥]` (merge/split) แยกเป็นกล่อง segmented แทนแถวปุ่มแน่น ๆ; hit target ใหญ่ขึ้น (16–18px → 20–22px), มี hover affordance, ปุ่มลบ (แถว/element) ขึ้นสีแดงตอน hover — ฟังก์ชัน/title เดิมไม่เปลี่ยน
 - **UI เป็นภาษาไทยทั้งชุด** (#124 ส่วนที่ 2 — ภาษา UI เป็นทีมเดียว) — กวาด label/section-title/empty-state/tooltip/option ที่ยังปนอังกฤษให้เป็นไทยทั้ง sidebar ซ้าย (ลากวางองค์ประกอบ, ตั้งค่าหน้ากระดาษ, แนวตั้ง/แนวนอน), property inspector ขวา (ทุก group/field ใช้รูปแบบ "ไทย (English)" เพื่อคงคำเทคนิคให้ค้นได้), Settings/pagination panel, layers/data panel, และ modal (พรีวิว/จัดการเทมเพลต/ตั้งค่าคอลัมน์). option ที่เลือกด้วย value แสดงผลไทยล้วน; ค่าเทคนิค/proper noun (BFO, NetSuite, JSON, Code128, ชนิด element) คงเดิม. อัปเดต selector ใน e2e/component tests ให้ตรงป้ายใหม่
 
 ### Fixed
