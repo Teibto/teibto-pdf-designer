@@ -147,13 +147,14 @@ test.describe('Inspector — actions', () => {
   });
 
   /**
-   * OPEN BUG #127: the inspector's "ส่วนของหน้า (Band)" role selector calls
-   * updateElement('role', …) which only mutates el.role. Band placement lives in
-   * state.bands and is never updated, so the chip stays in its original band
-   * while its role says otherwise — role and placement silently disagree.
-   * (Design decision pending — see issue #127.)
+   * Regression for #127: the inspector's "ส่วนของหน้า (Band)" role selector used
+   * to call updateElement('role', …), mutating only el.role while band placement
+   * (state.bands) stayed put — role and placement silently disagreed. Design
+   * decision (ก): role IS the band, so changing it must MOVE the chip. The
+   * selector now calls moveElementToBandByRole(), which detaches the chip and
+   * re-homes it into the target role's band (honouring the #49 acceptance matrix).
    */
-  test.fail('changing role should move the chip to the matching band (role desync)', async ({ page }) => {
+  test('changing role should move the chip to the matching band (role desync)', async ({ page }) => {
     await expect(band(page, 'Header')).toBeVisible();
     await inspector(page).locator('.role-option', { hasText: 'Summary' }).click();
     // Correct behaviour: the element ends up referenced by a Summary band.

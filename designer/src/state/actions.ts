@@ -1009,6 +1009,64 @@ export function addElementToCell(
 }
 
 /**
+ * Re-home an element to the band of a given ROLE (#127). Used by the inspector's
+ * role selector: after the band cutover (#47) an element's role IS its band, so
+ * changing the role must physically MOVE the chip — otherwise el.role and the
+ * band the chip sits in silently disagree. Detaches the id from its current band
+ * cell, sets el.role, then appends it to the target role's band (created at its
+ * canonical BAND_ORDER slot if absent). Honours the acceptance matrix (#49): a
+ * role that rejects the element type is a no-op returning false so the caller can
+ * warn. Returns true when already in that role (nothing to do) or the move applied.
+ */
+export function moveElementToBandByRole(
+  store: AppStore,
+  elId: string,
+  role: ElementRoleType,
+): boolean {
+  const el = store.state.elements.find((e) => e.id === elId);
+  if (!el) return false;
+  if (el.role === role) return true; // already there — no-op
+  if (!bandAccepts(role, el.type)) return false; // acceptance matrix (#49)
+
+  store.dispatch(tagAction((draft) => {
+    const target = draft.elements.find((e) => e.id === elId);
+    if (!target) return;
+    target.role = role;
+
+    // Detach from every band cell it currently occupies.
+    for (const band of draft.bands) {
+      for (const row of band.rows) {
+        for (const col of row.columns) {
+          const i = col.elementIds.indexOf(elId);
+          if (i >= 0) col.elementIds.splice(i, 1);
+        }
+      }
+    }
+
+    // Find or create the destination band at its canonical BAND_ORDER position.
+    let dest = draft.bands.find((b) => b.role === role);
+    if (!dest) {
+      dest = { role, rows: [] };
+      const order = BAND_ORDER.indexOf(role);
+      const at = draft.bands.findIndex((b) => BAND_ORDER.indexOf(b.role) > order);
+      if (at === -1) draft.bands.push(dest);
+      else draft.bands.splice(at, 0, dest);
+    }
+
+    // Append into the band's last cell, or seed a fresh row when it has none.
+    const lastRow = dest.rows[dest.rows.length - 1];
+    if (lastRow) {
+      lastRow.columns[lastRow.columns.length - 1].elementIds.push(elId);
+    } else {
+      dest.rows.push({ id: nanoid(8), columns: [{ id: nanoid(8), widthPct: 100, elementIds: [elId] }] });
+    }
+
+    draft.template.isDirty = true;
+  }, { name: 'moveElementToBandByRole', undoable: true }));
+  return true;
+}
+
+/**
  * Add a new element into a brand-new row of a role's band, creating the band if
  * it doesn't exist yet (#47 cutover empty-state). Lets a consultant start a blank
  * template — or add to a role that has no band — without a free canvas. The band
@@ -1050,4 +1108,19 @@ export function removeBandElement(store: AppStore, elId: string): void {
       }
     }
   }, { name: 'removeBandElement', undoable: true }));
+}
+
+/**
+ * Set (or clear) the type of the element currently being dragged from the palette
+ * (#49 acceptance-matrix discriminator; read in band-view drag handlers).
+ *
+ * `dragType` is a TRANSIENT UI flag, not document state — so this dispatch is
+ * tagged `undoable:false`. Writing it untagged made every dragstart/drop clear
+ * push a spurious history snapshot (state after the drop), which made the first
+ * Ctrl+Z a no-op and desynced elements/bands on a later undo (#129).
+ */
+export function setDragType(store: AppStore, type: ElementType | null): void {
+  store.dispatch(tagAction((draft) => {
+    draft.dragType = type;
+  }, { name: 'setDragType', undoable: false }));
 }

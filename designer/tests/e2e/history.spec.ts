@@ -31,16 +31,16 @@ test.describe('Undo / redo', () => {
   });
 
   /**
-   * OPEN BUG #129: a single Ctrl+Z right after dropping an element is a no-op.
-   * The drop path issues extra UNTAGGED dispatches — notably
-   * `store.dispatch(d => d.dragType = null)` in band-view — and untagged
-   * dispatches count as undoable, so a spurious snapshot of the post-drop state
-   * lands on top of the history stack. The first undo restores that identical
-   * state; worse, a later undo restores elements and bands from different
-   * snapshots, desyncing the two. Fix (deferred, architectural): keep transient
-   * UI flags like `dragType` out of the undoable state. See issue #129.
+   * Regression for #129: a single Ctrl+Z right after dropping an element must
+   * remove it. The drop path used to issue UNTAGGED `dragType` dispatches
+   * (dragstart set it, band-view cleared it) and untagged dispatches count as
+   * undoable, so a spurious snapshot of the post-drop state landed on the stack —
+   * the first undo restored that identical state (no-op) and a later undo
+   * desynced elements vs bands. Fixed by routing `dragType` writes through
+   * `setDragType()`, tagged `undoable:false`, so the only undo point is the
+   * `addElement` inside the drop. See issue #129.
    */
-  test.fail('one undo removes a freshly dropped element', async ({ page }) => {
+  test('one undo removes a freshly dropped element', async ({ page }) => {
     await gotoApp(page);
     await seedElement(page, 'Text', 'Header');
     await expect(chips(page)).toHaveCount(1);
