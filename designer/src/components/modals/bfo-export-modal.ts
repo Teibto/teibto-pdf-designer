@@ -11,21 +11,9 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { showToast } from '../shared/toast-notification';
-import { isNetSuiteEnv, getNsContext, saveNsTemplate } from '../../services/netsuite-adapter.service';
+import { getNsContext } from '../../services/netsuite-adapter.service';
+import { recordTypeOptions } from '../../constants/record-types';
 import '../shared/modal';
-
-const RECORD_TYPES = [
-  { value: 'transaction', label: 'Transaction (Invoice, SO, PO)' },
-  { value: 'salesorder', label: 'Sales Order' },
-  { value: 'invoice', label: 'Invoice' },
-  { value: 'purchaseorder', label: 'Purchase Order' },
-  { value: 'estimate', label: 'Estimate / Quotation' },
-  { value: 'cashsale', label: 'Cash Sale / Receipt' },
-  { value: 'itemfulfillment', label: 'Item Fulfillment' },
-  { value: 'vendorbill', label: 'Vendor Bill' },
-  { value: 'customer', label: 'Customer' },
-  { value: 'employee', label: 'Employee' },
-];
 
 @customElement('pld-bfo-export-modal')
 export class PldBfoExportModal extends LitElement {
@@ -34,30 +22,19 @@ export class PldBfoExportModal extends LitElement {
 
   @property({ type: Boolean }) open = false;
 
+  // recordType here only drives the FreeMarker preview hints — saving to NetSuite
+  // (and choosing the record type it targets) moved to <pld-save-ns-modal> (#138).
   @state() private recordType = 'transaction';
   @state() private useFreeMarker = true;
   @state() private includePageHeaders = true;
   @state() private xmlPreview = '';
-  // Save this as the default template for its record type, so the Print button
-  // (which loads the rectype default, no tplid) picks it up. Default on: a template
-  // designed from a record is almost always the one Print should use (#70).
-  @state() private setAsDefault = true;
 
   connectedCallback() {
     super.connectedCallback();
     // Default the record type to the record the designer was opened from
-    // (?rectype=… on the Suitelet URL) instead of a fixed 'transaction', so a
-    // Save-to-NetSuite from an invoice is saved as an invoice template (#70).
+    // (?rectype=… on the Suitelet URL) instead of a fixed 'transaction'.
     const ctxRectype = getNsContext()?.recordType;
     if (ctxRectype) this.recordType = ctxRectype;
-  }
-
-  /** Record-type options, including the record's own type if it isn't in the preset list. */
-  private get recordTypeOptions(): { value: string; label: string }[] {
-    if (this.recordType && !RECORD_TYPES.some((rt) => rt.value === this.recordType)) {
-      return [{ value: this.recordType, label: this.recordType }, ...RECORD_TYPES];
-    }
-    return RECORD_TYPES;
   }
 
   static styles = css`
@@ -274,7 +251,7 @@ export class PldBfoExportModal extends LitElement {
                     this.recordType = (e.target as HTMLSelectElement).value;
                     this._generatePreview();
                   }}>
-                  ${this.recordTypeOptions.map((rt) => html`
+                  ${recordTypeOptions(this.recordType).map((rt) => html`
                     <option value=${rt.value} ?selected=${rt.value === this.recordType}>${rt.label}</option>
                   `)}
                 </select>
@@ -296,13 +273,6 @@ export class PldBfoExportModal extends LitElement {
                     this._generatePreview();
                   }} />
                 Include Page Header/Footer CSS
-              </label>
-              <label class="check-item">
-                <input type="checkbox" .checked=${this.setAsDefault}
-                  @change=${(e: Event) => {
-                    this.setAsDefault = (e.target as HTMLInputElement).checked;
-                  }} />
-                Set as default template for this record type
               </label>
             </div>
           </div>
@@ -334,7 +304,6 @@ export class PldBfoExportModal extends LitElement {
           <div class="footer-btns">
             <button class="btn" @click=${this._close}>Close</button>
             <button class="btn" @click=${this._copyToClipboard}>📋 Copy XML</button>
-            <button class="btn btn-bfo" @click=${this._saveToNetsuite}>💾 Save to NetSuite</button>
             <button class="btn btn-bfo" @click=${this._downloadFile}>🔶 Download</button>
           </div>
         </div>
@@ -376,40 +345,6 @@ export class PldBfoExportModal extends LitElement {
     a.click();
     URL.revokeObjectURL(url);
     showToast('BFO XML downloaded!', 'success');
-  }
-
-  private async _saveToNetsuite() {
-    if (!isNetSuiteEnv()) {
-      showToast('Not running inside NetSuite. Use Download instead.', 'warning');
-      return;
-    }
-
-    try {
-      const state = this.store.state;
-      const designerJson = JSON.stringify({
-        elements: state.elements,
-        page: state.page,
-        pagination: state.pagination,
-        // Persist band edits in the record so a re-edit restores them (#47 3b).
-        bands: state.bands.length ? state.bands : undefined,
-        // Copy set (#92) — the render suitelet reads this from the record data
-        copies: state.copies && state.copies.length ? state.copies : undefined,
-      });
-
-      const result = await saveNsTemplate({
-        id: state.template.id || undefined,
-        name: state.template.name || 'Untitled Template',
-        data: designerJson,
-        xml: this.xmlPreview,
-        rectype: this.recordType,
-        isDefault: this.setAsDefault,
-      });
-
-      const defNote = this.setAsDefault ? ` — default for ${this.recordType}` : '';
-      showToast(`Template saved to NetSuite (ID: ${result.id})${defNote}`, 'success');
-    } catch (err) {
-      showToast(`Failed to save: ${(err as Error).message}`, 'error');
-    }
   }
 
   private _close() {

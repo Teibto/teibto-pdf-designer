@@ -233,7 +233,7 @@ export class PldBandView extends LitElement {
                       ` : nothing}
                       <button title="เลื่อนขึ้น" ?disabled=${ri === 0} @click=${() => moveBandRow(this.store, bi, ri, -1)}>↑</button>
                       <button title="เลื่อนลง" ?disabled=${ri === band.rows.length - 1} @click=${() => moveBandRow(this.store, bi, ri, 1)}>↓</button>
-                      <button title="ลบแถว" @click=${() => removeBandRow(this.store, bi, ri)}>✕</button>
+                      <button title="ลบแถว" @click=${() => this._removeRow(bi, ri)}>✕</button>
                     </div>
                   </div>
                 `)}
@@ -285,6 +285,15 @@ export class PldBandView extends LitElement {
     this.dispatchEvent(new CustomEvent('pld-open-column-config', {
       detail: { elementId }, bubbles: true, composed: true,
     }));
+  }
+
+  /** Delete a row, confirming first when it still holds elements (#136) — the
+   *  action drops those elements, so a non-empty row is destructive. */
+  private _removeRow(bi: number, ri: number) {
+    const row = this.store.state.bands[bi]?.rows[ri];
+    const count = row ? row.columns.reduce((n, c) => n + c.elementIds.length, 0) : 0;
+    if (count > 0 && !confirm(`ลบแถวนี้พร้อม ${count} element ที่อยู่ในแถว?`)) return;
+    removeBandRow(this.store, bi, ri);
   }
 
   private _onDragOver(e: DragEvent, role: ElementRoleType) {

@@ -1,86 +1,46 @@
 /**
- * E2E Tests — Barcode & List Elements
- * Tests barcode rendering, QR code, and list element behavior.
+ * E2E — Barcode, List & Image element drops (band-model UI, #123)
  *
  * @author Wichit Wongta
+ * @since 2026-07-22
  */
 import { test, expect } from '@playwright/test';
+import { gotoApp, dragPaletteTo, emptyRole, band, chips } from './_helpers';
 
-test.describe('Barcode Element', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
+test.describe('Barcode element', () => {
+  test.beforeEach(async ({ page }) => gotoApp(page));
+
+  test('drops a barcode into the Header band', async ({ page }) => {
+    await dragPaletteTo(page, 'Barcode', emptyRole(page, 'Header'));
+    await expect(band(page, 'Header')).toBeVisible();
+    await expect(chips(page).filter({ hasText: 'barcode' })).toHaveCount(1);
   });
 
-  test('should add barcode element to canvas', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-left');
-    const barcodeBtn = sidebar.locator('text=Barcode').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await barcodeBtn.dragTo(canvas);
-
-    const element = page.locator('pld-canvas-element').first();
-    await expect(element).toBeVisible();
+  test('drops a barcode into the Content band', async ({ page }) => {
+    await dragPaletteTo(page, 'Barcode', emptyRole(page, 'Content'));
+    await expect(chips(page).filter({ hasText: 'barcode' })).toHaveCount(1);
   });
 
-  test('should show barcode SVG after loading', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-left');
-    const barcodeBtn = sidebar.locator('text=Barcode').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await barcodeBtn.dragTo(canvas);
-
-    // Wait for bwip-js async render
-    await page.waitForTimeout(1500);
-
-    // The barcode element should contain an SVG
-    const element = page.locator('pld-canvas-element').first();
-    await expect(element).toBeVisible();
+  test('rejects a barcode on the Summary band (acceptance matrix #49)', async ({ page }) => {
+    await dragPaletteTo(page, 'Barcode', emptyRole(page, 'Summary'));
+    await expect(emptyRole(page, 'Summary')).toBeVisible();
+    await expect(chips(page)).toHaveCount(0);
   });
 });
 
-test.describe('List Element', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
-  });
-
-  test('should add list element to canvas', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-left');
-    const listBtn = sidebar.locator('text=List').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await listBtn.dragTo(canvas);
-
-    const element = page.locator('pld-canvas-element').first();
-    await expect(element).toBeVisible();
-  });
-
-  test('should display list items', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-left');
-    const listBtn = sidebar.locator('text=List').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await listBtn.dragTo(canvas);
-
-    // Wait for render
-    await page.waitForTimeout(300);
-
-    // Element should be visible with list content
-    const element = page.locator('pld-canvas-element').first();
-    await expect(element).toBeVisible();
+test.describe('List element', () => {
+  test('drops a list into the Content band', async ({ page }) => {
+    await gotoApp(page);
+    await dragPaletteTo(page, 'List', emptyRole(page, 'Content'));
+    await expect(band(page, 'Content')).toBeVisible();
+    await expect(chips(page).filter({ hasText: 'list' })).toHaveCount(1);
   });
 });
 
-test.describe('Image Element', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
-  });
-
-  test('should add image element with placeholder', async ({ page }) => {
-    const sidebar = page.locator('pld-sidebar-left');
-    const imageBtn = sidebar.locator('text=Image').first();
-    const canvas = page.locator('pld-canvas .page').first();
-    await imageBtn.dragTo(canvas);
-
-    const element = page.locator('pld-canvas-element').first();
-    await expect(element).toBeVisible();
+test.describe('Image element', () => {
+  test('drops an image into the Header band', async ({ page }) => {
+    await gotoApp(page);
+    await dragPaletteTo(page, 'Image', emptyRole(page, 'Header'));
+    await expect(chips(page).filter({ hasText: 'image' })).toHaveCount(1);
   });
 });

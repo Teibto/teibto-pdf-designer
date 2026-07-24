@@ -13,7 +13,7 @@ import { AppStore, storeContext } from '../state/store';
 import { HistoryService } from '../services/history.service';
 import { registerKeyboardShortcuts } from '../services/keyboard.service';
 import { applyPagination, clearPaginationCache } from '../services/pagination.service';
-import { saveTemplate } from '../services/template.service';
+import { saveTemplate, saveTemplateToNetSuite } from '../services/template.service';
 import { showToast } from './shared/toast-notification';
 import { getSampleTemplates } from '../constants/sample-templates';
 import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext } from '../services/netsuite-adapter.service';
@@ -34,6 +34,7 @@ import './modals/column-config-modal';
 import './modals/template-manager-modal';
 import './modals/preview-modal';
 import './modals/bfo-export-modal';
+import './modals/save-ns-modal';
 
 @customElement('pld-app-shell')
 export class PldAppShell extends LitElement {
@@ -45,6 +46,7 @@ export class PldAppShell extends LitElement {
   private _cleanupMiddleware: (() => void) | null = null;
   private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private _beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null;
+  private _saveHandler: (() => void) | null = null;
 
   @state() private view: 'design' | 'flow' = 'design';
 
@@ -54,6 +56,7 @@ export class PldAppShell extends LitElement {
   @state() private columnConfigElementId = '';
   @state() private showPreview = false;
   @state() private showBfoExport = false;
+  @state() private showSaveNs = false;
 
   static styles = css`
     :host {
@@ -138,12 +141,16 @@ export class PldAppShell extends LitElement {
       }
     });
 
-    // Wire global events from header buttons
+    // Wire global events from header buttons.
+    // NOTE (#131): pld-save-template is handled by the window listener below ONLY.
+    // The header dispatches it bubbles+composed, so it reaches window on its own;
+    // adding a `this` listener too would fire _saveTemplate twice (double NetSuite
+    // save). Ctrl+S dispatches straight on window, so one listener covers both.
     this.addEventListener('pld-show-templates', () => { this.showTemplateManager = true; });
-    this.addEventListener('pld-save-template', () => this._saveTemplate());
     this.addEventListener('pld-show-export-json', () => this._exportJson());
     this.addEventListener('pld-load-sample', () => this._loadSample());
     this.addEventListener('pld-show-bfo-export', () => { this.showBfoExport = true; });
+    this.addEventListener('pld-show-save-ns', () => { this.showSaveNs = true; });
     this.addEventListener('pld-show-preview', () => { this.showPreview = true; });
 
     // Column config event from sidebar
@@ -153,8 +160,13 @@ export class PldAppShell extends LitElement {
       this.showColumnConfig = true;
     });
 
-    // Window-level save event
-    window.addEventListener('pld-save-template', () => this._saveTemplate());
+    // Sole save handler (#131): catches both Ctrl+S (dispatched on window by
+    // keyboard.service) and the header button (bubbles+composed up to window).
+    // Named + removed on disconnect (#135) — an inline arrow could not be
+    // unregistered, so every remount stacked another listener and brought the
+    // #131 double-save straight back.
+    this._saveHandler = () => this._saveTemplate();
+    window.addEventListener('pld-save-template', this._saveHandler);
 
     // ─── NetSuite Auto-load ───
     if (isNetSuiteEnv()) {
@@ -180,6 +192,7 @@ export class PldAppShell extends LitElement {
     if (this._cleanupMiddleware) this._cleanupMiddleware();
     if (this._keyHandler) window.removeEventListener('keydown', this._keyHandler);
     if (this._beforeUnloadHandler) window.removeEventListener('beforeunload', this._beforeUnloadHandler);
+    if (this._saveHandler) window.removeEventListener('pld-save-template', this._saveHandler);
   }
 
   render() {
@@ -221,6 +234,11 @@ export class PldAppShell extends LitElement {
         @close=${() => (this.showBfoExport = false)}
       ></pld-bfo-export-modal>
 
+      <pld-save-ns-modal
+        .open=${this.showSaveNs}
+        @close=${() => (this.showSaveNs = false)}
+      ></pld-save-ns-modal>
+
       <pld-toast></pld-toast>
     `;
   }
@@ -230,11 +248,26 @@ export class PldAppShell extends LitElement {
   // ═══════════════════════════════════════
 
   private async _saveTemplate() {
+    // Inside NetSuite the 💾 button (and Ctrl+S) must persist to the customrecord.
+    // Saving only to IndexedDB looked successful but never reached the account (#137).
+    if (isNetSuiteEnv()) {
+      try {
+        const { id } = await saveTemplateToNetSuite(this.store);
+        showToast(`บันทึกเข้า NetSuite แล้ว (ID: ${id})`, 'success');
+      } catch (err) {
+        // No IndexedDB fallback — a failed NetSuite save must be visible, not
+        // masked by a silent local write (R4: no silent fallback).
+        showToast(`บันทึกเข้า NetSuite ไม่สำเร็จ: ${(err as Error).message}`, 'error');
+      }
+      return;
+    }
+    // Local (non-NetSuite) mode — persist to this browser and say so plainly so
+    // the user does not mistake it for a NetSuite save.
     try {
       await saveTemplate(this.store);
-      showToast('Template saved!', 'success');
+      showToast('บันทึกในเครื่องนี้เท่านั้น (ยังไม่เข้า NetSuite)', 'info');
     } catch (err) {
-      showToast(`Save failed: ${err}`, 'error');
+      showToast(`บันทึกไม่สำเร็จ: ${err}`, 'error');
     }
   }
 

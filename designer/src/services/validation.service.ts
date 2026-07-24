@@ -273,7 +273,7 @@ export function validatePaginationConfig(data: unknown): ValidationResult {
 
 /** Allowed keys per element type for updateElement() */
 const ALLOWED_KEYS: Record<string, Set<string>> = {
-  _base: new Set(['name', 'role', 'binding', 'locked', 'visible']),
+  _base: new Set(['name', 'role', 'binding', 'visibleIf', 'locked', 'visible']),
   text: new Set(['content', 'fontSize', 'fontWeight', 'color', 'textAlign', 'fontFamily']),
   header: new Set(['content', 'fontSize', 'fontWeight', 'color', 'textAlign', 'fontFamily']),
   image: new Set(['src', 'imageData', 'objectFit']),

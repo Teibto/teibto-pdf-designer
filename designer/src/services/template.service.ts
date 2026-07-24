@@ -16,6 +16,8 @@ import { migrateTemplate, needsMigration, CURRENT_VERSION } from './migration.se
 import { clearPaginationCache } from './pagination.service';
 import { elementsToBands } from './band-layout.service';
 import { extractJsonKeys } from '../state/actions';
+import { exportBfoXml, type BfoExportOptions } from './bfo-export.service';
+import { saveNsTemplate, getNsContext } from './netsuite-adapter.service';
 
 const TEMPLATE_PREFIX = 'pld-template-';
 
@@ -78,6 +80,63 @@ export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
   });
 
   return template;
+}
+
+/**
+ * Save the current design to the NetSuite template custom record (#137).
+ *
+ * The 💾 button used to call saveTemplate() (IndexedDB only) even inside NetSuite,
+ * so a "saved" template never reached the account. This persists both the designer
+ * JSON and the BFO XML generated from the authoritative band layout (#47), and
+ * **throws on failure** — the caller must surface the error rather than fall back
+ * to a silent local write (R4: no silent fallback).
+ *
+ * rectype defaults to the record the designer was opened from (nsContext), so a
+ * plain 💾 save associates the template with that transaction type. The Save
+ * dialog (#138) overrides it and may flag the template as the record type's print
+ * default via opts.
+ */
+export async function saveTemplateToNetSuite(
+  store: AppStore,
+  opts: { rectype?: string; isDefault?: boolean } = {},
+): Promise<{ id: string }> {
+  const state = store.state;
+  const ctx = getNsContext();
+
+  const options: BfoExportOptions = {
+    useBands: true,           // band layout is authoritative (#47 cutover)
+    useFreeMarker: true,
+    includePageHeaders: true,
+  };
+  if (ctx?.fontRegularUrl) {
+    options.thaiFontUrls = { regular: ctx.fontRegularUrl, bold: ctx.fontBoldUrl || undefined };
+  }
+  const xml = exportBfoXml(state, options);
+
+  const designerJson = JSON.stringify({
+    elements: state.elements,
+    page: state.page,
+    pagination: state.pagination,
+    // Persist band edits so a re-edit restores them (#47 3b).
+    bands: state.bands.length ? state.bands : undefined,
+    copies: state.copies && state.copies.length ? state.copies : undefined,
+  });
+
+  const result = await saveNsTemplate({
+    id: state.template.id || undefined,
+    name: state.template.name || 'Untitled Template',
+    data: designerJson,
+    xml,
+    rectype: opts.rectype ?? ctx?.recordType ?? undefined,
+    isDefault: opts.isDefault,
+  });
+
+  store.dispatch((d) => {
+    d.template.id = result.id;
+    d.template.isDirty = false;
+  });
+
+  return { id: result.id };
 }
 
 // ═══════════════════════════════════════

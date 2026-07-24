@@ -1,92 +1,58 @@
 /**
- * E2E Tests — Export & Preview
- * Tests PDF export, BFO export modal, and preview modal.
+ * E2E — Preview, BFO export & JSON copy (band-model UI, #123)
  *
  * @author Wichit Wongta
+ * @since 2026-07-22
  */
 import { test, expect } from '@playwright/test';
+import { gotoApp, loadSample, headerBtn, openPreview, toast } from './_helpers';
 
-test.describe('Preview Modal', () => {
+test.describe('Preview modal', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
-
-    // Load sample template for preview content
-    const sampleBtn = page.locator('text=Sample').first();
-    await sampleBtn.click();
-    await page.waitForSelector('pld-canvas-element');
+    await gotoApp(page);
+    await loadSample(page);
   });
 
-  test('should open preview modal', async ({ page }) => {
-    const previewBtn = page.locator('text=Preview').first();
-    await previewBtn.click();
-
-    const modal = page.locator('pld-preview-modal');
-    await expect(modal).toBeVisible();
+  test('opens and shows page navigation', async ({ page }) => {
+    const modal = await openPreview(page);
+    await expect(modal.locator('.page-info')).toContainText('/');
   });
 
-  test('should display page navigation in preview', async ({ page }) => {
-    const previewBtn = page.locator('text=Preview').first();
-    await previewBtn.click();
-
-    // Check for page indicator (e.g. "1 / 1")
-    const pageInfo = page.locator('pld-preview-modal .page-info');
-    await expect(pageInfo).toBeVisible();
+  test('zoom controls change the zoom level', async ({ page }) => {
+    const modal = await openPreview(page);
+    const label = modal.locator('.zoom-label');
+    const start = await label.textContent();
+    await modal.locator('.zoom-controls .nav-btn').last().click(); // +
+    await expect(label).not.toHaveText(start ?? '');
   });
 
-  test('should have zoom controls in preview', async ({ page }) => {
-    const previewBtn = page.locator('text=Preview').first();
-    await previewBtn.click();
-
-    const zoomLabel = page.locator('pld-preview-modal .zoom-label');
-    await expect(zoomLabel).toBeVisible();
-  });
-
-  test('should close preview modal', async ({ page }) => {
-    const previewBtn = page.locator('text=Preview').first();
-    await previewBtn.click();
-
-    // Press Escape to close
-    await page.keyboard.press('Escape');
+  test('renders a page and closes', async ({ page }) => {
+    const modal = await openPreview(page);
+    await expect(modal.locator('.page-preview')).toBeVisible();
+    await modal.locator('.close-btn').click();
+    await expect(modal.getByText('PDF Preview')).toBeHidden();
   });
 });
 
-test.describe('BFO Export Modal', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
-  });
-
-  test('should open BFO export modal', async ({ page }) => {
-    const bfoBtn = page.locator('text=NetSuite BFO').first();
-    await bfoBtn.click();
+test.describe('BFO export modal', () => {
+  test('opens and generates BFO XML', async ({ page }) => {
+    await gotoApp(page);
+    await loadSample(page);
+    await headerBtn(page, 'NetSuite BFO').click();
 
     const modal = page.locator('pld-bfo-export-modal');
-    await expect(modal).toBeVisible();
+    await expect(modal.getByText('NetSuite BFO XML Export')).toBeVisible();
+    await expect(modal.locator('.xml-code')).toContainText('<');
+
+    await modal.locator('.close-btn').click();
+    await expect(modal.getByText('NetSuite BFO XML Export')).toBeHidden();
   });
 });
 
-test.describe('PDF Export', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('pld-app-shell');
-
-    // Load a sample template
-    const sampleBtn = page.locator('text=Sample').first();
-    await sampleBtn.click();
-    await page.waitForSelector('pld-canvas-element');
-  });
-
-  test('should trigger PDF export and show toast', async ({ page }) => {
-    // Listen for the new page (PDF opens in new tab)
-    const pagePromise = page.context().waitForEvent('page', { timeout: 15_000 }).catch(() => null);
-
-    const pdfBtn = page.locator('text=PDF').first();
-    await pdfBtn.click();
-
-    // Wait for success toast
-    await page.waitForTimeout(3000);
-    const newPage = await pagePromise;
-    if (newPage) await newPage.close();
+test.describe('JSON export', () => {
+  test('copies the template JSON and shows a toast', async ({ page }) => {
+    await gotoApp(page);
+    await headerBtn(page, 'JSON').click();
+    await expect(toast(page, 'JSON copied')).toBeVisible();
   });
 });

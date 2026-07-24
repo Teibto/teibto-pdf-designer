@@ -11,3 +11,7 @@ useDefault = true
 [[allowlists]]
 description = "Chrome persistent QA profile (.qa-profiles/) — gitignored, browser internals ชน pattern (#25)"
 paths = ['''(^|/)\.qa-profiles/''']
+
+[[allowlists]]
+description = "Local .env (NS creds/TOTP) — gitignored (.gitignore:15-16), ไม่มีวันเข้า commit; gitleaks dir . สแกน working tree รวม ignored file (#137)"
+paths = ['''(^|/)\.env($|\.)''']
