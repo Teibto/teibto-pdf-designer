@@ -318,6 +318,39 @@ define([
     return { pdfFile: combinePdfDocs(multi.docs), tranId: multi.tranId, rec: multi.rec };
   }
 
+  /**
+   * Render a template against **synthetic** data — no transaction needed (#191).
+   *
+   * Lives here, not in the Suitelet, because it must go through the same
+   * `makeRenderer` as Print: the whole value of a sample preview is that it fails
+   * and succeeds for the same reasons the real print does (Thai font from config,
+   * `<macrolist>` header on every page, a binding that is not `?xml`-escaped
+   * blowing up the whole document). A second binding path would be a preview that
+   * lies — the exact class of bug the single-render-core rule exists to prevent.
+   *
+   * The copy set is honored like Print's: one pass per label, combined via
+   * `<pdfset>`, so ต้นฉบับ/สำเนา is visible before the template ever reaches a
+   * customer's account.
+   *
+   * @returns {{pdfFile: Object}}
+   */
+  function renderSampleDocument(tplXml, recType, copies, tel) {
+    if (tel) tel.stage = 'render';
+
+    if (copies.length === 1) {
+      var only = copies[0];
+      var data = invoiceData.buildSampleData(recType, only.th, only.en);
+      return { pdfFile: makeRenderer(tplXml, data, null, tel, only).renderAsPdf() };
+    }
+
+    var docs = copies.map(function (c) {
+      var perCopy = invoiceData.buildSampleData(recType, c.th, c.en);
+      return extractPdfDoc(makeRenderer(tplXml, perCopy, null, tel, c).renderAsString());
+    });
+    if (tel) tel.stage = 'copyset';
+    return { pdfFile: combinePdfDocs(docs) };
+  }
+
   return {
     TPL: TPL,
     INVOICE_COPIES: INVOICE_COPIES,
@@ -330,6 +363,7 @@ define([
     makeRenderer: makeRenderer,
     renderDocument: renderDocument,
     renderDocumentXml: renderDocumentXml,
+    renderSampleDocument: renderSampleDocument,
     combinePdfDocs: combinePdfDocs
   };
 });

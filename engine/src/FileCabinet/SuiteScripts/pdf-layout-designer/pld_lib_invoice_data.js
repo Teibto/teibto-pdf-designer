@@ -696,9 +696,200 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     return buildTransactionData('invoice', recId, copyLabelTH, copyLabelEN);
   }
 
+  // ═══════════════════════════════════════════════════
+  // SAMPLE DATA (#191) — เอกสารสังเคราะห์สำหรับพรีวิวโดยไม่ต้องมี record
+  // ═══════════════════════════════════════════════════
+
+  /**
+   * ชุดข้อมูลสังเคราะห์รูปร่างเดียวกับที่ `buildTransactionData` คืน — ให้คนที่เปิด
+   * ดีไซเนอร์จากเมนู (ไม่ได้มาจาก transaction) พรีวิวผ่าน BFO จริงและผูก binding ได้
+   *
+   * เจ้าของ contract คือไฟล์นี้ ตัวอย่างจึงต้องอยู่ที่นี่ด้วย ไม่ใช่ใน SPA — ถ้าแยกกัน
+   * มันจะหลุด sync แบบเดียวกับ #155 แล้วผู้ใช้ออกแบบตาม key ที่ engine ไม่ได้จ่าย
+   * (unit test บังคับว่าทุก key ใน CURATED_KEYS / RAW_ALIAS_KEYS / ITEM_BINDING_KEYS
+   * ต้องมีจริงในตัวอย่าง)
+   *
+   * **ข้อมูลสังเคราะห์ล้วน** (data classification: Internal) — ห้ามใส่ชื่อคู่ค้าหรือ
+   * ตัวเลขจริงของลูกค้า · ยกเว้น `company` ที่อ่านจาก config ของ account เองเพื่อให้
+   * พรีวิวเห็นหัวจดหมาย/โลโก้/ฟอนต์จริงตามที่ตั้งไว้
+   *
+   * คำอธิบายสินค้าแถวแรกมี `&` โดยตั้งใจ: เทมเพลตที่ bind โดยไม่ผ่าน `?xml` จะพัง
+   * ทั้งใบตอนพรีวิว (#184) แทนที่จะไปพังครั้งแรกบนเอกสารจริงของลูกค้า
+   *
+   * @param {string} recType
+   * @param {string} [copyLabelTH] ป้ายชุดสำเนาของ pass นี้
+   * @param {string} [copyLabelEN]
+   */
+  function buildSampleData(recType, copyLabelTH, copyLabelEN) {
+    var type = isSupportedType(recType) ? String(recType) : 'invoice';
+    var titles = DOC_TITLES[type];
+    var showTotals = !NO_TOTALS[type];
+    var isPayment = !!APPLY_SOURCE[type];
+    function totalsText(v) { return showTotals ? money(v) : ''; }
+
+    // ยอดที่สอดคล้องกันทั้งใบ: 152,500 − 2,500 = 150,000 + VAT 7% 10,500 = 160,500
+    var grossTotal = 152500, specialDiscount = 2500, advanceReceive = 0;
+    var baseAmount = 150000, vatRatePct = 7, vat = 10500, grandTotal = 160500;
+    var wht = 0, cashCoupon = 0, customerPaid = 160500;
+
+    var itemRows = [
+      sampleRow({ item: 'ITEM-A100', description: 'กระดาษถ่ายเอกสาร A4 80 แกรม (Laser & Inkjet)',
+        quantity: 100, units: 'รีม', rate: 100, amount: 10000 }),
+      sampleRow({ item: 'ITEM-B220', description: 'หมึกพิมพ์เลเซอร์ สีดำ รุ่นมาตรฐาน',
+        quantity: 5, units: 'กล่อง', rate: 2500, amount: 12500 }),
+      sampleRow({ item: 'SRV-INST', description: 'ค่าบริการติดตั้งและอบรมการใช้งาน',
+        quantity: 1, units: 'งาน', rate: 130000, amount: 130000 })
+    ];
+    // ใบเสร็จรับเงินไม่มีบรรทัดสินค้า — แถวของมันคือเอกสารที่ตัดชำระ (#170)
+    var applyRows = [
+      sampleRow({ refnum: 'INV-2026-0107', applydate: '17/07/2026', total: 160500 }),
+      sampleRow({ refnum: 'INV-2026-0092', applydate: '02/07/2026', total: 32100 })
+    ];
+    var rows = isPayment ? applyRows : itemRows;
+
+    var cfg = {};
+    try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
+
+    return {
+      subsidiaryId: '',
+      company: {
+        name: cfg.name || 'บริษัท ตัวอย่าง จำกัด (สำนักงานใหญ่)',
+        nameEn: cfg.nameEn || 'Example Company Limited',
+        address: cfg.address || '99/9 ถนนทดสอบ แขวงตัวอย่าง เขตทดลอง กรุงเทพฯ 10110',
+        addressEn: cfg.addressEn || '99/9 Test Rd, Bangkok 10110',
+        phone: cfg.phone || '02-000-0000',
+        email: cfg.email || 'ar@example.co.th',
+        taxId: cfg.taxId || '0105500000000',
+        branch: branchText(cfg.branch || '00000'),
+        branchCode: cfg.branch || '00000',
+        logo: cfg.logo || ''
+      },
+      document: {
+        number: 'SAMPLE-0001',
+        date: '17/07/2026',
+        dueDate: '16/08/2026',
+        refSo: 'SO-2026-0044',
+        refNo: 'PO-CUST-8891',
+        titleTH: titles.th + ' (' + (copyLabelTH || 'ต้นฉบับ') + ')',
+        titleEN: titles.en + ' (' + (copyLabelEN || 'Original') + ')',
+        copyTH: copyLabelTH || 'ต้นฉบับ',
+        copyEN: copyLabelEN || 'Original',
+        printedDate: format.format({ value: new Date(), type: format.Type.DATETIME }),
+        docInfoRows: [
+          { label: 'Doc No. / เลขที่เอกสาร', value: 'SAMPLE-0001' },
+          { label: 'Date / วันที่', value: '17/07/2026' },
+          { label: 'Due Date / วันครบกำหนดชำระ', value: '16/08/2026' },
+          { label: 'Ref.SO / เลขที่การขาย', value: 'SO-2026-0044' },
+          { label: 'Ref.No / เลขที่อ้างอิง', value: 'PO-CUST-8891' }
+        ]
+      },
+      customer: {
+        name: wordbreak.breakThai('บริษัท ผู้ซื้อตัวอย่าง จำกัด'),
+        address: wordbreak.breakThai('1 หมู่ 2 ถนนสมมติ ตำบลทดสอบ อำเภอตัวอย่าง จังหวัดสมุทรทดลอง 10540'),
+        taxId: '0105599999999',
+        branch: branchText('00000')
+      },
+      shipTo: { address: wordbreak.breakThai('คลังสินค้าตัวอย่าง 55/5 ถนนขนส่ง ตำบลทดสอบ จังหวัดสมุทรทดลอง 10540') },
+      totals: {
+        gross: totalsText(grossTotal),
+        specialDiscount: totalsText(specialDiscount),
+        advanceReceive: totalsText(advanceReceive),
+        baseAmount: totalsText(baseAmount),
+        vatRate: showTotals ? vatRatePct : '',
+        vat: totalsText(vat),
+        grandTotal: totalsText(grandTotal),
+        wht: totalsText(wht),
+        cashCoupon: totalsText(cashCoupon),
+        customerPaid: isPayment ? money(customerPaid) : totalsText(customerPaid),
+        bahtText: showTotals || isPayment ? bahtText.bahtText(grandTotal) : '',
+        summaryRows: !showTotals ? [] : [
+          { label: 'Total / มูลค่ารวม', value: money(grossTotal) },
+          { label: 'Special Discount / ส่วนลดพิเศษ', value: money(specialDiscount) },
+          { label: 'Advance Receive / หักเงินรับล่วงหน้า', value: money(advanceReceive) },
+          { label: 'Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม', value: money(baseAmount) },
+          { label: 'VAT / ภาษีมูลค่าเพิ่ม ' + vatRatePct + '%', value: money(vat) },
+          { label: 'Grand Total / มูลค่าสุทธิ', value: money(grandTotal) },
+          { label: 'Withholding Tax / ภาษีหัก ณ ที่จ่าย', value: money(wht) },
+          { label: 'Cash Coupon / คูปองส่วนลดเงินสด', value: money(cashCoupon) },
+          { label: 'Customer Paid / ยอดชำระ (บาท)', value: money(customerPaid) }
+        ],
+        subtotal: totalsText(baseAmount),
+        tax: totalsText(vat),
+        total: totalsText(grandTotal)
+      },
+      issuer: { createdBy: 'ผู้จัดทำตัวอย่าง' },
+      items: rows,
+      fields: {
+        memo: 'เอกสารตัวอย่างสำหรับออกแบบเทมเพลต — ไม่ใช่ข้อมูลจริง',
+        salesrep: 'พนักงานขายตัวอย่าง',
+        terms: 'เครดิต 30 วัน',
+        currency: 'THB',
+        location: 'คลังกลาง',
+        department: 'ฝ่ายขาย',
+        'class': 'ในประเทศ',
+        subsidiary: 'บริษัทตัวอย่าง',
+        shipmethod: 'ขนส่งภายในบริษัท',
+        trackingnumbers: 'TRK-000123',
+        employee: 'ผู้ขอซื้อตัวอย่าง',
+        paymentmethod: 'เงินโอน',
+        checknum: 'CHQ-0001',
+        createdfrom: 'SO-2026-0044'
+      },
+
+      // ── raw-record aliases (#155) ──
+      tranid: 'SAMPLE-0001',
+      trandate: '17/07/2026',
+      duedate: '16/08/2026',
+      entity: wordbreak.breakThai('บริษัท ผู้ซื้อตัวอย่าง จำกัด'),
+      billaddress: wordbreak.breakThai('1 หมู่ 2 ถนนสมมติ ตำบลทดสอบ จังหวัดสมุทรทดลอง 10540'),
+      shipaddress: wordbreak.breakThai('คลังสินค้าตัวอย่าง 55/5 ถนนขนส่ง จังหวัดสมุทรทดลอง 10540'),
+      memo: 'เอกสารตัวอย่างสำหรับออกแบบเทมเพลต — ไม่ใช่ข้อมูลจริง',
+      otherrefnum: 'PO-CUST-8891',
+      terms: 'เครดิต 30 วัน',
+      salesrep: 'พนักงานขายตัวอย่าง',
+      employee: 'ผู้ขอซื้อตัวอย่าง',
+      createdfrom: 'SO-2026-0044',
+      custbody_buyer_taxid: '0105599999999',
+      custbody_buyer_branch: branchText('00000'),
+      custbody_doc_copy_label: (copyLabelTH || 'ต้นฉบับ') + ' (' + (copyLabelEN || 'Original') + ')',
+      item: rows,
+      subtotal: grossTotal,
+      discounttotal: baseAmount - grossTotal,
+      taxtotal: vat,
+      total: grandTotal,
+      subtotalText: totalsText(grossTotal),
+      discounttotalText: specialDiscount ? totalsText(-specialDiscount) : '',
+      netAmountText: totalsText(baseAmount),
+      taxtotalText: totalsText(vat),
+      totalText: totalsText(grandTotal),
+      bahtText: showTotals || isPayment ? bahtText.bahtText(grandTotal) : '',
+      apply: applyRows,
+      payment: isPayment ? customerPaid : 0,
+      paymentText: isPayment ? money(customerPaid) : '',
+      paymentmethod: 'เงินโอน',
+      checknum: 'CHQ-0001'
+    };
+  }
+
+  /**
+   * แถวตัวอย่างหนึ่งแถวที่มี **ทุก key** ใน ITEM_BINDING_KEYS เสมอ — key ที่ไม่เกี่ยว
+   * กับแถวนั้นเป็นค่าว่าง ไม่ใช่หายไป ตามกฎเดียวกับแถวจริง (#155/#170)
+   */
+  function sampleRow(values) {
+    var row = {};
+    ITEM_BINDING_KEYS.forEach(function (key) { row[key] = ''; });
+    Object.keys(values).forEach(function (key) { row[key] = values[key]; });
+    if (values.quantity != null) row.quantityText = money(values.quantity);
+    if (values.rate != null) row.rateText = money(values.rate);
+    if (values.amount != null) row.amountText = money(values.amount);
+    if (values.total != null) row.totalText = money(values.total);
+    return row;
+  }
+
   return {
     buildInvoiceData: buildInvoiceData,
     buildTransactionData: buildTransactionData,
+    buildSampleData: buildSampleData,
     isSupportedType: isSupportedType,
     // Binding contract (#155) — consumed by the engine unit tests; the template
     // validator reads the same lists straight from this source file.
