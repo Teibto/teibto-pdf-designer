@@ -581,3 +581,26 @@ test('every binding the master pack uses resolves for the record types it target
   }
   assert.ok(curatedChecked >= 4, 'expected the invoice/tax-invoice/PO/quotation masters to be checked');
 });
+
+test('line queries exclude the COGS/asset rows an inventory item generates (#185)', () => {
+  // transactionline stores THREE rows per inventory item on an invoice — revenue,
+  // Cost of Sales and inventory relief — all `mainline='F' AND taxline='F'`, so the
+  // filter that reads right returns our own cost figures as extra printed lines
+  // (proven on SB2 inv 1094914: 12 rows for a 4-line invoice). The two extra rows
+  // are exactly the ones with iscogs='T'.
+  //
+  // This asserts on the SQL the engine FIRES, not on what the stub returns — a stub
+  // that matches by substring can never prove a column filter by itself (#174).
+  const built = buildLibWith();
+  built.lib.buildTransactionData('invoice', 42);
+
+  const lineQueries = built.query.seen
+    .map((s) => s.query)
+    .filter((q) => q.indexOf('transactionline') !== -1);
+
+  assert.ok(lineQueries.length > 0, 'the invoice must read its lines from transactionline');
+  for (const q of lineQueries) {
+    assert.ok(/iscogs/.test(q),
+      'every transactionline read must exclude COGS/asset rows (#185): ' + q.slice(0, 120));
+  }
+});

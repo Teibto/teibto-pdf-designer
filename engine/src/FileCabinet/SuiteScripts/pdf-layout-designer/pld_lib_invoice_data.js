@@ -298,6 +298,17 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     //    quantity is GL-signed (negative for charges) → negate for display. The
     //    reference shows expense-item lines GL-negative (-50/-1,500) but that
     //    contradicts the record UI and its own summary sum — kept record-signed.
+    //
+    //    `iscogs = 'F'` is what keeps the PRINTED lines only (#185). An invoice that
+    //    sells an inventory item stores THREE rows per item — revenue
+    //    (accountinglinetype DEFERREDREVENUE/INCOME, iscogs F), Cost of Sales (COGS,
+    //    iscogs T) and the inventory relief (ASSET, iscogs T) — and all three are
+    //    `mainline='F' AND taxline='F'`, so the invoice printed 12 rows for a
+    //    4-line invoice, with our own cost figures on the customer's document.
+    //    Proven on SB2 inv 1094914 by dumping `SELECT *` per line: the two extra
+    //    rows per item are exactly the ones with iscogs='T'. Same root cause as the
+    //    delivery note (#176), which sidesteps it by reading the `item` sublist.
+    //    IS NULL is kept for line types that leave the flag unset.
     var lines = (isPayment || isSublistItems) ? [] : many(
       "SELECT tl.linesequencenumber AS seq, tl.itemtype, " +
       "  BUILTIN.DF(tl.item) AS item_code, itm.displayname AS item_name, tl.memo, " +
@@ -309,6 +320,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       "  LEFT JOIN item itm ON itm.id = tl.item " +
       "  LEFT JOIN unitstypeuom uom ON uom.internalid = tl.units " +
       "WHERE tl.transaction = ? AND tl.mainline = 'F' AND tl.taxline = 'F' " +
+      "  AND (tl.iscogs IS NULL OR tl.iscogs = 'F') " +
       "  AND (tl.itemtype IS NULL OR tl.itemtype <> 'Subtotal') " +
       "ORDER BY tl.linesequencenumber",
       [id]
@@ -322,7 +334,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var custcolBySeq = {};
     try {
       ((isPayment || isSublistItems) ? [] : many(
-        "SELECT * FROM transactionline WHERE transaction = ? AND mainline = 'F' AND taxline = 'F'",
+        "SELECT * FROM transactionline WHERE transaction = ? AND mainline = 'F' AND taxline = 'F' " +
+        "  AND (iscogs IS NULL OR iscogs = 'F')",
         [id]
       )).forEach(function (row) {
         var cc = {};
