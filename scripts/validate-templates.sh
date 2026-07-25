@@ -76,11 +76,13 @@ RECORD_KEY = re.compile(r'record\.([A-Za-z_][A-Za-z0-9_]*)')
 LINE_KEY = re.compile(r'line\.([A-Za-z_][A-Za-z0-9_]*)')
 
 def js_string_list(src: str, var_name: str):
-    """ดึงรายชื่อ string จาก `var NAME = [ 'a', 'b' ];` ใน source ของ engine lib."""
+    """ดึงรายชื่อ string จาก `var NAME = [ 'a', 'b' ];` ใน source ของ engine lib.
+    ตัด // comment ออกก่อน — คำอธิบายในลิสต์ที่มี quote ทำให้ parser กินเลย (เจอจริง #165)."""
     m = re.search(r'var\s+' + var_name + r'\s*=\s*\[(.*?)\]\s*;', src, re.DOTALL)
     if not m:
         return None
-    return re.findall(r"'([^']+)'", m.group(1))
+    body = re.sub(r'//[^\n]*', '', m.group(1))
+    return re.findall(r"'([^']+)'", body)
 
 def js_object_keys(src: str, var_name: str):
     """ดึง key ระดับบนสุดจาก `var NAME = { key: {...}, ... };` (ใช้กับ DOC_TITLES)."""
@@ -175,6 +177,19 @@ def check_template(path: Path):
 
     # 7) binding ต้องอยู่ใน contract ที่ engine bind จริง (#155)
     check_binding_contract(path, src, name)
+
+    # 8) ห้าม format ตัวเลขใน template (#165) — ทุกค่าที่ผ่าน data source ของ N/render
+    #    ถึง FreeMarker เป็น string เสมอ (พิสูจน์บน SB2: is_number = NO) ดังนั้น
+    #    ?string("#,##0.00") / ?string["#,##0.00"] คืนค่าว่างโดยไม่ error → ช่องเงินว่างเงียบ
+    for m in re.finditer(r'\?string\s*[\[(]', src):
+        snippet = src[max(0, m.start() - 40):m.end() + 12].replace('\n', ' ')
+        errors.append((name, f'format ตัวเลขใน template (`?string(...)`) — ค่าจาก data source '
+                             f'เป็น string เสมอ จึงคืนค่าว่างเงียบ ๆ ให้ engine format มาแล้วพิมพ์ตรง ๆ '
+                             f'(เช่น ${{record.totalText}}) (#165) · ใกล้: …{snippet.strip()}…'))
+    #    เลขคณิตกับ binding ก็พังด้วยเหตุเดียวกัน — ตัวอักษรไทยต้องมาจาก engine
+    if 'pldBahtText(' in src:
+        errors.append((name, 'เรียก pldBahtText() ใน template — ทำเลขคณิตกับค่าที่เป็น string '
+                             'จึงคืนค่าว่างเสมอ ใช้ ${record.bahtText} ที่ engine คำนวณให้ (#165)'))
 
 def check_sample(path: Path):
     try:

@@ -157,6 +157,51 @@ test('record.item rows are numeric and cover every row the item table prints', (
   assert.equal(second.amount, 0);
 });
 
+// ─── #165: money must arrive PRE-FORMATTED ─────────────────────────────────────
+// render.DataSource.OBJECT hands every value to FreeMarker as a string (proven on
+// SB2: `${record.total?is_number}` → NO), so a template cannot format a number:
+// `?string("#,##0.00")` on a string returns EMPTY with no error. Anything printed
+// has to be formatted here.
+test('formatted money text is present, comma-grouped and 2dp', () => {
+  const data = buildLib().buildTransactionData('invoice', 42);
+
+  assert.equal(data.subtotalText, '12,000.00');
+  assert.equal(data.netAmountText, '10,000.00', 'subtotal − discount, as the master prints it');
+  assert.equal(data.taxtotalText, '700.00');
+  assert.equal(data.totalText, '10,700.00');
+  for (const key of ['subtotalText', 'netAmountText', 'taxtotalText', 'totalText', 'bahtText']) {
+    assert.equal(typeof data[key], 'string', `${key} must be a string — FreeMarker cannot format`);
+  }
+});
+
+test('discount text is empty when there is no discount (template branches on it)', () => {
+  const withDiscount = buildLib().buildTransactionData('invoice', 42);
+  assert.equal(withDiscount.discounttotalText, '2,000.00', 'printed as a positive figure');
+
+  const noSummary = buildLib({ sums: [] }).buildTransactionData('invoice', 42);
+  assert.equal(noSummary.discounttotalText, '', 'empty → the master hides the discount rows');
+});
+
+test('amount in words comes from the engine, in Thai', () => {
+  const data = buildLib().buildTransactionData('invoice', 42);
+
+  assert.equal(typeof data.bahtText, 'string');
+  assert.ok(data.bahtText.indexOf('บาท') !== -1, `expected Thai baht text, got "${data.bahtText}"`);
+  assert.equal(data.bahtText, data.totals.bahtText, 'same value the curated schema exposes');
+});
+
+test('item rows carry formatted text next to the raw numbers', () => {
+  const [first, second] = buildLib().buildTransactionData('invoice', 42).item;
+
+  assert.equal(first.quantityText, '1');
+  assert.equal(first.rateText, '1,000.00');
+  assert.equal(first.amountText, '12,000.00');
+  // an item-less charge line prints blank, not 0.00
+  assert.equal(second.quantityText, '');
+  assert.equal(second.rateText, '');
+  assert.equal(second.amountText, '');
+});
+
 test('copy label follows the copy being rendered, not a stored field', () => {
   const lib = buildLib();
 

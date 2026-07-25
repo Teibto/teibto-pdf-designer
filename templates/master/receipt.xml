@@ -18,69 +18,8 @@
   จึงแสดงว่างได้ (null-safe); account ที่ต้องการที่อยู่ผู้ชำระ ให้ map custom body field เอง
 -->
 
-<#-- ═══ จำนวนเงินเป็นตัวอักษรไทย (บาทถ้วน/สตางค์) ═══ -->
-<#assign PLD_DIGITS = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"]>
-<#assign PLD_PLACES = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"]>
-<#-- zero-width space (U+200B) แทรกระหว่างหน่วยอ่าน ให้ BFO เลือกตัดบรรทัดที่ขอบพยางค์
-     แทนกลางคำ (BFO ไม่มี Thai dictionary word-break — สตริงไทยยาวโดนตัดที่ไหนก็ได้, #35) -->
-<#assign PLD_ZWSP = "\x200B">
-
-<#-- อ่านเลข 0..999999 หนึ่งกลุ่ม (กติกา: สิบ ไม่ใช่หนึ่งสิบ · ยี่สิบ · เอ็ด ท้ายเลขที่มากกว่าสิบ
-     หรือกลุ่มที่มีหลักล้านนำหน้า เช่น 1000001 = หนึ่งล้านเอ็ด) -->
-<#function pldReadGroup g hasHigher>
-  <#local s = "">
-  <#local str = g?c>
-  <#local len = str?length>
-  <#list 0..(len - 1) as i>
-    <#local d = str[i..i]?number>
-    <#local p = len - i - 1>
-    <#if d != 0>
-      <#local unit = "">
-      <#if p == 1>
-        <#if d == 1><#local unit = "สิบ">
-        <#elseif d == 2><#local unit = "ยี่สิบ">
-        <#else><#local unit = PLD_DIGITS[d] + "สิบ"></#if>
-      <#elseif p == 0 && d == 1 && (g gt 10 || hasHigher)>
-        <#local unit = "เอ็ด">
-      <#else>
-        <#local unit = PLD_DIGITS[d] + PLD_PLACES[p]>
-      </#if>
-      <#-- คั่นแต่ละหน่วยด้วย ZWSP: จุดตัดบรรทัดที่ปลอดภัย (ไม่กลางพยางค์) #35 -->
-      <#local s = s + (s?length gt 0)?then(PLD_ZWSP, "") + unit>
-    </#if>
-  </#list>
-  <#return s>
-</#function>
-
-<#function pldBahtText amount>
-  <#-- N/render คืนเลขจาก * และ % เป็น double (25 % 100 = "25.0") — ?int ทุกจุดก่อน ?c
-       ไม่งั้น g?c ได้ "25.0" แล้ว "."?number พังเงียบทั้ง function -->
-  <#local total = (((amount?abs) * 100)?round)?int>
-  <#local baht = (total / 100)?int>
-  <#local satang = (total % 100)?int>
-  <#local words = "">
-  <#if baht == 0>
-    <#local words = "ศูนย์">
-  <#else>
-    <#local remaining = baht>
-    <#local groups = []>
-    <#list 1..3 as pass>
-      <#if remaining gt 0>
-        <#local groups = [(remaining % 1000000)?int] + groups>
-        <#local remaining = (remaining / 1000000)?int>
-      </#if>
-    </#list>
-    <#list groups as g>
-      <#local words = words + (words?length gt 0)?then(PLD_ZWSP, "") + pldReadGroup(g, (g_index gt 0))>
-      <#if g_has_next><#local words = words + PLD_ZWSP + "ล้าน"></#if>
-    </#list>
-  </#if>
-  <#if satang == 0>
-    <#return words + PLD_ZWSP + "บาทถ้วน">
-  <#else>
-    <#return words + PLD_ZWSP + "บาท" + PLD_ZWSP + pldReadGroup(satang, false) + PLD_ZWSP + "สตางค์">
-  </#if>
-</#function>
+<#-- helper แปลงจำนวนเงินเป็นตัวอักษรถูกถอดออกใน #165 (ทำเลขคณิตกับค่าที่เป็น string
+     จึงคืนค่าว่างเสมอ) — ตัวจริงคือ pld_lib_baht_text.js ฝั่ง engine -->
 
 <pdf>
 <head>
@@ -188,8 +127,8 @@ td.r { text-align: right; }
       <td class="c">${line_index + 1}</td>
       <td><p class="cell">${line.refnum!""}</p></td>
       <td class="c">${line.applydate!""}</td>
-      <td class="r">${(line.total!0)?string["#,##0.00"]}</td>
-      <td class="r">${(line.amount!0)?string["#,##0.00"]}</td>
+      <td class="r">${line.total!""}</td>
+      <td class="r">${line.amount!""}</td>
     </tr>
     </#list>
   </tbody>
@@ -201,8 +140,12 @@ td.r { text-align: right; }
     <td style="width: 55%;">
       <p class="cell">
       <br />
+      <#-- ตัวอักษรไทยต้องมาจาก engine (record.bahtText) — customerpayment ยังไม่ได้ curated
+           data จึงซ่อนไว้ ไม่พิมพ์วงเล็บเปล่า; จะขึ้นเองเมื่อ #159 เพิ่ม rectype นี้ -->
+      <#if (record.bahtText!"") != "">
       <span class="section-label">จำนวนเงินที่รับชำระ (ตัวอักษร)</span><br />
-      <span class="amount-text">(${pldBahtText(record.payment!0)})</span>
+      <span class="amount-text">(${record.bahtText})</span>
+      </#if>
       <#if (record.memo!"") != "">
       <br /><br />
       <span class="section-label">หมายเหตุ (Remarks)</span><br />
@@ -214,7 +157,7 @@ td.r { text-align: right; }
       <table style="width: 100%;">
         <tr class="grand">
           <td><p class="cell">จำนวนเงินที่รับชำระ (Amount Received)</p></td>
-          <td class="r">${(record.payment!0)?string["#,##0.00"]}</td>
+          <td class="r">${record.payment!""}</td>
         </tr>
       </table>
     </td>
