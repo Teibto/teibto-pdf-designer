@@ -29,6 +29,7 @@ const HDR = {
   otherrefnum: 'PO-8842',
   customer_name: '02901 บริษัท ผู้ซื้อทดสอบ จำกัด',
   created_by: '105 สมชาย ทดสอบ',
+  created_from: 'Sales Order #SO2026-0044',
 };
 
 const SUMS = [
@@ -248,7 +249,7 @@ test('every curated type prints its own Thai document title', () => {
 test('an unknown record type never silently prints as an invoice', () => {
   const lib = buildLib();
   assert.equal(lib.isSupportedType('cashsale'), true);
-  assert.equal(lib.isSupportedType('itemfulfillment'), false,
+  assert.equal(lib.isSupportedType('customerpayment'), false,
     'still raw-path — the render suitelet must keep binding the raw record for it (#170)');
 });
 
@@ -290,6 +291,49 @@ test('a stored copy-label field never overrides the copy being rendered', () => 
   }).buildTransactionData('cashsale', 42, 'สำเนา', 'Copy');
 
   assert.equal(data.custbody_doc_copy_label, 'สำเนา (Copy)');
+});
+
+// ─── #170: a document that moves goods, not money ────────────────────────────
+test('an item fulfillment prints no money at all — blank, never 0.00', () => {
+  // The fixture deliberately has full invoice amounts on it: the blanking must come
+  // from the record TYPE, not from the data happening to be empty.
+  const data = buildLib().buildTransactionData('itemfulfillment', 42);
+
+  for (const key of ['subtotalText', 'discounttotalText', 'netAmountText',
+    'taxtotalText', 'totalText', 'bahtText']) {
+    assert.equal(data[key], '', `${key} must be blank on a delivery note, got "${data[key]}"`);
+  }
+  for (const key of ['gross', 'baseAmount', 'vat', 'grandTotal', 'wht', 'customerPaid',
+    'vatRate', 'bahtText', 'subtotal', 'tax', 'total']) {
+    assert.equal(data.totals[key], '', `totals.${key} must be blank, got "${data.totals[key]}"`);
+  }
+  // length, not deepEqual: the module runs in its own vm context, so its Array has a
+  // different prototype and deepStrictEqual([], []) fails across the realm boundary.
+  assert.equal(data.totals.summaryRows.length, 0,
+    'the 9-row statutory summary must disappear, not render nine empty rows');
+  assert.ok(data.bahtText.indexOf('ศูนย์') === -1,
+    'a delivery note must never read "(ศูนย์บาทถ้วน)"');
+});
+
+test('an item fulfillment still prints its lines, quantities and units', () => {
+  const data = buildLib().buildTransactionData('itemfulfillment', 42);
+
+  assert.equal(data.document.titleTH, 'ใบส่งสินค้า (ต้นฉบับ)');
+  assert.ok(data.item.length > 0, 'the item table is the whole point of a delivery note');
+  assert.equal(data.item[0].quantityText, '1');
+  assert.equal(data.item[0].units, 'Pack12');
+  assert.equal(plain(data.item[0].item), 'PD0001 สินค้าทดสอบ ก');
+});
+
+test('the money-blanking is per record type, not global', () => {
+  const lib = buildLib();
+  assert.equal(lib.buildTransactionData('invoice', 42).totalText, '10,700.00');
+  assert.equal(lib.buildTransactionData('itemfulfillment', 42).totalText, '');
+});
+
+test('createdfrom carries the source document for the delivery note', () => {
+  const data = buildLib().buildTransactionData('itemfulfillment', 42);
+  assert.equal(data.createdfrom, 'Sales Order #SO2026-0044');
 });
 
 test('buyer tax id / branch prefer the account field and fall back to Thai-Loc values', () => {

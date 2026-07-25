@@ -1,5 +1,5 @@
 {
-  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · เอกสารส่งของไม่แสดงราคา — line มีเฉพาะ item/description/quantity/units · entity = ลูกค้า, shipaddress = สถานที่ส่งมอบ, createdfrom = ใบสั่งขายต้นทาง · @author Wichit Wongta @since 2026-07-17",
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · เอกสารส่งของไม่แสดงราคา — line มีเฉพาะ item/description/quantity/units · quantityText คือค่าที่ template พิมพ์จริง (engine format มาแล้ว #165/#170) ส่วน quantity เป็น number ไว้ให้ col.format · entity = ลูกค้า, shipaddress = สถานที่ส่งมอบ, createdfrom = ใบสั่งขายต้นทาง · @author Wichit Wongta @since 2026-07-17",
   "record": {
     "tranid": "DN-2026-0089",
     "trandate": "17/07/2026",
@@ -10,11 +10,11 @@
     "custbody_doc_copy_label": "ต้นฉบับ (Original)",
     "memo": "โปรดตรวจนับสินค้าให้ครบถ้วนก่อนลงนามรับสินค้า",
     "item": [
-      { "item": "OFC-DSK-A", "description": "โต๊ะทำงานผู้บริหาร ท็อปไม้วอลนัท 160x80 ซม.", "quantity": 10, "units": "ตัว" },
-      { "item": "OFC-CHR-B", "description": "เก้าอี้สำนักงานตาข่ายระบายอากาศ รับประกัน 3 ปี", "quantity": 30, "units": "ตัว" },
-      { "item": "NET-SW-24P", "description": "สวิตช์เครือข่าย 24 พอร์ต Gigabit", "quantity": 6, "units": "เครื่อง" },
-      { "item": "CBL-CAT6-305", "description": "สายแลน CAT6 กล่อง 305 เมตร", "quantity": 5, "units": "กล่อง" },
-      { "item": "ACC-KBD-TRAY", "description": "ถาดวางคีย์บอร์ดใต้โต๊ะ แบบรางเลื่อน", "quantity": 10, "units": "ชุด" }
+      { "item": "OFC-DSK-A", "description": "โต๊ะทำงานผู้บริหาร ท็อปไม้วอลนัท 160x80 ซม.", "quantity": 10, "quantityText": "10", "units": "ตัว" },
+      { "item": "OFC-CHR-B", "description": "เก้าอี้สำนักงานตาข่ายระบายอากาศ รับประกัน 3 ปี", "quantity": 30, "quantityText": "30", "units": "ตัว" },
+      { "item": "NET-SW-24P", "description": "สวิตช์เครือข่าย 24 พอร์ต Gigabit", "quantity": 6, "quantityText": "6", "units": "เครื่อง" },
+      { "item": "CBL-CAT6-305", "description": "สายแลน CAT6 กล่อง 305 เมตร", "quantity": 5, "quantityText": "5", "units": "กล่อง" },
+      { "item": "ACC-KBD-TRAY", "description": "ถาดวางคีย์บอร์ดใต้โต๊ะ แบบรางเลื่อน", "quantity": 10, "quantityText": "10", "units": "ชุด" }
     ]
   },
   "company": {

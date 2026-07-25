@@ -29,14 +29,12 @@ const DESIGNER_CONSTANTS = path.join(
 /**
  * Types that print through the raw record binding — no curated Thai document data yet.
  *
- * Shrinking as #170 lands: tier A (vendorbill/cashsale/returnauthorization) reuses the
- * transaction-line builder as-is. What is left needs a DIFFERENT line source, which is
- * why it is not simply "more of the same": an itemfulfillment has lines but no rate or
- * amount, and a customerpayment has no item lines at all — its rows are the invoices
- * being paid.
+ * Shrinking as #170 lands. What is left is the one type whose rows do not come from
+ * transactionline at all: a customerpayment has no item lines — its rows are the
+ * invoices being paid.
  */
 const RAW_PATH_TYPES = [
-  'itemfulfillment', 'customerpayment',
+  'customerpayment',
 ];
 
 function read(file) {

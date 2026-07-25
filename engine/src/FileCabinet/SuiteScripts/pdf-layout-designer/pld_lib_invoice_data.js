@@ -109,9 +109,18 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     purchaseorder:       { th: 'ใบสั่งซื้อ', en: 'PURCHASE ORDER' },
     cashsale:            { th: 'ใบเสร็จรับเงิน/ใบกำกับภาษี', en: 'RECEIPT/TAX INVOICE' },
     vendorbill:          { th: 'ใบรับวางบิล', en: 'VENDOR BILL' },
-    returnauthorization: { th: 'ใบรับคืนสินค้า', en: 'RETURN AUTHORIZATION' }
+    returnauthorization: { th: 'ใบรับคืนสินค้า', en: 'RETURN AUTHORIZATION' },
+    itemfulfillment:     { th: 'ใบส่งสินค้า', en: 'DELIVERY NOTE' }
   };
   var PURCHASE_SIDE = { purchaseorder: true, vendorbill: true };
+  // Documents that move goods, not money (#170). An item fulfillment carries line
+  // quantities but no rate and no amount, and it has no statutory VAT breakdown —
+  // so every money figure would otherwise print a truthful-looking "0.00" and the
+  // amount in words would read "(ศูนย์บาทถ้วน)" on a delivery note. Money TEXT is
+  // blank for these instead, which is also what a template branches on (#165):
+  // `<#if (record.totalText!"") != "">`. The numeric aliases stay 0 so the shape of
+  // the contract does not change per record type.
+  var NO_TOTALS = { itemfulfillment: true };
 
   /** Record types this builder supports (exported for the suitelet gates) */
   function isSupportedType(recType) {
@@ -140,7 +149,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   ];
   var RAW_ALIAS_KEYS = [
     'tranid', 'trandate', 'duedate', 'entity', 'billaddress', 'shipaddress',
-    'memo', 'otherrefnum', 'terms', 'salesrep', 'employee',
+    'memo', 'otherrefnum', 'terms', 'salesrep', 'employee', 'createdfrom',
     'custbody_buyer_taxid', 'custbody_buyer_branch', 'custbody_doc_copy_label',
     'item', 'subtotal', 'discounttotal', 'taxtotal', 'total',
     // Money/quantity as ALREADY-FORMATTED text (#165). A template cannot format a
@@ -175,12 +184,18 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var titles = DOC_TITLES[recType] || DOC_TITLES.invoice;
     // '-' negates GL-signed sales lines for display; '' keeps purchase lines as-is
     var sign = PURCHASE_SIDE[recType] ? '' : '-';
+    // Goods-movement documents print no money at all (#170) — see NO_TOTALS.
+    var showTotals = !NO_TOTALS[recType];
+    function totalsText(v) { return showTotals ? money(v) : ''; }
     var rec = record.load({ type: recType, id: id });
 
     var hdr = first(
       "SELECT tranid, TO_CHAR(trandate,'DD/MM/YYYY') AS trandate, " +
       "  TO_CHAR(duedate,'DD/MM/YYYY') AS duedate, otherrefnum, " +
-      "  BUILTIN.DF(entity) AS customer_name, BUILTIN.DF(createdby) AS created_by " +
+      "  BUILTIN.DF(entity) AS customer_name, BUILTIN.DF(createdby) AS created_by, " +
+      // Source document of a fulfillment/receipt — the master delivery note prints it
+      // as "ใบสั่งขาย (SO No.)" (#170). Null on transactions entered directly.
+      "  BUILTIN.DF(createdfrom) AS created_from " +
       "FROM transaction WHERE id = ?",
       [id]
     );
@@ -347,7 +362,10 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       { label: 'Ref.SO / เลขที่การขาย', value: '' },
       { label: 'Ref.No / เลขที่อ้างอิง', value: hdr.otherrefnum || '' }
     ];
-    var summaryRows = [
+    // Empty on a goods-movement document (#170): a designer template renders this
+    // array as its summary box, so an empty list removes the box instead of drawing
+    // nine labelled rows with nothing in them.
+    var summaryRows = !showTotals ? [] : [
       { label: 'Total / มูลค่ารวม', value: money(grossTotal) },
       { label: 'Special Discount / ส่วนลดพิเศษ', value: money(specialDiscount) },
       { label: 'Advance Receive / หักเงินรับล่วงหน้า', value: money(advanceReceive) },
@@ -402,23 +420,24 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       },
       shipTo: { address: wordbreak.breakThai(shipAddr) },
       totals: {
-        // Thai statutory 9-row breakdown
-        gross: money(grossTotal),
-        specialDiscount: money(specialDiscount),
-        advanceReceive: money(advanceReceive),
-        baseAmount: money(baseAmount),
-        vatRate: vatRatePct,
-        vat: money(vat),
-        grandTotal: money(grandTotal),
-        wht: money(wht),
-        cashCoupon: money(cashCoupon),
-        customerPaid: money(customerPaid),
-        bahtText: bahtText.bahtText(grandTotal),
+        // Thai statutory 9-row breakdown — every figure blank on a document that
+        // moves goods rather than money (#170)
+        gross: totalsText(grossTotal),
+        specialDiscount: totalsText(specialDiscount),
+        advanceReceive: totalsText(advanceReceive),
+        baseAmount: totalsText(baseAmount),
+        vatRate: showTotals ? vatRatePct : '',
+        vat: totalsText(vat),
+        grandTotal: totalsText(grandTotal),
+        wht: totalsText(wht),
+        cashCoupon: totalsText(cashCoupon),
+        customerPaid: totalsText(customerPaid),
+        bahtText: showTotals ? bahtText.bahtText(grandTotal) : '',
         summaryRows: summaryRows,
         // backward-compat (#69)
-        subtotal: money(baseAmount),
-        tax: money(vat),
-        total: money(grandTotal)
+        subtotal: totalsText(baseAmount),
+        tax: totalsText(vat),
+        total: totalsText(grandTotal)
       },
       issuer: { createdBy: cleanName(hdr.created_by) },
       items: items,
@@ -440,6 +459,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       terms: bodyFields.terms || '',
       salesrep: bodyFields.salesrep || '',
       employee: bodyFields.employee || '',
+      // Source document ("ใบสั่งขาย (SO No.)" on the master delivery note, #170)
+      createdfrom: hdr.created_from || '',
       // Buyer tax id/branch: the account's own field wins, else the Thai-Loc
       // custbody_thl_* values the curated schema already resolved.
       custbody_buyer_taxid: bodyValue(rec, 'custbody_buyer_taxid') || custTaxId || '',
@@ -457,12 +478,12 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       // Formatted money (#165): the numeric keys above survive the trip to
       // FreeMarker only as strings, so anything a template PRINTS must be
       // formatted here. Empty discount text = "no discount row" for the template.
-      subtotalText: money(rawSubtotal),
-      discounttotalText: rawDiscount ? money(Math.abs(rawDiscount)) : '',
-      netAmountText: money(baseAmount),
-      taxtotalText: money(vat),
-      totalText: money(grandTotal),
-      bahtText: bahtText.bahtText(grandTotal)
+      subtotalText: totalsText(rawSubtotal),
+      discounttotalText: rawDiscount && showTotals ? money(Math.abs(rawDiscount)) : '',
+      netAmountText: totalsText(baseAmount),
+      taxtotalText: totalsText(vat),
+      totalText: totalsText(grandTotal),
+      bahtText: showTotals ? bahtText.bahtText(grandTotal) : ''
     };
 
     // ── custbody_* passthrough at the top level (#170) ──────────────────────────
