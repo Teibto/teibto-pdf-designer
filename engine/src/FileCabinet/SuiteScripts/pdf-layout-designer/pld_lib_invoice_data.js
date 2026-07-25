@@ -151,6 +151,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // formatted counterparts (#165) — what the item table actually prints
     'quantityText', 'rateText', 'amountText'
   ];
+  // ${copy.*} — data source ที่ pld_sl_render_pdf ใส่ให้ทุก render pass (#159)
+  // ป้ายชุดเอกสารของ pass นั้น ใช้ได้ทั้ง curated และ raw-record binding
+  var COPY_BINDING_KEYS = ['th', 'en', 'label'];
 
   /**
    * @param {string} recType  NetSuite record type (invoice/estimate/salesorder/purchaseorder/creditmemo)
@@ -467,6 +470,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // validator reads the same lists straight from this source file.
     bindingKeys: BINDING_KEYS,
     itemBindingKeys: ITEM_BINDING_KEYS,
+    copyBindingKeys: COPY_BINDING_KEYS,
     supportedTypes: Object.keys(DOC_TITLES)
   };
 });

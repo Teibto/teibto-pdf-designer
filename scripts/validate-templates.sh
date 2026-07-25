@@ -74,6 +74,7 @@ def is_c_ternary(interp: str) -> bool:
 RECTYPE_MARKER = re.compile(r'pld:rectype\s+([A-Za-z_][A-Za-z0-9_]*)')
 RECORD_KEY = re.compile(r'record\.([A-Za-z_][A-Za-z0-9_]*)')
 LINE_KEY = re.compile(r'line\.([A-Za-z_][A-Za-z0-9_]*)')
+COPY_KEY = re.compile(r'\bcopy\.([A-Za-z_][A-Za-z0-9_]*)')
 
 def js_string_list(src: str, var_name: str):
     """ดึงรายชื่อ string จาก `var NAME = [ 'a', 'b' ];` ใน source ของ engine lib.
@@ -97,15 +98,17 @@ if engine_lib and engine_lib.is_file():
     curated = js_string_list(eng, 'CURATED_KEYS')
     aliases = js_string_list(eng, 'RAW_ALIAS_KEYS')
     item_keys = js_string_list(eng, 'ITEM_BINDING_KEYS')
+    copy_keys = js_string_list(eng, 'COPY_BINDING_KEYS')
     curated_types = js_object_keys(eng, 'DOC_TITLES')
-    if None in (curated, aliases, item_keys, curated_types):
+    if None in (curated, aliases, item_keys, copy_keys, curated_types):
         errors.append((engine_lib.name,
                        'อ่าน binding contract ไม่ได้ (CURATED_KEYS / RAW_ALIAS_KEYS / '
-                       'ITEM_BINDING_KEYS / DOC_TITLES) — validator กับ engine หลุด sync (#155)'))
+                       'ITEM_BINDING_KEYS / COPY_BINDING_KEYS / DOC_TITLES) — validator กับ engine หลุด sync (#155)'))
     else:
         engine_contract = {
             'record': set(curated) | set(aliases),
             'line': set(item_keys),
+            'copy': set(copy_keys),
             'types': set(curated_types),
         }
 
@@ -117,6 +120,12 @@ def check_binding_contract(path: Path, src: str, name: str):
         return
     if engine_contract is None:
         return
+
+    # ${copy.*} มาจาก data source ที่ engine ใส่ให้ทุก render pass — ใช้ได้ทุก rectype (#159)
+    for key in sorted(set(COPY_KEY.findall(src))):
+        if key not in engine_contract['copy']:
+            errors.append((name, f'${{copy.{key}}} ไม่มีใน COPY_BINDING_KEYS ของ engine — '
+                                 f'ป้ายชุดเอกสารจะพิมพ์ว่างเงียบ ๆ (#159)'))
 
     rectype = marker.group(1)
     # rectype ที่ engine ไม่ curate ใช้ record ดิบของ NetSuite — ${record.tranid} /
