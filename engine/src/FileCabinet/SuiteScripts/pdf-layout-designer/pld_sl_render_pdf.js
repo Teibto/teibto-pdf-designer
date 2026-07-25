@@ -13,6 +13,8 @@
  *   ?action=preview&tplid=456                    ← preview with sample data
  *   ?action=list&rectype=invoice                 ← list available templates
  *   ?action=delete&tplid=456 (POST)               ← delete a template record
+ *   ?action=history&tplid=456                    ← version history (#189)
+ *   ?action=rollback&tplid=456&version=3 (POST)   ← restore a version (#189)
  *
  * @author Wichit Wongta
  */
@@ -24,8 +26,10 @@ define([
   'N/runtime',
   'N/log',
   'N/xml',
-  './pld_lib_render'
-], function (render, record, search, file, runtime, log, xml, pldRender) {
+  './pld_lib_render',
+  './pld_lib_auth',
+  './pld_lib_tpl_audit'
+], function (render, record, search, file, runtime, log, xml, pldRender, auth, tplAudit) {
 
   // ─── Custom Record Config (owned by the render core, #181) ───
   const TPL_RECORD_TYPE   = pldRender.TPL.TYPE;
@@ -40,6 +44,12 @@ define([
     var tel = newTelemetry(context.request); // observability (#149) — request-scoped
 
     try {
+      // ทุก action ที่เปลี่ยนเทมเพลตผ่านด่านสิทธิ์ก่อนเสมอ (#189) — จุดเดียว ไม่ใช่
+      // กระจายเช็คในแต่ละฟังก์ชัน เพราะ action ที่เพิ่มทีหลังแล้วลืมเช็คคือช่องโหว่เงียบ
+      if (WRITE_ACTIONS[tel.action] === true) {
+        auth.assertCanEditTemplates(tel.action, { tplid: tel.tplid, rectype: tel.rectype });
+      }
+
       switch (tel.action) {
         case 'render':
           return renderPdf(context, tel);
@@ -53,6 +63,10 @@ define([
           return getTemplate(context);
         case 'delete':
           return deleteTemplate(context);
+        case 'history':
+          return templateHistory(context);
+        case 'rollback':
+          return rollbackTemplate(context);
         case 'preview-live':
           return previewLivePdf(context, tel);
         case 'version':
@@ -62,6 +76,11 @@ define([
       }
 
     } catch (e) {
+      // สิทธิ์ไม่พอไม่ใช่ "render ล้มเหลว" — ตอบเป็นคำปฏิเสธที่อ่านรู้เรื่อง และ
+      // ไม่ต้อง log ซ้ำ (pld_lib_auth เขียน audit line ไปแล้วพร้อม roleId)
+      if (e && e.pldDenied === true) {
+        return writeDeniedJson(response, e);
+      }
       // Structured, correlated failure log (#149): one entry carrying full
       // context — which action/template/record/subsidiary/account/stage failed —
       // so a customer-reported "print ไม่ออก" is diagnosable straight from the
@@ -85,6 +104,13 @@ define([
 
   /** Actions a browser opens directly (transaction buttons + preview links). */
   var BROWSER_ACTIONS = { render: true, preview: true };
+
+  /**
+   * Actions ที่เปลี่ยนสถานะเทมเพลต — ต้องผ่าน pld_lib_auth ก่อน (#189).
+   * อ่านอย่างเดียว (render / preview / list / get / history / version) เปิดให้ทุก role
+   * ตามเดิม เพราะการพิมพ์เอกสารเป็นงานประจำวันของทุกคน
+   */
+  var WRITE_ACTIONS = { save: true, 'delete': true, rollback: true };
 
   function isBrowserAction(action) {
     // newTelemetry defaults a missing action to 'render' — same as the switch's
@@ -146,6 +172,20 @@ define([
       errorId: tel.errorId,
       message: e && e.message ? e.message : String(e),
       ref: 'เกิดข้อผิดพลาดในการสร้าง PDF — แจ้งทีม Teibto พร้อมรหัสอ้างอิง ' + tel.errorId
+    }));
+  }
+
+  /**
+   * คำปฏิเสธเมื่อ role ไม่มีสิทธิ์แก้เทมเพลต (#189). ทุก write action ถูกเรียกผ่าน
+   * fetch จาก SPA จึงเป็น JSON เสมอ · `denied:true` แยกจาก error ทั่วไปเพื่อให้ SPA
+   * ขึ้นข้อความ "ดูได้แต่แก้ไม่ได้" แทนที่จะชวนให้ผู้ใช้กดลองใหม่
+   */
+  function writeDeniedJson(response, e) {
+    response.setHeader({ name: 'Content-Type', value: 'application/json; charset=utf-8' });
+    response.write(JSON.stringify({
+      error: true,
+      denied: true,
+      message: e.message
     }));
   }
 
@@ -464,7 +504,12 @@ define([
 
   /**
    * Save template (POST).
-   * Body: { id?, name, data, xml, rectype, isDefault? }
+   * Body: { id?, name, data, xml, rectype, isDefault?, note? }
+   *
+   * เขียนทับเนื้อเทมเพลตได้เหมือนเดิม แต่ไม่ทำให้ของเดิมหาย (#189): เวอร์ชันก่อนหน้า
+   * ถูก snapshot ไว้ก่อนเสมอ ถ้าเทมเพลตนั้นยังไม่เคยมีประวัติ (มีอยู่ก่อนฟีเจอร์นี้)
+   * จะเก็บสถานะปัจจุบันเป็นเวอร์ชัน baseline ให้ก่อน — ไม่งั้นการ save ครั้งแรก
+   * หลัง deploy จะกลืน XML ที่ใช้งานจริงอยู่ไปโดยไม่มีทางถอย
    */
   function saveTemplate(context) {
     if (context.request.method !== 'POST') {
@@ -484,6 +529,7 @@ define([
 
     if (tplId) {
       rec = record.load({ type: TPL_RECORD_TYPE, id: tplId });
+      seedBaselineVersion(tplId, rec);
     } else {
       rec = record.create({ type: TPL_RECORD_TYPE });
     }
@@ -508,7 +554,47 @@ define([
 
     var savedId = rec.save();
 
-    sendJson(context, { id: savedId, success: true });
+    var snap = tplAudit.snapshot({
+      tplId: savedId,
+      action: tplId ? 'update' : 'create',
+      name: body.name || 'Untitled',
+      rectype: body.rectype || '',
+      xml: body.xml,
+      data: body.data || '',
+      note: body.note || ''
+    });
+
+    tplAudit.auditWrite(tplId ? 'update' : 'create', {
+      tplid: String(savedId),
+      rectype: body.rectype || '',
+      name: body.name || 'Untitled',
+      isDefault: body.isDefault === true,
+      version: snap.versionNo
+    });
+
+    sendJson(context, { id: savedId, success: true, version: snap.versionNo });
+  }
+
+  /**
+   * เทมเพลตที่มีอยู่ก่อนฟีเจอร์ประวัติ (#189) ยังไม่มีเวอร์ชันสักตัว — เก็บสถานะ
+   * ปัจจุบันเป็น baseline **ก่อน** จะเขียนทับ เพื่อให้ save ครั้งแรกหลัง deploy
+   * ยังย้อนกลับได้ · เทมเพลตที่มีประวัติแล้วไม่ต้องทำอะไร (เวอร์ชันล่าสุด = ของที่อยู่บน record)
+   */
+  function seedBaselineVersion(tplId, rec) {
+    if (tplAudit.latestVersionNo(tplId) > 0) return;
+
+    var currentXml = rec.getValue({ fieldId: TPL_FLD_XML });
+    if (!currentXml) return; // ไม่มีอะไรให้กู้คืน
+
+    tplAudit.snapshot({
+      tplId: tplId,
+      action: 'baseline',
+      name: rec.getValue({ fieldId: TPL_FLD_NAME }) || '',
+      rectype: rec.getValue({ fieldId: TPL_FLD_REC_TYPE }) || '',
+      xml: currentXml,
+      data: rec.getValue({ fieldId: TPL_FLD_DATA }) || '',
+      note: 'สถานะก่อนเริ่มเก็บประวัติเวอร์ชัน'
+    });
   }
 
   /**
@@ -530,22 +616,127 @@ define([
     var tplId = context.request.parameters.tplid;
     if (!tplId) throw new Error('Missing tplid');
 
-    var wasDefault = false;
-    try {
-      wasDefault = record.lookupFields({
-        type: TPL_RECORD_TYPE,
-        id: tplId,
-        columns: [TPL_FLD_IS_DEFAULT]
-      })[TPL_FLD_IS_DEFAULT] === true;
-    } catch (e) {
-      // Record already gone / unreadable — let record.delete below surface
-      // the real error (R4: no silent swallow).
-      wasDefault = false;
-    }
+    // #189: อ่านของจริงออกมาเก็บเป็นเวอร์ชันสุดท้าย **ก่อน** ลบ — การลบเทมเพลตที่ใช้
+    // ออกใบกำกับภาษีเป็น action ที่ย้อนไม่ได้ที่สุดใน product นี้ ประวัติจึงต้องมีเนื้อไฟล์
+    // ติดไปด้วย ไม่ใช่แค่บรรทัดว่า "ถูกลบแล้ว" (rollback สร้าง record ใหม่จากแถวนี้ได้)
+    var rec = record.load({ type: TPL_RECORD_TYPE, id: tplId });
+    var wasDefault = rec.getValue({ fieldId: TPL_FLD_IS_DEFAULT }) === true;
+    var recType = rec.getValue({ fieldId: TPL_FLD_REC_TYPE }) || '';
+
+    var snap = tplAudit.snapshot({
+      tplId: tplId,
+      action: 'delete',
+      name: rec.getValue({ fieldId: TPL_FLD_NAME }) || '',
+      rectype: recType,
+      xml: rec.getValue({ fieldId: TPL_FLD_XML }) || '',
+      data: rec.getValue({ fieldId: TPL_FLD_DATA }) || '',
+      note: wasDefault ? 'เป็น default ของ ' + recType + ' ตอนที่ถูกลบ' : ''
+    });
 
     record.delete({ type: TPL_RECORD_TYPE, id: tplId });
 
-    sendJson(context, { success: true, wasDefault: wasDefault });
+    tplAudit.auditWrite('delete', {
+      tplid: String(tplId),
+      rectype: recType,
+      wasDefault: wasDefault,
+      version: snap.versionNo
+    });
+
+    sendJson(context, { success: true, wasDefault: wasDefault, version: snap.versionNo });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // VERSION HISTORY + ROLLBACK (#189)
+  // ═══════════════════════════════════════════════════
+
+  /**
+   * ประวัติการแก้ของเทมเพลตหนึ่งตัว (GET) — ใคร role ไหน ทำอะไร เมื่อไหร่
+   * เปิดให้ทุก role อ่านได้เหมือน list/get: การรู้ว่าใครแก้เอกสารเป็นข้อมูลที่ควรโปร่งใส
+   * ในทีม ส่วนการ **เปลี่ยน** ยังคงต้องมีสิทธิ์
+   */
+  function templateHistory(context) {
+    var tplId = context.request.parameters.tplid;
+    if (!tplId) throw new Error('Missing tplid');
+
+    var limit = parseInt(context.request.parameters.limit, 10) || 100;
+
+    sendJson(context, {
+      tplid: String(tplId),
+      canEdit: auth.canEditTemplates(),
+      keepPayload: tplAudit.PAYLOAD_KEEP,
+      versions: tplAudit.history(tplId, limit)
+    });
+  }
+
+  /**
+   * ย้อนเทมเพลตกลับไปเวอร์ชันหนึ่ง (POST) — params: tplid, version
+   *
+   * ไม่เคยลบประวัติ: การย้อนกลับเขียนเป็น **เวอร์ชันใหม่** ที่มีเนื้อของเวอร์ชันเก่า
+   * ดังนั้นย้อนของย้อนได้ และประวัติยังเล่าเรื่องตามลำดับเวลาจริง
+   *
+   * เทมเพลตที่ถูกลบไปแล้วก็ย้อนได้ — สร้าง record ใหม่จาก snapshot (ธง default
+   * ไม่ตามมาด้วย เพราะการกู้คืนต้องไม่แย่ง Print ของ record type นั้นกลับไปเงียบ ๆ)
+   */
+  function rollbackTemplate(context) {
+    if (context.request.method !== 'POST') {
+      throw new Error('POST required for rollback');
+    }
+
+    var params = context.request.parameters;
+    var tplId = params.tplid;
+    var wanted = params.version;
+
+    if (!tplId) throw new Error('Missing tplid');
+    if (!wanted) throw new Error('Missing version — ระบุเวอร์ชันที่ต้องการย้อนกลับไป');
+
+    var src = tplAudit.readVersion(tplId, wanted);
+
+    var rec;
+    var recreated = false;
+    try {
+      rec = record.load({ type: TPL_RECORD_TYPE, id: tplId });
+    } catch (e) {
+      // เทมเพลตถูกลบไปแล้ว — กู้กลับมาเป็น record ใหม่ (เกณฑ์ข้อ 7 ของ #189)
+      rec = record.create({ type: TPL_RECORD_TYPE });
+      recreated = true;
+    }
+
+    rec.setValue({ fieldId: 'name', value: src.name || 'Untitled' });
+    rec.setValue({ fieldId: TPL_FLD_NAME, value: src.name || 'Untitled' });
+    rec.setValue({ fieldId: TPL_FLD_XML, value: src.xml });
+    rec.setValue({ fieldId: TPL_FLD_DATA, value: src.data });
+    if (src.rectype) {
+      rec.setValue({ fieldId: TPL_FLD_REC_TYPE, value: src.rectype });
+    }
+
+    var savedId = rec.save();
+
+    var snap = tplAudit.snapshot({
+      tplId: savedId,
+      action: 'rollback',
+      name: src.name,
+      rectype: src.rectype,
+      xml: src.xml,
+      data: src.data,
+      note: 'ย้อนกลับไปเวอร์ชัน ' + src.version + (recreated ? ' (กู้เทมเพลตที่ถูกลบไปแล้ว)' : '')
+    });
+
+    tplAudit.auditWrite('rollback', {
+      tplid: String(savedId),
+      sourceTplid: String(tplId),
+      rectype: src.rectype,
+      restoredFrom: src.version,
+      recreated: recreated,
+      version: snap.versionNo
+    });
+
+    sendJson(context, {
+      success: true,
+      id: savedId,
+      version: snap.versionNo,
+      restoredFrom: src.version,
+      recreated: recreated
+    });
   }
 
   // ═══════════════════════════════════════════════════

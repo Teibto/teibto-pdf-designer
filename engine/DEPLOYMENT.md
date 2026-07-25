@@ -115,6 +115,24 @@ GET  scriptlet.nl?script=customscript_pld_render&deploy=customdeploy_pld_render&
 | Record Type | `custrecord_pld_tpl_rectype` | Free-Form Text | invoice, salesorder, etc. |
 | Is Default | `custrecord_pld_tpl_default` | Checkbox | Default template for this type |
 
+**Custom Record 2 — ประวัติเวอร์ชัน (`customrecord_pld_tpl_version`, #189)**
+
+engine เขียนแถวหนึ่งแถวต่อการเขียนเทมเพลตหนึ่งครั้ง (สร้าง / แก้ / กู้คืน / ลบ) — **ห้ามแก้ด้วยมือ** และห้ามลบทิ้ง เพราะเป็นทั้งทางถอยกลับและร่องรอยว่าใครแก้เอกสาร
+
+| Label | ID | Type | Notes |
+|-------|----|------|-------|
+| Template Internal ID | `custrecord_pld_ver_tplid` | Integer | id ของเทมเพลต — ตัวเลขล้วน ไม่ใช่ List/Record เพื่อให้ประวัติรอดจากการลบเทมเพลต |
+| Version | `custrecord_pld_ver_no` | Integer | เดินหน้าทีละ 1 ต่อเทมเพลต |
+| Action | `custrecord_pld_ver_action` | Free-Form Text | create / update / rollback / delete / baseline |
+| Template Name | `custrecord_pld_ver_name` | Free-Form Text | ชื่อ ณ เวอร์ชันนั้น |
+| Record Type | `custrecord_pld_ver_rectype` | Free-Form Text | |
+| Changed By (ID) / Changed By / Role | `custrecord_pld_ver_userid` / `_username` / `_roleid` | Free-Form Text | ชื่อเก็บเป็นข้อความ ประวัติจึงอ่านได้แม้พนักงานลาออก |
+| BFO XML / Designer Data | `custrecord_pld_ver_xml` / `_data` | Long Text | เนื้อของเวอร์ชันนั้น |
+| Note | `custrecord_pld_ver_note` | Free-Form Text | เช่น ย้อนกลับไปเวอร์ชันไหน |
+| Payload Pruned | `custrecord_pld_ver_pruned` | Checkbox | เนื้อถูกตัดตามโควตาแล้ว — แถวยังอยู่ แต่กู้คืนไม่ได้ |
+
+> เก็บเนื้อไฟล์ไว้ **20 เวอร์ชันล่าสุดต่อเทมเพลต** เวอร์ชันที่เก่ากว่านั้นถูกตัดเฉพาะ XML/JSON ทิ้งเพื่อไม่ให้ CLOBTEXT โตไม่มีเพดานบน account ลูกค้า — แถว audit ไม่เคยถูกลบ
+
 ---
 
 ## Step 2: Build App
@@ -226,6 +244,28 @@ SuiteScripts/
 > ⚠️ **ต้องใช้ THSarabunPSK เท่านั้น — ห้าม THSarabunNew (#32).** BFO ของ NetSuite **ไม่ apply GPOS mark positioning**; THSarabunNew ออกแบบให้วรรณยุกต์/สระ (่ ้ ั ิ ี ึ ื ุ ู) พึ่ง GPOS ดึงลง → บน BFO mark ลอยหลุดจากฐาน (เห็นชัดบนฐานเตี้ย เช่น น้ำ ค่า). THSarabunPSK วาง mark ถูกใน glyph outline เอง จึง render ถูกโดยไม่พึ่ง GPOS (พิสูจน์ด้วย render จริงบน SB2 2026-07-17 + ตรงกับ Suitelet PFTS ที่ใช้อยู่). หมายเหตุ: template ยังใช้ label `font-family: THSarabunNew` เป็น BFO font-family identifier เฉย ๆ — ตัวฟอนต์ที่ embed จริงมาจาก URL ใน config (ต้องชี้ไป THSarabunPSK)
 >
 > ⚠️ พิสูจน์แล้วบน SB2 (2026-07-17): font-family ที่ไม่ embed — รวมถึง `NotoSansThai` — ทำให้ **glyph ไทยถูก drop เงียบ ๆ** ใน PDF (ไม่ error) — เอกสารไทยทุกใบต้องตั้ง font URL บน config เสมอ
+
+---
+
+## Template Governance — ใครแก้เทมเพลตได้ (#189)
+
+Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Administrator` เพราะ **การพิมพ์** ต้องอ่าน transaction / ฟอนต์ / config ข้าม subsidiary ได้ ผลข้างเคียงคือสิทธิ์ระดับ record ของ NetSuite ไม่ได้กันการเขียนเทมเพลตไว้เลย engine จึงตรวจสิทธิ์เอง ก่อนทุก action ที่เปลี่ยนเทมเพลต (`save` / `delete` / `rollback`).
+
+**ตั้งค่า:** ช่อง **Template Editor Roles** (`custrecord_pld_cfg_editor_roles`) บน config record — ใส่ internal id ของ role คั่นด้วย comma เช่น `1017,1042` (ดู id ที่ Setup > Users/Roles > Manage Roles คอลัมน์ Internal ID)
+
+| ค่าในช่อง | ใครแก้เทมเพลตได้ |
+|---|---|
+| ว่าง (ค่าตั้งต้น) | **Administrator เท่านั้น** |
+| `1017` | Administrator + role 1017 |
+
+- เป็นสิทธิ์ระดับ **account** ไม่ผูก subsidiary — engine อ่าน union ของ config record ที่ active ทุกใบ เพราะเทมเพลตหนึ่งตัวใช้พิมพ์ได้ทั้ง account (`customrecord_pld_template` ไม่มีช่อง subsidiary)
+- Administrator (role 3) อนุญาตเสมอ — กัน account ล็อกตัวเองออกจากการตั้งค่าของตัวเอง
+- **fail-closed**: config อ่านไม่ได้ / ยังไม่ได้ deploy field / ไม่มี config record = เหลือ Administrator อย่างเดียว พร้อม log บอกสาเหตุ ไม่มีทางที่ config ผิดแล้วเปิดให้ทุก role
+- การพิมพ์ (`render`, `preview`, พิมพ์เป็นชุด) และการอ่าน (`list`, `get`, `history`) **ไม่ถูกจำกัด** — เป็นงานประจำวันของทุกคน
+
+**ตรวจว่าใครแก้อะไรไป:** ทุกการเขียนทิ้งไว้สองที่ — แถวใน `customrecord_pld_tpl_version` (อยู่บน account ถาวร) และ `log.audit` หนึ่งบรรทัดใน Script Execution Log (`PLD template update` / `… delete` / `… rollback` / `PLD template write denied`) ที่มี `userId` `userName` `roleId` `tplid` `version` ครบ
+
+> ⚠️ **ยืนยัน roleId สดหลัง deploy ครั้งแรกของทุก account** — login ด้วย role ที่ไม่ใช่ Administrator แล้วกดบันทึกเทมเพลตหนึ่งครั้ง จากนั้นอ่าน `roleId` ใน audit line: ถ้าขึ้น `3` แปลว่า account นี้ให้ `runtime.getCurrentUser().role` ตามค่า run-as ของ deployment ไม่ใช่ role จริงของผู้ใช้ → ด่านนี้เปิดให้ทุกคนโดยปริยาย ต้องกันที่ชั้น deployment แทน (ตั้ง Audience เป็นเฉพาะ role ที่แก้ได้ แล้วแยก deployment ของการพิมพ์ออก) unit test พิสูจน์ข้อนี้ไม่ได้โดยธรรมชาติ
 
 ---
 
@@ -349,18 +389,25 @@ SuiteScripts/
 | `app` | GET | rectype, recid | Serve designer app |
 | `load-record` | GET | rectype, recid | Load record as JSON |
 | `list-templates` | GET | rectype | List saved templates |
-| `save-template` | POST | body JSON | Save template to CR |
-| `generate-bfo` | POST | body JSON | Save BFO to File Cabinet |
+
+> Suitelet ตัวนี้ **อ่านอย่างเดียวตั้งแต่ #189** — POST ทุกแบบถูกปฏิเสธ (`save-template` และ `generate-bfo` ถูกถอดออก) ทางเขียนเทมเพลตมีเส้นเดียวคือ Renderer Suitelet ซึ่งมีด่านสิทธิ์ + ประวัติเวอร์ชัน
 
 ### Renderer Suitelet (`pld_sl_render_pdf.js`)
 
-| Action | Method | Params | Description |
-|--------|--------|--------|-------------|
-| `render` | GET | rectype, recid, tplid?, download? | Generate PDF |
-| `preview` | GET | tplid | Preview with sample data |
-| `list` | GET | rectype | List available templates |
-| `get` | GET | tplid | Get single template |
-| `save` | POST | body JSON | Save/update template |
+| Action | Method | Params | Description | ต้องมีสิทธิ์แก้ |
+|--------|--------|--------|-------------|:--:|
+| `render` | GET | rectype, recid, tplid?, download? | Generate PDF | |
+| `preview` | GET | tplid | Preview with sample data | |
+| `preview-live` | POST | body JSON | Render XML ที่ยังไม่บันทึก | |
+| `list` | GET | rectype | List available templates | |
+| `get` | GET | tplid | Get single template | |
+| `history` | GET | tplid, limit? | ประวัติเวอร์ชันของเทมเพลต (#189) | |
+| `version` | GET | — | version stamp ที่ deploy ไว้ | |
+| `save` | POST | body JSON | Save/update template | ✓ |
+| `delete` | POST | tplid | ลบเทมเพลต | ✓ |
+| `rollback` | POST | tplid, version | กู้คืนเวอร์ชันเก่า (#189) | ✓ |
+
+action ที่ต้องมีสิทธิ์และถูกปฏิเสธ ตอบ `{"error":true,"denied":true,"message":"…"}` — ไม่ใช่หน้า error ของ render
 
 ---
 
