@@ -11,9 +11,11 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { lintBfoXml, type LintReport } from '../../services/bfo-lint.service';
-import { getCachedBindingContract } from '../../services/netsuite-adapter.service';
 import { showToast } from '../shared/toast-notification';
-import { getNsContext, isNetSuiteEnv, hasThaiFontConfigured } from '../../services/netsuite-adapter.service';
+import {
+  getNsContext, isNetSuiteEnv, hasThaiFontConfigured,
+  getCachedBindingContract, fetchNsSampleData,
+} from '../../services/netsuite-adapter.service';
 import { recordTypeOptions, DEFAULT_RECORD_TYPE } from '../../constants/record-types';
 import '../shared/modal';
 
@@ -54,7 +56,7 @@ export class PldBfoExportModal extends LitElement {
       margin-bottom: 16px;
     }
 
-    /* ฟอนต์ไทยไม่ได้ตั้งใน config (#156) — เตือนก่อนที่ผู้ใช้จะไปเจอ PDF ที่ไทยหาย */
+    /* ผลตรวจกับดัก BFO (#191) — error บล็อกการบันทึก, warning แค่เตือน */
     .lint-box {
       border-radius: 6px;
       padding: 10px 12px;
@@ -83,6 +85,7 @@ export class PldBfoExportModal extends LitElement {
     .lint-box .fix { color: var(--color-text-dim, #8a8ca0); }
     .lint-box code { font-size: 11px; }
 
+    /* ฟอนต์ไทยไม่ได้ตั้งใน config (#156) — เตือนก่อนที่ผู้ใช้จะไปเจอ PDF ที่ไทยหาย */
     .font-warn {
       margin: 0 0 16px;
       padding: 10px 12px;
@@ -282,6 +285,24 @@ export class PldBfoExportModal extends LitElement {
   updated(changed: Map<string, unknown>) {
     if (changed.has('open') && this.open) {
       this._generatePreview();
+      this._ensureBindingContract();
+    }
+  }
+
+  /**
+   * ดึง binding contract จาก engine ถ้ายังไม่มีในรอบนี้ แล้ว lint ใหม่ (#193).
+   *
+   * lint เตือน "ฟิลด์นี้ engine ไม่ได้จ่าย" ได้ก็ต่อเมื่อรู้ contract — เดิมมันถูกเติม
+   * เฉพาะตอนผู้ใช้กดโหลดข้อมูลตัวอย่าง คำเตือนจึงขึ้นบ้างไม่ขึ้นบ้างโดยที่ผู้ใช้ไม่รู้ว่า
+   * ทำไม · ล้มเหลวก็ไม่เป็นไร กฎที่เหลือยังตรวจครบ ด่านตอนบันทึกจึงไม่อ่อนลง
+   */
+  private async _ensureBindingContract() {
+    if (!isNetSuiteEnv() || getCachedBindingContract()) return;
+    try {
+      await fetchNsSampleData(this.recordType);
+      this._generatePreview();
+    } catch {
+      // contract โหลดไม่ได้ = ไม่มีคำเตือนเรื่องฟิลด์นอกสัญญาเท่านั้น
     }
   }
 
