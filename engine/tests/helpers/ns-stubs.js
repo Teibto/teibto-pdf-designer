@@ -83,7 +83,10 @@ function recordStub({ id = 1, values = {}, texts = {}, sublists = {} } = {}) {
 const formatStub = {
   Type: { DATE: 'date', DATETIME: 'datetime' },
   format({ value, type }) {
-    if (!(value instanceof Date)) return String(value == null ? '' : value);
+    // cross-realm: a Date built inside the AMD sandbox is not `instanceof Date` here
+    if (Object.prototype.toString.call(value) !== '[object Date]') {
+      return String(value == null ? '' : value);
+    }
     const dd = String(value.getDate()).padStart(2, '0');
     const mm = String(value.getMonth() + 1).padStart(2, '0');
     const yyyy = value.getFullYear();
@@ -135,11 +138,23 @@ const xmlStub = {
   },
 };
 
-/** N/runtime stub. */
-function runtimeStub({ user = { id: 9, name: 'QA Tester', email: 'qa@example.test' }, script = { id: 'customscript_pld_render', deploymentId: 'customdeploy_pld_render' } } = {}) {
+/**
+ * N/runtime stub.
+ *
+ * `usage` models the governance budget the batch print screen steers by (#181):
+ * pass a function to return a falling sequence, or a number for a fixed budget.
+ */
+function runtimeStub({
+  user = { id: 9, name: 'QA Tester', email: 'qa@example.test' },
+  script = { id: 'customscript_pld_render', deploymentId: 'customdeploy_pld_render' },
+  usage,
+} = {}) {
+  const currentScript = Object.assign({
+    getRemainingUsage: () => (typeof usage === 'function' ? usage() : (usage == null ? 1000 : usage)),
+  }, script);
   return {
     getCurrentUser: () => user,
-    getCurrentScript: () => script,
+    getCurrentScript: () => currentScript,
     EnvType: { SANDBOX: 'SANDBOX', PRODUCTION: 'PRODUCTION' },
     envType: 'SANDBOX',
   };
@@ -150,17 +165,23 @@ function runtimeStub({ user = { id: 9, name: 'QA Tester', email: 'qa@example.tes
  * positional getValue(fieldId) like the real search.Result.
  */
 function searchStub(rows = []) {
+  const pick = (bag, field) => {
+    const key = typeof field === 'object' && field ? field.name : field;
+    return Object.prototype.hasOwnProperty.call(bag || {}, key) ? bag[key] : '';
+  };
   const results = rows.map((r) => ({
     id: r.id,
-    getValue: (field) => {
-      const key = typeof field === 'object' && field ? field.name : field;
-      return Object.prototype.hasOwnProperty.call(r.values || {}, key) ? r.values[key] : '';
-    },
+    getValue: (field) => pick(r.values, field),
+    getText: (field) => pick(r.texts, field),
   }));
   const created = [];
+  const columns = [];
   return {
     created,
+    columns,
     module: {
+      Sort: { ASC: 'ASC', DESC: 'DESC', NONE: 'NONE' },
+      createColumn(opts) { columns.push(opts); return opts; },
       create(opts) {
         created.push(opts);
         return {

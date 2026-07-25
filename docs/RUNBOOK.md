@@ -28,7 +28,7 @@
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
-| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 69 passed |
+| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 81 passed |
 | Template pack (จาก repo root) | `bash scripts/validate-templates.sh` | ✅ ผ่านทุกไฟล์ |
 
 CI `quality-gate` รัน lint + vitest + e2e + template validator + engine unit test + secret-scan — ตั้งแต่ #155 **ครอบ `engine/` ด้วย** (`node --check` ทุกไฟล์ + `node --test`) ไม่ต้องเช็ค syntax มือแล้ว แต่ change ที่แตะ BFO output ยังต้อง QA สดบน SB2 เหมือนเดิม
@@ -48,6 +48,7 @@ CI `quality-gate` รัน lint + vitest + e2e + template validator + engine un
 - render engine ต้องไม่พังเงียบ (R4) — fail ต้อง error ให้เห็น ไม่คืน PDF เปล่า · เวลาเพิ่ม log ใช้ structured `N/log` + `errorId` correlation (fail ยิง `log.error` พร้อม context ครบ และแนบ `errorId` ใน response · success ยิง `log.audit` ครั้งเดียว) ดู `pld_sl_render_pdf.js` (#149)
 - **รูปร่างของ error ขึ้นกับคนอ่าน (#157)**: action ที่เบราว์เซอร์เปิดเอง (`render`, `preview`, ไม่ระบุ action) คืนหน้า HTML ไทย + `errorId` · action ที่ designer เรียกผ่าน fetch (`list` `get` `save` `delete` `preview-live` `version`) คืน JSON · **ห้ามส่ง `stack` กลับ client ทั้งสองทาง** — stack อยู่ใน Script Execution Log อย่างเดียว · เพิ่ม action ใหม่ที่เบราว์เซอร์เปิดตรง ต้องใส่ใน `BROWSER_ACTIONS` ไม่งั้นผู้ใช้เจอ JSON
 - **render core อยู่ที่ `pld_lib_render.js` ที่เดียว (#181)** — โหลด template + ตีความชุดสำเนา + ประกอบ renderer (data source `record`/`copy`/`company`/`context`) + รวม `<pdfset>` · Suitelet พิมพ์ทีละใบ, live preview และการพิมพ์เป็นชุด เรียก lib ตัวนี้ทั้งหมด · **ห้ามเรียก `addCustomDataSource` จากไฟล์อื่น** — unit test `render-core.test.js` fail ทันทีถ้ามีไฟล์ที่สองเริ่ม bind เอง (กันไม่ให้ product กลับไปมีหลาย render path อีก)
+- **พิมพ์เป็นชุดถูกจำกัดด้วย governance ไม่ใช่ด้วยตัวเลขที่ตั้งไว้ (#181)** — `pld_sl_batch_print.js` วัด `getRemainingUsage()` คร่อมการ render แต่ละใบ แล้วใช้ต้นทุนที่แพงที่สุดที่วัดได้ตัดสินใจว่าจะขึ้นใบถัดไปไหว (กันไว้ 100 units ให้ขั้นตอนรวมไฟล์) · ผลลัพธ์มีสองแบบเท่านั้น: **ครบทุกใบ → PDF** หรือ **ไม่ครบ → หน้าสรุป** ที่บอกว่าใบไหนสำเร็จ/ล้มเหลว/ยังไม่ได้พิมพ์ ห้ามส่งไฟล์ที่ขาดใบไปเงียบ ๆ (R4) · หน้าจอนี้ค้นเอกสารด้วย **saved-search API ไม่ใช่ SuiteQL** เพราะ search รู้จัก record type ตรง ๆ ไม่ต้องแปลงเป็น type code เอง (บทเรียน #174)
 - SDF partial deploy เมื่อแก้ 1-2 ไฟล์ — backup `engine/src/deploy.xml` → เขียน minimal → `suitecloud project:validate --server` → `project:deploy` (รันผ่าน **Bash** ไม่ใช่ PowerShell foreground) → **restore `deploy.xml` เต็มเสมอ** · `project.json` (authid) gitignore ไว้
 - full deploy คือ `scripts/deploy.sh` — stamp version แล้ว build กับ stage bundle แล้ว loop `defaultAuthId` ต่อ account พร้อมสรุป PASS/FAIL · ดู version ที่ deploy จาก account ผ่าน `?action=version`
 - อ่าน Script Execution Log บน account — เปิด `script.nl?id=<scriptid>` (ไม่ใช่ `scriptrecord.nl` ที่จะขึ้น "Record does not exist") แล้วคลิก subtab `#executionlogtxt` log จะขึ้น inline

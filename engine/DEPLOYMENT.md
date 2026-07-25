@@ -251,7 +251,31 @@ SuiteScripts/
 
 ---
 
-### Script 3 — Transaction Buttons (User Event)
+### Script 3 — Batch Print (Suitelet, #181)
+
+| Field | Value |
+|-------|-------|
+| Type | Suitelet |
+| Name | PLD - Batch Print |
+| ID | `customscript_pld_batch` |
+| Script File | `pld_sl_batch_print.js` |
+
+**Deploy:**
+
+| Field | Value |
+|-------|-------|
+| Title | PLD Batch Print |
+| ID | `customdeploy_pld_batch` |
+| Status | Released |
+| Audience | All Roles ที่ต้องการพิมพ์เอกสารเป็นชุด |
+
+**เปิดใช้งาน:** เปิด URL ของ deployment ตรง ๆ (Customization → Scripting → Scripts → PLD - Batch Print → Deployments → คลิกที่ deployment แล้วดู External/Internal URL) หรือทำ **Center Link** ให้ผู้ใช้กดจากเมนู: Customization → Centers and Tabs → Center Links → New โดยชี้ไป URL เดียวกัน
+
+**ข้อจำกัดที่ต้องบอกผู้ใช้:** Suitelet มีโควตา 1,000 usage units ต่อครั้ง สคริปต์วัดต้นทุนจริงต่อใบตอนรันแล้วหยุดก่อนโควตาหมด — เอกสารทั่วไปพิมพ์ได้ราวสิบกว่าใบต่อครั้ง ถ้าเลือกเกิน ระบบขึ้นหน้าสรุปว่าพิมพ์ได้กี่ใบ เหลือกี่ใบ พร้อมปุ่มพิมพ์ส่วนที่เหลือ (ไม่ตัดทิ้งเงียบ) · ชุดใหญ่กว่านั้นจะย้ายไป Map/Reduce ใน PR ถัดไปของ #181
+
+---
+
+### Script 4 — Transaction Buttons (User Event)
 
 | Field | Value |
 |-------|-------|
