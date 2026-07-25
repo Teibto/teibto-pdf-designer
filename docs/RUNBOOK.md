@@ -79,6 +79,7 @@ Skeleton บังคับ copy จาก `templates/master/tax-invoice.xml` �
 | CSS `object-fit` `text-overflow` `@page` margin box `counter(page)` | หลีกเลี่ยง (BFO เมินเงียบ) | 3, 5 |
 | `<div>` ระดับ body | `<p>` หรือ `<table>` (BFO ทิ้ง div ทั้ง element เงียบ) | 10 |
 | สตริงไทยยาวตัดกลางคำ | แทรก ZWSP `\x200B` ระหว่างหน่วย (BFO ไม่มี Thai word-break) | 35 |
+| `<img>` ที่กำหนดขนาดด้านเดียว (`width` อย่างเดียว · `height` อย่างเดียว · `max-width`) | ระบุ **`width` และ `height` คู่กันเสมอ** — BFO ย่อภาพก็ต่อเมื่อได้กล่องครบสองแกน ให้ค่าด้านเดียวมันเมินแล้ววาดขนาดจริง แล้วโดนตัดตามขอบ cell/หน้าเงียบ ๆ (โลโก้ของ account จึงล้นหน้าและดันเนื้อหาตกหน้า) | 178 |
 | ไม่มี marker `pld:rectype <recordtype>` ใน comment หัวไฟล์ | ใส่เสมอ — บอกว่า template ผูกกับ record type ไหน (validator ใช้เลือกว่าจะเทียบ binding contract แบบ curated หรือข้าม) | 155 |
 | bind key ที่ engine ไม่ได้จ่ายสำหรับ rectype นั้น | ใช้ key ใน contract หรือเพิ่ม alias ที่ `pld_lib_invoice_data.js` — ไม่งั้นพิมพ์ว่างเงียบ | 155 |
 | **format ตัวเลขใน template** — `?string("#,##0.00")` / `?string["#,##0.00"]` | พิมพ์ค่าที่ engine format มาแล้ว (`${record.totalText}` `${line.amountText}` `${record.bahtText}`) | 165 |
