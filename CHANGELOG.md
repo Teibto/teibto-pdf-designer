@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Master template pack พิมพ์ออกมาฟิลด์ว่างทั้งใบ + สำเนาขึ้นป้าย "ต้นฉบับ" ทั้ง 2 ชุด** (#155) — master ทั้ง 6 ไฟล์ใน `templates/master/` เขียนตาม schema record ดิบ (`${record.tranid}`, `<#list (record.item)![]>`, `${record.total}`) แต่ engine bind object จาก `pld_lib_invoice_data.js` แทน record ดิบสำหรับ rectype ที่ curated (invoice/creditmemo/estimate/salesorder/purchaseorder) → ทุก `${record.*}` resolve ไม่ได้ และ binding null-safe (กฎ #2) เปลี่ยน mismatch เป็น "ว่าง" ไม่ใช่ error: PDF ที่ได้ไม่มีเลขที่/วันที่/ลูกค้า/ที่อยู่, ตารางสินค้า 0 บรรทัด, ยอด `0.00` + `(ศูนย์บาทถ้วน)` และ `${record.custbody_doc_copy_label}` fallback ทำให้สำเนาของใบกำกับภาษีขึ้น "ต้นฉบับ (Original)" เหมือนต้นฉบับ. แก้โดยทำ curated object เป็น superset: เพิ่มชั้น raw-record alias 19 key (`tranid` `trandate` `duedate` `entity` `billaddress` `shipaddress` `memo` `otherrefnum` `terms` `salesrep` `employee` `custbody_buyer_taxid` `custbody_buyer_branch` `custbody_doc_copy_label` `item[]` `subtotal` `discounttotal` `taxtotal` `total`) — ยอดกับค่าในแถวเป็น **number** (curated `totals.*` เป็น string มี comma ซึ่งทำ `?string["#,##0.00"]`/`pldBahtText()` พังทั้งใบ), `subtotal + discounttotal` เท่ากับ Base Total ตามที่ master คิดเลข, และ `custbody_doc_copy_label` มาจาก copy ที่กำลังเรนเดอร์จริง (`ต้นฉบับ (Original)` / `สำเนา (Copy)`) ทับ field ที่ account อาจเก็บไว้ ไม่แตะไฟล์ master (นอกจากเพิ่ม marker) จึงไม่ต้อง re-save template ที่ deploy ไปแล้ว
+
+### Added
+- **Engine unit test + CI ครอบ `engine/`** (#155) — เดิม CI ไม่แตะ `engine/` เลย SuiteScript ตรวจแค่ `node --check` มือ. เพิ่ม `engine/tests/` รันด้วย `node --test` (ไม่ต้องมี NetSuite session): AMD shim `helpers/amd.js` mount โมดูลจริงโดย stub เฉพาะ `N/*` — sibling lib (baht text, Thai wordbreak) โหลดของจริง; 8 test คุม binding contract, ค่าเป็น number, copy label ต่อชุด, buyer tax id fallback และ **regression ของ #155 โดยตรง**: กวาด `${record.*}`/`${line.*}` ที่ master แต่ละไฟล์ใช้จริง แล้วยืนยันว่ามีอยู่ใน object ที่ engine สร้าง (ทั้ง 8 test แดงถ้าย้อน engine กลับก่อนแก้) · quality-gate เพิ่ม step `node --check` ทุกไฟล์ + `node --test`
+- **binding-contract gate ใน `scripts/validate-templates.sh`** (#155) — validator อ่าน `CURATED_KEYS`/`RAW_ALIAS_KEYS`/`ITEM_BINDING_KEYS`/`DOC_TITLES` จาก source ของ engine แล้ว fail PR ที่ master bind key นอก contract (ข้อความบอกให้เพิ่ม alias หรือแก้ binding) · master ทุกไฟล์ต้องประกาศ `pld:rectype <recordtype>` ใน comment หัวไฟล์ — validator ใช้แยกว่าไฟล์นั้นเรนเดอร์ผ่าน curated schema หรือ record ดิบ (rectype ที่ engine ไม่ curate ข้ามการเทียบ ดู #159)
+
 ## [0.3.0] — 2026-07-24
 
 ### Added
