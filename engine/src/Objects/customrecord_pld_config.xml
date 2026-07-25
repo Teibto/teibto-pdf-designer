@@ -238,6 +238,22 @@
       <showinlist>F</showinlist>
       <storevalue>T</storevalue>
     </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_cfg_editor_roles">
+      <accesslevel>2</accesslevel>
+      <applyformatting>F</applyformatting>
+      <defaultchecked>F</defaultchecked>
+      <description>Internal id ของ role ที่แก้/ลบเทมเพลตได้ คั่นด้วย comma เช่น 1017,1042 — Administrator (role 3) ได้เสมอ · ว่าง = เฉพาะ Administrator (fail-closed) · เป็นสิทธิ์ระดับ account ไม่ผูก subsidiary เพราะเทมเพลตใช้ร่วมทั้ง account (issue #189)</description>
+      <displaytype>NORMAL</displaytype>
+      <encryptatrest>F</encryptatrest>
+      <fieldtype>TEXTAREA</fieldtype>
+      <globalsearch>F</globalsearch>
+      <isformula>F</isformula>
+      <ismandatory>F</ismandatory>
+      <label>Template Editor Roles</label>
+      <searchlevel>2</searchlevel>
+      <showinlist>F</showinlist>
+      <storevalue>T</storevalue>
+    </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_pld_cfg_subsidiary">
       <accesslevel>2</accesslevel>
       <applyformatting>F</applyformatting>

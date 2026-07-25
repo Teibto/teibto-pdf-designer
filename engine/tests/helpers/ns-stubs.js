@@ -156,14 +156,19 @@ const xmlStub = {
  * pass a function to return a falling sequence, or a number for a fixed budget.
  */
 function runtimeStub({
-  user = { id: 9, name: 'QA Tester', email: 'qa@example.test' },
+  // role 3 = Administrator: the default keeps every pre-#189 test on the allowed
+  // side of the template-permission gate, exactly as those flows behaved before it.
+  user = { id: 9, name: 'QA Tester', email: 'qa@example.test', role: 3 },
   script = { id: 'customscript_pld_render', deploymentId: 'customdeploy_pld_render' },
   usage,
+  parameters = {},
 } = {}) {
   const currentScript = Object.assign({
     getRemainingUsage: () => (typeof usage === 'function' ? usage() : (usage == null ? 1000 : usage)),
+    getParameter: ({ name }) => (Object.prototype.hasOwnProperty.call(parameters, name) ? parameters[name] : ''),
   }, script);
   return {
+    accountId: 'TSTDRV000',
     getCurrentUser: () => user,
     getCurrentScript: () => currentScript,
     EnvType: { SANDBOX: 'SANDBOX', PRODUCTION: 'PRODUCTION' },
@@ -333,8 +338,160 @@ function contextStub({ parameters = {}, method = 'GET', body = '' } = {}) {
   return { context: { request: { parameters, method, body }, response }, response };
 }
 
+// ═══════════════════════════════════════════════════
+// A LIVE RECORD STORE (#189)
+// ═══════════════════════════════════════════════════
+//
+// Template governance is about what SURVIVES a write: a version row must exist
+// after a save, the row must still be there after the template is deleted, and the
+// version number must keep climbing. Hand-fed search fixtures cannot show any of
+// that — so these two stubs share one in-memory store: N/record writes into it and
+// N/search reads back out of it.
+
+/**
+ * N/record stub backed by a mutable store.
+ *
+ * @param {Object} [seed] - { 'customrecord_x:12': { field: value, … } }
+ */
+function recordStoreStub(seed = {}) {
+  const records = {};
+  Object.keys(seed).forEach((key) => { records[key] = { ...seed[key] }; });
+
+  const saved = [];
+  const deleted = [];
+  const submitted = [];
+  let seq = 500;
+  let clock = 0;
+
+  const makeRec = (type, id, values) => {
+    const bag = { ...values };
+    return {
+      id,
+      getValue({ fieldId }) {
+        return Object.prototype.hasOwnProperty.call(bag, fieldId) ? bag[fieldId] : '';
+      },
+      setValue({ fieldId, value }) { bag[fieldId] = value; },
+      save() {
+        const rid = id == null ? String(seq++) : String(id);
+        // the platform stamps `created`; monotonic + deterministic so history
+        // assertions can read it
+        clock += 1;
+        const created = bag.created || `25/7/2026 10:${String(clock).padStart(2, '0')}`;
+        records[`${type}:${rid}`] = { ...bag, created };
+        saved.push({ type, id: rid, values: { ...bag } });
+        return rid;
+      },
+    };
+  };
+
+  return {
+    records,
+    saved,
+    deleted,
+    submitted,
+    /** rows of one type currently in the store, as plain objects */
+    rowsOf(type) {
+      return Object.keys(records)
+        .filter((k) => k.indexOf(`${type}:`) === 0)
+        .map((k) => ({ id: k.slice(type.length + 1), values: records[k] }));
+    },
+    module: {
+      Type: {},
+      load({ type, id }) {
+        const key = `${type}:${id}`;
+        if (!Object.prototype.hasOwnProperty.call(records, key)) {
+          throw new Error(`That record does not exist: ${key}`);
+        }
+        return makeRec(type, String(id), records[key]);
+      },
+      create({ type }) { return makeRec(type, null, {}); },
+      delete({ type, id }) {
+        const key = `${type}:${id}`;
+        if (!Object.prototype.hasOwnProperty.call(records, key)) {
+          throw new Error(`That record does not exist: ${key}`);
+        }
+        delete records[key];
+        deleted.push({ type, id: String(id) });
+      },
+      submitFields({ type, id, values }) {
+        const key = `${type}:${id}`;
+        submitted.push({ type, id: String(id), values: { ...values } });
+        if (records[key]) Object.assign(records[key], values);
+        return String(id);
+      },
+      lookupFields({ type, id, columns }) {
+        const key = `${type}:${id}`;
+        if (!Object.prototype.hasOwnProperty.call(records, key)) {
+          throw new Error(`That record does not exist: ${key}`);
+        }
+        const out = {};
+        columns.forEach((c) => { out[c] = records[key][c]; });
+        return out;
+      },
+    },
+  };
+}
+
+/** field name out of either a plain string or a search.Column object */
+const columnName = (field) => (typeof field === 'object' && field ? field.name : field);
+
+/** One `[field, operator, value]` filter against a stored row. */
+function matchesFilter(values, [field, op, want]) {
+  const raw = Object.prototype.hasOwnProperty.call(values, field) ? values[field] : '';
+
+  if (op === 'is' && field === 'isinactive') {
+    return (raw === true || raw === 'T' ? 'T' : 'F') === want;
+  }
+  if (op === 'is' && (want === 'T' || want === 'F')) {
+    return (raw === true || raw === 'T' ? 'T' : 'F') === want;
+  }
+  if (op === 'equalto') return Number(raw) === Number(want);
+  return String(raw) === String(want);
+}
+
+/** N/search stub reading the same store recordStoreStub writes into. */
+function storeSearchStub(store) {
+  const created = [];
+  return {
+    created,
+    module: {
+      Sort: { ASC: 'ASC', DESC: 'DESC', NONE: 'NONE' },
+      createColumn(opts) { return opts; },
+      create(opts) {
+        created.push(opts);
+        const rows = store.rowsOf(opts.type)
+          .filter((row) => (opts.filters || [])
+            .filter((f) => Array.isArray(f))
+            .every((f) => matchesFilter(row.values, f)));
+
+        const sortCol = (opts.columns || []).find((c) => c && c.sort);
+        if (sortCol) {
+          const dir = sortCol.sort === 'DESC' ? -1 : 1;
+          rows.sort((a, b) => dir * ((Number(a.values[sortCol.name]) || 0) - (Number(b.values[sortCol.name]) || 0)));
+        }
+
+        const results = rows.map((row) => ({
+          id: row.id,
+          getValue: (field) => {
+            const key = columnName(field);
+            return Object.prototype.hasOwnProperty.call(row.values, key) ? row.values[key] : '';
+          },
+          getText: () => '',
+        }));
+
+        return {
+          run: () => ({
+            getRange: ({ start = 0, end = 1000 } = {}) => results.slice(start, end),
+            each: (fn) => { results.every((row) => fn(row) !== false); },
+          }),
+        };
+      },
+    },
+  };
+}
+
 module.exports = {
   queryStub, recordStub, formatStub, logStub, companyConfigStub,
   xmlStub, runtimeStub, searchStub, renderStub, fileStub, fileSystemStub, taskStub,
-  responseStub, contextStub,
+  responseStub, contextStub, recordStoreStub, storeSearchStub,
 };

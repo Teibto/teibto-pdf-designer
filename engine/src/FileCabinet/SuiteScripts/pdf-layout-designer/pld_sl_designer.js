@@ -6,6 +6,10 @@
  * PDF Layout Flow Designer — NetSuite Suitelet Host
  * Serves the built SPA from File Cabinet and injects NetSuite context.
  *
+ * Suitelet ตัวนี้ **อ่านอย่างเดียว** (#189): เสิร์ฟ SPA, ส่ง context, โหลดข้อมูล record
+ * และ list เทมเพลต · การเขียนเทมเพลตทุกชนิดอยู่ที่ pld_sl_render_pdf ที่เดียวซึ่งมีด่าน
+ * สิทธิ์ + ประวัติเวอร์ชันครบ — ห้ามเพิ่ม path เขียนกลับมาที่นี่
+ *
  * @author Wichit Wongta
  */
 define([
@@ -16,8 +20,9 @@ define([
   'N/record',
   'N/log',
   './pld_lib_company_config',
-  './pld_lib_invoice_data'
-], function (file, runtime, url, search, record, log, companyConfig, invoiceData) {
+  './pld_lib_invoice_data',
+  './pld_lib_auth'
+], function (file, runtime, url, search, record, log, companyConfig, invoiceData, auth) {
 
   /**
    * File Cabinet path of the built SPA bundle. deploy.sh (#39) stages
@@ -45,24 +50,22 @@ define([
           return loadRecordData(context);
         case 'list-templates':
           return listSavedTemplates(context);
-        case 'save-template':
-          return; // POST only
         default:
           return serveApp(context);
       }
     }
 
     if (request.method === 'POST') {
-      const action = request.parameters.action;
-
-      switch (action) {
-        case 'save-template':
-          return saveTemplateToRecord(context);
-        case 'generate-bfo':
-          return generateBfoRecord(context);
-        default:
-          response.write(JSON.stringify({ error: 'Unknown action' }));
-      }
+      // #189: เดิมที่นี่รับ `save-template` (สำเนาที่สองของ CRUD ที่ pld_sl_render_pdf
+      // เป็นเจ้าของ) และ `generate-bfo` ที่เขียนไฟล์ XML ลง File Cabinet **โฟลเดอร์ไหน
+      // ก็ได้ตามที่ผู้เรียกส่งมา** โดยไม่ตรวจสิทธิ์อะไรเลย ทั้งคู่ไม่มี client เรียกจริง
+      // (SPA ยิง action=save/list ไปที่ render Suitelet) จึงถอดออกทั้งคู่ — ทางเขียน
+      // เทมเพลตเหลือเส้นเดียวที่มีด่านสิทธิ์และประวัติเวอร์ชัน
+      response.setHeader({ name: 'Content-Type', value: 'application/json; charset=utf-8' });
+      response.write(JSON.stringify({
+        error: true,
+        message: 'Suitelet นี้อ่านอย่างเดียว — บันทึกเทมเพลตผ่าน PLD Renderer (?action=save) เท่านั้น (#189)'
+      }));
     }
   }
 
@@ -171,6 +174,10 @@ define([
       // <link type="font"> in exported BFO XML (server BFO has no Thai fonts)
       fontRegularUrl: script.getParameter({ name: 'custscript_pld_font_regular' }) || cfg.fontRegular || null,
       fontBoldUrl: script.getParameter({ name: 'custscript_pld_font_bold' }) || cfg.fontBold || null,
+      // #189: บอก SPA ตั้งแต่ตอนเปิดว่า role นี้บันทึกได้ไหม — ผู้ใช้ที่แก้ไม่ได้ควรเห็น
+      // โหมดอ่านอย่างเดียวตั้งแต่แรก ไม่ใช่ออกแบบไปครึ่งชั่วโมงแล้วโดนปฏิเสธตอนกดบันทึก
+      // (server ยังเป็นคนตัดสินจริงทุกครั้ง — ค่านี้ใช้แค่ทำให้ UI ซื่อสัตย์)
+      canEditTemplates: auth.canEditTemplates(),
     };
 
     return ctx;
@@ -319,82 +326,6 @@ define([
 
     } catch (e) {
       log.error({ title: 'listSavedTemplates', details: e });
-      context.response.write(JSON.stringify({ error: e.message }));
-    }
-  }
-
-  /**
-   * Save template to custom record (POST).
-   */
-  function saveTemplateToRecord(context) {
-    try {
-      const body = JSON.parse(context.request.body);
-      const templateId = body.id;
-      const name = body.name;
-      const data = body.data; // JSON string of template
-      const recType = body.rectype || '';
-
-      // XML is mandatory — the engine has no generator of its own, so a template
-      // saved without XML can never render (#6, R4: no silent fallback).
-      if (!body.xml) {
-        throw new Error('Template XML is required. Export BFO XML from the designer and include it in the save payload (#6).');
-      }
-
-      let rec;
-      if (templateId) {
-        rec = record.load({ type: 'customrecord_pld_template', id: templateId });
-      } else {
-        rec = record.create({ type: 'customrecord_pld_template' });
-      }
-
-      // Built-in name is mandatory (custom record includeName=T) — set it too.
-      rec.setValue({ fieldId: 'name', value: name || 'Untitled' });
-      rec.setValue({ fieldId: 'custrecord_pld_tpl_name', value: name });
-      rec.setValue({ fieldId: 'custrecord_pld_tpl_data', value: data });
-      rec.setValue({ fieldId: 'custrecord_pld_tpl_xml', value: body.xml });
-      if (recType) {
-        rec.setValue({ fieldId: 'custrecord_pld_tpl_rectype', value: recType });
-      }
-
-      const savedId = rec.save();
-
-      context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
-      context.response.write(JSON.stringify({ id: savedId, success: true }));
-
-    } catch (e) {
-      log.error({ title: 'saveTemplateToRecord', details: e });
-      context.response.write(JSON.stringify({ error: e.message }));
-    }
-  }
-
-  // ═══════════════════════════════════════
-  // BFO RECORD GENERATION
-  // ═══════════════════════════════════════
-
-  /**
-   * Generate and save BFO XML as a File Cabinet file (POST).
-   */
-  function generateBfoRecord(context) {
-    try {
-      const body = JSON.parse(context.request.body);
-      const xmlContent = body.xml;
-      const fileName = body.filename || 'pld-template.xml';
-      const folderId = body.folderId || APP_FOLDER_ID;
-
-      const xmlFile = file.create({
-        name: fileName,
-        fileType: file.Type.XMLDOC,
-        contents: xmlContent,
-        folder: folderId,
-      });
-
-      const fileId = xmlFile.save();
-
-      context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
-      context.response.write(JSON.stringify({ fileId: fileId, success: true }));
-
-    } catch (e) {
-      log.error({ title: 'generateBfoRecord', details: e });
       context.response.write(JSON.stringify({ error: e.message }));
     }
   }
