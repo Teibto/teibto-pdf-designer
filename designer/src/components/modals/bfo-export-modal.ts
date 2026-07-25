@@ -10,6 +10,8 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
+import { lintBfoXml, type LintReport } from '../../services/bfo-lint.service';
+import { getCachedBindingContract } from '../../services/netsuite-adapter.service';
 import { showToast } from '../shared/toast-notification';
 import { getNsContext, isNetSuiteEnv, hasThaiFontConfigured } from '../../services/netsuite-adapter.service';
 import { recordTypeOptions, DEFAULT_RECORD_TYPE } from '../../constants/record-types';
@@ -28,6 +30,8 @@ export class PldBfoExportModal extends LitElement {
   @state() private useFreeMarker = true;
   @state() private includePageHeaders = true;
   @state() private xmlPreview = '';
+  /** ผลตรวจกับดัก BFO ของ XML ที่เห็นอยู่ (#191) */
+  @state() private lint: LintReport | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -51,6 +55,34 @@ export class PldBfoExportModal extends LitElement {
     }
 
     /* ฟอนต์ไทยไม่ได้ตั้งใน config (#156) — เตือนก่อนที่ผู้ใช้จะไปเจอ PDF ที่ไทยหาย */
+    .lint-box {
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .lint-box.err {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--color-danger, #ef4444);
+      color: var(--color-danger, #ef4444);
+    }
+    .lint-box.warn {
+      background: rgba(245, 166, 35, 0.1);
+      border: 1px solid var(--color-warning, #f5a623);
+      color: var(--color-warning, #f5a623);
+    }
+    .lint-box.ok {
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.5);
+      color: var(--color-text-dim, #8a8ca0);
+    }
+    .lint-box h4 { margin: 0 0 6px; font-size: 12px; }
+    .lint-box ul { margin: 0; padding-left: 18px; }
+    .lint-box li { margin-bottom: 4px; }
+    .lint-box .fix { color: var(--color-text-dim, #8a8ca0); }
+    .lint-box code { font-size: 11px; }
+
     .font-warn {
       margin: 0 0 16px;
       padding: 10px 12px;
@@ -311,6 +343,8 @@ export class PldBfoExportModal extends LitElement {
               </p>`
             : nothing}
 
+          ${this._renderLint()}
+
           <!-- XML Preview -->
           <div class="xml-preview-area">
             <div class="xml-toolbar">
@@ -345,6 +379,47 @@ export class PldBfoExportModal extends LitElement {
     `;
   }
 
+  /**
+   * ผลตรวจกับดัก BFO ของ XML ที่กำลังจะบันทึก/ดาวน์โหลด (#191).
+   *
+   * error = พิสูจน์แล้วว่าทำให้เอกสารพิมพ์ไม่ออกหรือพิมพ์ว่าง — บันทึกเข้า NetSuite
+   * ไม่ได้จนกว่าจะแก้ · warning = พิมพ์ออก แต่หน้าตาบนกระดาษอาจไม่ตรงกับที่เห็นในจอ
+   */
+  private _renderLint() {
+    const report = this.lint;
+    if (!report) return nothing;
+
+    if (report.findings.length === 0) {
+      return html`<div class="lint-box ok">✓ ตรวจกับดัก BFO แล้ว — ไม่พบปัญหา</div>`;
+    }
+
+    const group = (
+      items: typeof report.findings,
+      cls: string,
+      title: string,
+    ) => (items.length === 0 ? nothing : html`
+      <div class="lint-box ${cls}">
+        <h4>${title}</h4>
+        <ul>
+          ${items.map((f) => html`
+            <li>
+              ${f.message}
+              ${f.sample ? html`<br /><code>${f.sample}</code>` : nothing}
+              <br /><span class="fix">วิธีแก้: ${f.hint}</span>
+            </li>
+          `)}
+        </ul>
+      </div>
+    `);
+
+    return html`
+      ${group(report.errors, 'err',
+        `✕ ต้องแก้ก่อนบันทึก (${report.errors.length}) — เอกสารจะพิมพ์ไม่ออกหรือพิมพ์ออกมาว่าง`)}
+      ${group(report.warnings, 'warn',
+        `⚠ ควรตรวจ (${report.warnings.length}) — พิมพ์ออก แต่ผลบนกระดาษอาจไม่ตรงกับที่เห็นในดีไซเนอร์`)}
+    `;
+  }
+
   private _generatePreview() {
     const options: BfoExportOptions = {
       recordType: this.recordType,
@@ -356,6 +431,7 @@ export class PldBfoExportModal extends LitElement {
     // The Thai <link type="font"> is bound to the config record (#156) — nothing
     // account-specific is baked into the XML, so this output is safe to commit.
     this.xmlPreview = exportBfoXml(this.store.state, options);
+    this.lint = lintBfoXml(this.xmlPreview, getCachedBindingContract());
   }
 
   private _copyToClipboard() {

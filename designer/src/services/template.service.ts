@@ -15,12 +15,13 @@ import type { Band } from '../models/bands';
 import { createDefaultPage } from '../models/page';
 import { createDefaultPagination } from '../models/template';
 import { validateTemplate } from './validation.service';
+import { lintBfoXml, summarizeLint } from './bfo-lint.service';
 import { migrateTemplate, needsMigration, isFutureVersion, CURRENT_VERSION } from './migration.service';
 import { clearPaginationCache } from './pagination.service';
 import { elementsToBands } from './band-layout.service';
 import { extractJsonKeys } from '../state/actions';
 import { exportBfoXml, type BfoExportOptions } from './bfo-export.service';
-import { saveNsTemplate, getNsContext } from './netsuite-adapter.service';
+import { saveNsTemplate, getNsContext, getCachedBindingContract } from './netsuite-adapter.service';
 
 const TEMPLATE_PREFIX = 'pld-template-';
 
@@ -141,6 +142,20 @@ export async function saveTemplateToNetSuite(
     bands: state.bands.length ? state.bands : undefined,
     copies: state.copies && state.copies.length ? state.copies : undefined,
   });
+
+  // กับดัก BFO ที่พิสูจน์แล้วว่าทำให้เอกสารพิมพ์ไม่ออกหรือพิมพ์ว่าง ต้องตายตรงนี้ (#191).
+  // ปล่อยผ่านไปแล้วมันจะไปโผล่ตอนผู้ใช้กด Print ที่หน้างาน ซึ่งไกลจากคนที่แก้ได้ที่สุด
+  // — และเทมเพลตนั้นได้ทับของเดิมไปแล้ว (R4: ล้มให้เห็น ไม่ใช่เงียบ)
+  const lint = lintBfoXml(xml, getCachedBindingContract());
+  if (!lint.ok) {
+    throw new Error(
+      `บันทึกไม่ได้ — เทมเพลตนี้จะพิมพ์ไม่ออกหรือพิมพ์ออกมาว่าง (${lint.errors.length} ข้อ):
+` +
+      `${summarizeLint(lint)}
+` +
+      'ดูรายการเต็มและวิธีแก้ในกล่อง "🔶 NetSuite BFO"',
+    );
+  }
 
   // Fail before the POST with an actionable message, rather than let the server
   // reject an over-cap CLOBTEXT with an opaque error (#143).

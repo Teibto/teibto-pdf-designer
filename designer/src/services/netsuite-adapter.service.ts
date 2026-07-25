@@ -83,6 +83,18 @@ export interface NsContext {
   canEditTemplates?: boolean;
 }
 
+/**
+ * ข้อมูลตัวอย่าง + binding contract จาก engine (#191).
+ * contract มากับข้อมูลเสมอ เพราะ SPA ต้องไม่ถือลิสต์ key เอง — สำเนาที่สองของ
+ * contract คือทางที่มันหลุด sync แล้วผู้ใช้ออกแบบตาม key ที่ engine ไม่ได้จ่าย (#155)
+ */
+export interface NsSampleData {
+  rectype: string;
+  curated: boolean;
+  data: Record<string, unknown>;
+  contract: { record: string[]; line: string[]; copy: string[] };
+}
+
 /** Saved template metadata from NetSuite custom record */
 export interface NsTemplate {
   id: string;
@@ -389,6 +401,33 @@ export async function duplicateNsTemplate(
 }
 
 // ═══════════════════════════════════════
+// SAMPLE DATA (#191)
+// ═══════════════════════════════════════
+
+/**
+ * contract ล่าสุดที่ engine บอกมา — เก็บไว้ให้ตัว lint ใช้เตือน key ที่ engine ไม่จ่าย
+ * โดยไม่ต้องยิง request เพิ่มตอนกดบันทึก
+ */
+let cachedSample: NsSampleData | null = null;
+
+/** ข้อมูลตัวอย่าง + contract ของ record type หนึ่ง — ออกแบบได้โดยไม่ต้องมี record */
+export async function fetchNsSampleData(rectype: string): Promise<NsSampleData> {
+  const baseUrl = getRendererUrl() || getDesignerUrl();
+  const result = await suiteletFetch(baseUrl, 'sample-data', { rectype });
+  const failure = result as { error?: unknown; message?: string };
+  if (failure.error) {
+    throw new Error(failure.message || 'โหลดข้อมูลตัวอย่างจาก NetSuite ไม่สำเร็จ');
+  }
+  cachedSample = result as NsSampleData;
+  return cachedSample;
+}
+
+/** contract ที่โหลดมาแล้ว (ถ้ามี) — null เมื่อยังไม่เคยโหลดตัวอย่างในเซสชันนี้ */
+export function getCachedBindingContract(): NsSampleData['contract'] | null {
+  return cachedSample ? cachedSample.contract : null;
+}
+
+// ═══════════════════════════════════════
 // PDF RENDER (via Render Suitelet)
 // ═══════════════════════════════════════
 
@@ -441,8 +480,11 @@ export function openPdfPreview(templateId: string): void {
 export async function renderLivePreview(opts: {
   xml: string;
   rectype: string;
-  recid: string;
+  /** ไม่ต้องมีเมื่อ sample = true (#191) */
+  recid?: string;
   copies?: { th: string; en: string }[] | null;
+  /** พรีวิวด้วยข้อมูลตัวอย่างของ engine — ใช้เมื่อเปิดดีไซเนอร์โดยไม่มี record (#191) */
+  sample?: boolean;
 }): Promise<Blob> {
   const baseUrl = getRendererUrl();
   if (!baseUrl) throw new Error('Render Suitelet URL not configured');
@@ -456,7 +498,13 @@ export async function renderLivePreview(opts: {
     const response = await fetch(target.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ xml: opts.xml, rectype: opts.rectype, recid: opts.recid, copies: opts.copies }),
+      body: JSON.stringify({
+        xml: opts.xml,
+        rectype: opts.rectype,
+        recid: opts.recid,
+        copies: opts.copies,
+        sample: opts.sample === true,
+      }),
       signal: controller.signal,
     });
 

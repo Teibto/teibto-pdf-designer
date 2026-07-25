@@ -398,9 +398,10 @@ Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Admini
 |--------|--------|--------|-------------|:--:|
 | `render` | GET | rectype, recid, tplid?, download? | Generate PDF | |
 | `preview` | GET | tplid | Preview with sample data | |
-| `preview-live` | POST | body JSON | Render XML ที่ยังไม่บันทึก | |
+| `preview-live` | POST | body JSON (`xml`, `rectype`, `recid` หรือ `sample:true`) | เรนเดอร์ XML ที่ยังไม่บันทึก · `sample:true` = ใช้ข้อมูลตัวอย่างของ engine ไม่ต้องมี record (#191) | |
 | `list` | GET | rectype | List available templates | |
 | `get` | GET | tplid | Get single template | |
+| `sample-data` | GET | rectype | ข้อมูลตัวอย่าง + binding contract (#191) | |
 | `history` | GET | tplid, limit? | ประวัติเวอร์ชันของเทมเพลต (#189) | |
 | `version` | GET | — | version stamp ที่ deploy ไว้ | |
 | `save` | POST | body JSON | Save/update template | ✓ |

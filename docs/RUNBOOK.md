@@ -24,11 +24,11 @@
 | เช็ค | คำสั่ง | baseline |
 |---|---|---|
 | Type | `npx tsc --noEmit` | 0 error |
-| Unit + component | `npx vitest run` | 557 passed |
+| Unit + component | `npx vitest run` | TBD passed |
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
-| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 117 passed |
+| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | TBD2 passed |
 | Template pack (จาก repo root) | `bash scripts/validate-templates.sh` | ✅ ผ่านทุกไฟล์ |
 
 CI `quality-gate` รัน lint + vitest + e2e + template validator + engine unit test + secret-scan — ตั้งแต่ #155 **ครอบ `engine/` ด้วย** (`node --check` ทุกไฟล์ + `node --test`) ไม่ต้องเช็ค syntax มือแล้ว แต่ change ที่แตะ BFO output ยังต้อง QA สดบน SB2 เหมือนเดิม
@@ -41,6 +41,9 @@ CI `quality-gate` รัน lint + vitest + e2e + template validator + engine un
 - ชื่อ custom element ไม่ตรงชื่อไฟล์ — header คือ `pld-header` (ไม่ใช่ `pld-app-header`) · editor เดียวคือ `pld-band-view` (canvas เก่าถอดแล้ว) · band ที่ element อยู่คือ role ของมัน ดังนั้นเปลี่ยน role = ย้าย chip ข้าม band (#127)
 - flag ชั่วคราวห้ามอยู่ใน undoable state — `dragType` เคยเขียนแบบ untagged ทำให้ history middleware เก็บ snapshot เกิน แล้ว Ctrl+Z แรกเป็น no-op (#129) แก้โดยเขียนผ่าน action ที่ `tagAction(..., { undoable: false })`
 - **ฟอนต์ไทยใน XML ที่ designer สร้าง ห้าม bake URL (#156)** — `buildFontLink()` ปล่อย `<link>` ที่ bind `${(company.fontRegular!'')?xml}` ทุกครั้ง (เหมือน master pack, กฎ #32) ไม่มี path ที่ export ออกมาโดยไม่มี font link · URL File Cabinet มี token `h=` ที่หมดอายุเมื่อ re-save ไฟล์ฟอนต์ → bake ไว้แล้วภาษาไทยหายเงียบทีหลัง · account ที่ config ยังไม่มีฟอนต์ designer เตือนเองตอน save + ในโมดัล BFO (`hasThaiFontConfigured()`)
+- **กับดัก BFO ตายที่ `bfo-lint.service.ts` ก่อนบันทึกเข้า NetSuite (#191)** — `saveTemplateToNetSuite()` lint XML ก่อน POST เสมอ (จุดเดียวกับ `assertClobSize`) มี error = ไม่บันทึก · ความรุนแรงแบ่งตาม **น้ำหนักหลักฐาน** ไม่ใช่ตามชื่อกฎ: `error` = พิสูจน์แล้วว่าเอกสารพิมพ์ไม่ออก/พิมพ์ว่าง (c-ternary #1 · ไม่ null-safe #2 · ไม่ผ่าน `?xml` #184 · `?string()` บนค่าที่ยังไม่แปลงเป็นตัวเลข #165 · ฟอนต์ฝัง URL #32/#156 · รูปด้านเดียว #178 · `counter(page)` #3 · XML ไม่ well-formed), `warning` = พิมพ์ออกแต่หน้าตาอาจไม่ตรง (`<div>` · `object-fit`/`text-overflow` · key นอก binding contract) · **`scripts/validate-templates.sh` เข้มกว่าโดยตั้งใจ** เพราะ master pack เขียนมือและผ่านรีวิว ส่วน lint ต้องไม่ฟ้องผลงานปกติของ generator ไม่งั้นผู้ใช้จะกดข้ามทุกครั้ง — เพิ่มกฎใหม่ให้เพิ่มทั้งสองที่
+  - **ข้อที่ยังไม่ชี้ขาด (#191)**: generator ปล่อย `<div>` เป็นกล่องจัดวาง และ `text-overflow: ellipsis` (พร้อม comment ในโค้ดที่บอกว่า BFO รองรับ) ซึ่งขัดกับ TOOLSTACK #5/#10 — เทมเพลตจากดีไซเนอร์พิมพ์ออกจริงบน SB2 มาตลอด แปลว่ากฎเดิมแคบกว่าที่เขียนไว้ ต้องพิสูจน์สดแล้วแก้ให้ตรงกันทั้ง TOOLSTACK, validator และ lint
+- **พรีวิว BFO จริงได้โดยไม่ต้องมี record (#191)** — `preview-live` รับ `sample: true` แล้ว engine สร้างเอกสารสังเคราะห์เอง (`buildSampleData` ใน `pld_lib_invoice_data.js` — เจ้าของ contract เป็นคนถือตัวอย่าง SPA ห้ามถือลิสต์ key เอง) · เคารพชุดสำเนาเหมือน Print · `?action=sample-data&rectype=<t>` คืนทั้งข้อมูลตัวอย่างและ contract ให้ปุ่ม "โหลดข้อมูลตัวอย่าง" ใน data panel และให้ lint เตือน key ที่ engine ไม่จ่าย · คำอธิบายสินค้าแถวแรกมี `&` โดยตั้งใจ เพื่อให้กับดัก #184 ตายตอนพรีวิว ไม่ใช่ตอนลูกค้ากดพิมพ์
 - ไฟล์ source ใหม่หรือ rewrite ใส่ `@author <ชื่อจริง>` + `@since YYYY-MM-DD` (R1) ห้ามเดาชื่อ
 
 ## ⚙️ กับดัก engine (SuiteScript / SDF)

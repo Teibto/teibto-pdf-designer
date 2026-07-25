@@ -6,7 +6,8 @@
  *
  * @author Wichit Wongta
  */
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
+import { isNetSuiteEnv } from '../../services/netsuite-adapter.service';
 import { customElement, property } from 'lit/decorators.js';
 
 type JsonData = Record<string, unknown>;
@@ -195,10 +196,27 @@ export class PldDataForm extends LitElement {
     }
 
     /* ─── Primitive at top level ─── */
+    .sample-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--color-accent, #4f6ef7);
+      background: transparent;
+      color: var(--color-accent, #4f6ef7);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .sample-btn:hover { background: rgba(79, 110, 247, 0.12); }
+
     .top-field {
       padding: 6px 0;
     }
   `;
+
+  /** ขอข้อมูลตัวอย่างจาก engine (#191) — app-shell เป็นคนโหลดเข้า store */
+  private _loadSampleData() {
+    this.dispatchEvent(new CustomEvent('pld-load-sample-data', { bubbles: true, composed: true }));
+  }
 
   render() {
     if (!this.jsonData || Object.keys(this.jsonData).length === 0) {
@@ -206,6 +224,16 @@ export class PldDataForm extends LitElement {
         <div class="empty">
           ยังไม่ได้โหลดข้อมูล<br />
           ใช้ <strong>★ ตัวอย่าง</strong> หรือวาง JSON ในมุมมอง <strong>JSON</strong>
+          ${isNetSuiteEnv() ? html`
+            <p style="margin-top: 10px;">
+              <button class="sample-btn" @click=${this._loadSampleData}>
+                ⬇ โหลดข้อมูลตัวอย่างจาก NetSuite
+              </button>
+            </p>
+            <p style="margin-top: 4px; font-size: 11px;">
+              เอกสารสมมติที่มีฟิลด์ครบตามที่ engine จ่ายจริง — ผูก binding ได้โดยไม่ต้องเปิดจาก transaction
+            </p>
+          ` : nothing}
         </div>
       `;
     }

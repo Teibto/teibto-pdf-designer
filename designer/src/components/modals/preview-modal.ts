@@ -18,6 +18,7 @@ import { formatCellValue } from '../../utils/format';
 import { getCachedBarcodeSvg } from '../../services/barcode.service';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { isNetSuiteEnv, getNsContext, renderLivePreview, openRenderedPdf } from '../../services/netsuite-adapter.service';
+import { DEFAULT_RECORD_TYPE } from '../../constants/record-types';
 import '../shared/modal';
 
 @customElement('pld-preview-modal')
@@ -328,9 +329,19 @@ export class PldPreviewModal extends LitElement {
     }
   `;
 
-  /** Server-side preview is only meaningful inside NetSuite with a record loaded. */
+  /**
+   * พรีวิวผ่าน BFO จริงทำได้ทุกครั้งที่อยู่ใน NetSuite (#191) — ไม่มี record ก็ยัง
+   * render ได้ด้วยข้อมูลตัวอย่างของ engine · เดิมเงื่อนไขคือ "ต้องมี recordId" ทำให้
+   * คนที่เปิดดีไซเนอร์จากเมนูไม่เคยเห็นผลจาก BFO เลยสักครั้ง เห็นแต่ HTML ที่ SPA วาดเอง
+   * ซึ่งไม่บอกอะไรเรื่องฟอนต์ไทย/หัวท้ายซ้ำหน้า/ตารางล้น
+   */
   private get _serverMode(): boolean {
-    return isNetSuiteEnv() && !!getNsContext()?.recordId;
+    return isNetSuiteEnv();
+  }
+
+  /** ไม่มี record → พรีวิวด้วยข้อมูลตัวอย่าง และต้องบอกผู้ใช้ให้ชัดว่าเป็นตัวอย่าง */
+  private get _sampleMode(): boolean {
+    return isNetSuiteEnv() && !getNsContext()?.recordId;
   }
 
   updated(changed: Map<string, unknown>) {
@@ -356,7 +367,10 @@ export class PldPreviewModal extends LitElement {
    */
   private async _loadServerPreview() {
     const ctx = getNsContext();
-    if (!ctx?.recordId || !ctx?.recordType) return;
+    if (!ctx) return;
+    const sample = this._sampleMode;
+    const rectype = ctx.recordType || DEFAULT_RECORD_TYPE;
+    if (!sample && !ctx.recordId) return;
 
     this._clearServerPreview();
     this.serverLoading = true;
@@ -366,7 +380,13 @@ export class PldPreviewModal extends LitElement {
       // preview therefore fails/succeeds on fonts exactly like Print does.
       const options: BfoExportOptions = { useBands: true }; // band layout is authoritative (#47 cutover)
       const xml = exportBfoXml(this.store.state, options);
-      const blob = await renderLivePreview({ xml, rectype: ctx.recordType, recid: ctx.recordId, copies: this.store.state.copies });
+      const blob = await renderLivePreview({
+        xml,
+        rectype,
+        recid: sample ? undefined : ctx.recordId!,
+        copies: this.store.state.copies,
+        sample,
+      });
       this.serverPdfUrl = URL.createObjectURL(blob);
     } catch (err) {
       this.serverError = err instanceof Error ? err.message : String(err);
@@ -411,8 +431,14 @@ export class PldPreviewModal extends LitElement {
   private _renderServerBody() {
     return html`
       <div class="preview-toolbar">
-        <span class="server-hint">เรนเดอร์โดย NetSuite N/render — ตรงกับ Print PDF ทุกจุด</span>
-        <button class="export-btn" @click=${this._printServer}>📄 เปิด / ดาวน์โหลด PDF</button>
+        <span class="server-hint">
+          ${this._sampleMode
+            ? 'เรนเดอร์โดย NetSuite N/render ด้วย ข้อมูลตัวอย่าง — ฟอนต์ หัว-ท้ายกระดาษ และชุดสำเนา ตรงกับ Print จริง ส่วนตัวเลขและชื่อเป็นของสมมติ'
+            : 'เรนเดอร์โดย NetSuite N/render — ตรงกับ Print PDF ทุกจุด'}
+        </span>
+        ${this._sampleMode
+          ? nothing
+          : html`<button class="export-btn" @click=${this._printServer}>📄 เปิด / ดาวน์โหลด PDF</button>`}
       </div>
 
       ${this.serverLoading
