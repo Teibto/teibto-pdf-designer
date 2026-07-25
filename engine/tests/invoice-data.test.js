@@ -29,7 +29,6 @@ const HDR = {
   otherrefnum: 'PO-8842',
   customer_name: '02901 บริษัท ผู้ซื้อทดสอบ จำกัด',
   created_by: '105 สมชาย ทดสอบ',
-  created_from: 'Sales Order #SO2026-0044',
 };
 
 const SUMS = [
@@ -60,12 +59,16 @@ const BODY_VALUES = {
   employee: '88',
   subtotal: 10000,
   taxtotal: 700,
+  createdfrom: '9911',
   custbody_thl_entvatregistrationno: '0994000000000',
   custbody_thl_entbranchno: '00000',
   custbody_thl_withholdingtaxtotal: 0,
 };
 
-const BODY_TEXTS = { terms: 'Net 30', salesrep: 'สุดา ขายเก่ง', employee: 'อนงค์ จัดซื้อ' };
+const BODY_TEXTS = {
+  terms: 'Net 30', salesrep: 'สุดา ขายเก่ง', employee: 'อนงค์ จัดซื้อ',
+  createdfrom: 'Sales Order #SO2026-0044',
+};
 
 /** Returns the module plus the query stub, so a test can assert on the SQL issued. */
 function buildLibWith(overrides = {}) {
@@ -333,7 +336,27 @@ test('the money-blanking is per record type, not global', () => {
 
 test('createdfrom carries the source document for the delivery note', () => {
   const data = buildLib().buildTransactionData('itemfulfillment', 42);
-  assert.equal(data.createdfrom, 'Sales Order #SO2026-0044');
+  assert.equal(data.createdfrom, 'Sales Order #SO2026-0044',
+    'display text of the record field, not the internal id');
+});
+
+// ─── #174: the column that took the whole account's printing down ────────────
+test('no query asks the transaction table for createdfrom', () => {
+  // `createdfrom` is not an identifier SuiteQL accepts on `transaction`. Selecting it
+  // threw "Unknown identifier 'createdfrom'" on the FIRST query of every curated
+  // render, so one added column stopped every document on the account from printing —
+  // invoices included, not just the delivery note the column was added for.
+  //
+  // A stub cannot tell a real column from an invented one (it matches SQL by
+  // substring and hands back a fixture), so this asserts on the SQL text itself:
+  // body fields come off the loaded record, never out of the header SELECT.
+  const built = buildLibWith();
+  built.lib.buildTransactionData('itemfulfillment', 42);
+
+  for (const { query } of built.query.seen) {
+    assert.ok(query.indexOf('createdfrom') === -1,
+      `SuiteQL must not reference createdfrom — read it off the record instead (#174):\n${query}`);
+  }
 });
 
 test('buyer tax id / branch prefer the account field and fall back to Thai-Loc values', () => {

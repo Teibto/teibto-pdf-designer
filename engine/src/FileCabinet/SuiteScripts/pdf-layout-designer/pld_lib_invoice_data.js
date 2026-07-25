@@ -60,7 +60,13 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   var STANDARD_FIELDS = [
     'memo', 'salesrep', 'terms', 'currency', 'location',
     'department', 'class', 'subsidiary', 'shipmethod', 'trackingnumbers',
-    'employee'   // requestor on purchase orders (master pack binds ${record.employee}, #155)
+    'employee',  // requestor on purchase orders (master pack binds ${record.employee}, #155)
+    // Source document of a fulfillment ("ใบสั่งขาย (SO No.)" on the master delivery
+    // note, #170). Read off the LOADED RECORD, never from SuiteQL: `createdfrom` is
+    // not an identifier the transaction table accepts, and selecting it threw
+    // "Unknown identifier 'createdfrom'" on the very first query of EVERY curated
+    // render — one column took the whole account's printing down (#174).
+    'createdfrom'
   ];
   function fieldDisplay(rec, fld) {
     var v;
@@ -192,10 +198,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var hdr = first(
       "SELECT tranid, TO_CHAR(trandate,'DD/MM/YYYY') AS trandate, " +
       "  TO_CHAR(duedate,'DD/MM/YYYY') AS duedate, otherrefnum, " +
-      "  BUILTIN.DF(entity) AS customer_name, BUILTIN.DF(createdby) AS created_by, " +
-      // Source document of a fulfillment/receipt — the master delivery note prints it
-      // as "ใบสั่งขาย (SO No.)" (#170). Null on transactions entered directly.
-      "  BUILTIN.DF(createdfrom) AS created_from " +
+      "  BUILTIN.DF(entity) AS customer_name, BUILTIN.DF(createdby) AS created_by " +
       "FROM transaction WHERE id = ?",
       [id]
     );
@@ -459,8 +462,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       terms: bodyFields.terms || '',
       salesrep: bodyFields.salesrep || '',
       employee: bodyFields.employee || '',
-      // Source document ("ใบสั่งขาย (SO No.)" on the master delivery note, #170)
-      createdfrom: hdr.created_from || '',
+      // Source document ("ใบสั่งขาย (SO No.)" on the master delivery note, #170) —
+      // from the record, not SuiteQL (#174)
+      createdfrom: bodyFields.createdfrom || '',
       // Buyer tax id/branch: the account's own field wins, else the Thai-Loc
       // custbody_thl_* values the curated schema already resolved.
       custbody_buyer_taxid: bodyValue(rec, 'custbody_buyer_taxid') || custTaxId || '',
