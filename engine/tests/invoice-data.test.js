@@ -66,20 +66,26 @@ const BODY_VALUES = {
 
 const BODY_TEXTS = { terms: 'Net 30', salesrep: 'สุดา ขายเก่ง', employee: 'อนงค์ จัดซื้อ' };
 
-function buildLib(overrides = {}) {
+/** Returns the module plus the query stub, so a test can assert on the SQL issued. */
+function buildLibWith(overrides = {}) {
   const values = { ...BODY_VALUES, ...(overrides.values || {}) };
+  const q = queryStub([
+    { match: 'FROM transaction WHERE id', rows: [HDR] },
+    { match: 'customrecord_thl_summarytotal', rows: overrides.sums || SUMS },
+    { match: 'FROM transactionline tl', rows: overrides.lines || LINES },
+    { match: 'SELECT * FROM transactionline', rows: [] },
+  ]);
   const stubs = {
-    'N/query': queryStub([
-      { match: 'FROM transaction WHERE id', rows: [HDR] },
-      { match: 'customrecord_thl_summarytotal', rows: overrides.sums || SUMS },
-      { match: 'FROM transactionline tl', rows: overrides.lines || LINES },
-      { match: 'SELECT * FROM transactionline', rows: [] },
-    ]),
+    'N/query': q,
     'N/record': recordStub({ id: 42, values, texts: BODY_TEXTS }).module,
     'N/format': formatStub,
     './pld_lib_company_config': companyConfigStub,
   };
-  return loadAmd('./pld_lib_invoice_data', stubs);
+  return { lib: loadAmd('./pld_lib_invoice_data', stubs), query: q };
+}
+
+function buildLib(overrides = {}) {
+  return buildLibWith(overrides).lib;
 }
 
 /** ZWSP is inserted by the Thai wordbreak helper — strip it for comparisons. */
@@ -216,6 +222,74 @@ test('copy label follows the copy being rendered, not a stored field', () => {
   assert.equal(copy.document.copyTH, 'สำเนา');
   assert.equal(copy.document.copyEN, 'Copy');
   assert.ok(copy.document.titleTH.indexOf('สำเนา') !== -1);
+});
+
+// ─── #170: record types that reuse the transaction-line builder as-is ────────
+test('every curated type prints its own Thai document title', () => {
+  const lib = buildLib();
+  const titles = {
+    cashsale: ['ใบเสร็จรับเงิน/ใบกำกับภาษี', 'RECEIPT/TAX INVOICE'],
+    vendorbill: ['ใบรับวางบิล', 'VENDOR BILL'],
+    returnauthorization: ['ใบรับคืนสินค้า', 'RETURN AUTHORIZATION'],
+  };
+
+  for (const [rectype, [th, en]] of Object.entries(titles)) {
+    const data = lib.buildTransactionData(rectype, 42);
+    assert.equal(data.document.titleTH, `${th} (ต้นฉบับ)`);
+    assert.equal(data.document.titleEN, `${en} (Original)`);
+
+    const copy = lib.buildTransactionData(rectype, 42, 'สำเนา', 'Copy');
+    assert.ok(copy.document.titleTH.indexOf(th) === 0,
+      `${rectype} must keep its own title on the copy, got "${copy.document.titleTH}"`);
+    assert.equal(copy.custbody_doc_copy_label, 'สำเนา (Copy)');
+  }
+});
+
+test('an unknown record type never silently prints as an invoice', () => {
+  const lib = buildLib();
+  assert.equal(lib.isSupportedType('cashsale'), true);
+  assert.equal(lib.isSupportedType('itemfulfillment'), false,
+    'still raw-path — the render suitelet must keep binding the raw record for it (#170)');
+});
+
+test('purchase-side lines keep their record sign, sales-side lines are negated', () => {
+  // The GL sign lives in the SQL (`-tl.quantity`), so this asserts on the query text:
+  // a vendor bill printing negative quantities is the failure being pinned.
+  const purchase = buildLibWith();
+  purchase.lib.buildTransactionData('vendorbill', 42);
+  const purchaseSql = purchase.query.seen.map((s) => s.query).join('\n');
+  assert.ok(purchaseSql.indexOf('-tl.quantity') === -1,
+    'vendorbill is purchase-side — its lines are already positive');
+
+  const sales = buildLibWith();
+  sales.lib.buildTransactionData('cashsale', 42);
+  const salesSql = sales.query.seen.map((s) => s.query).join('\n');
+  assert.ok(salesSql.indexOf('-tl.quantity') !== -1,
+    'cashsale is sales-side — transactionline stores it GL-negative (#67)');
+});
+
+test('custbody_* stay bound at the top level when a type becomes curated', () => {
+  // Flipping a type into DOC_TITLES swaps NetSuite's raw record binding for this
+  // object, so ${record.custbody_xxx} in a template already live on an account
+  // must keep resolving — otherwise it prints blank with no error (#155).
+  const data = buildLib({
+    values: { custbody_thl_project_ref: 'PRJ-2026-014' },
+  }).buildTransactionData('cashsale', 42);
+
+  assert.equal(data.custbody_thl_project_ref, 'PRJ-2026-014');
+  assert.equal(data.custbody_thl_entvatregistrationno, '0994000000000');
+  assert.equal(data.fields.custbody_thl_project_ref, 'PRJ-2026-014',
+    'the #79 fields.* path keeps working alongside the top-level alias');
+});
+
+test('a stored copy-label field never overrides the copy being rendered', () => {
+  // The passthrough above must not resurrect the #159 bug where every copy printed
+  // "ต้นฉบับ" because a stored body field won over the render pass.
+  const data = buildLib({
+    values: { custbody_doc_copy_label: 'ต้นฉบับ (Original)' },
+  }).buildTransactionData('cashsale', 42, 'สำเนา', 'Copy');
+
+  assert.equal(data.custbody_doc_copy_label, 'สำเนา (Copy)');
 });
 
 test('buyer tax id / branch prefer the account field and fall back to Thai-Loc values', () => {

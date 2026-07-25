@@ -28,7 +28,7 @@
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
-| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 38 passed |
+| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 43 passed |
 | Template pack (จาก repo root) | `bash scripts/validate-templates.sh` | ✅ ผ่านทุกไฟล์ |
 
 CI `quality-gate` รัน lint + vitest + e2e + template validator + engine unit test + secret-scan — ตั้งแต่ #155 **ครอบ `engine/` ด้วย** (`node --check` ทุกไฟล์ + `node --test`) ไม่ต้องเช็ค syntax มือแล้ว แต่ change ที่แตะ BFO output ยังต้อง QA สดบน SB2 เหมือนเดิม
@@ -105,8 +105,9 @@ config record `customrecord_pld_config` คือจุดตั้งค่า 
 
 ### เพิ่ม document type ใหม่ end-to-end
 
-1. engine — เพิ่ม rectype ใน `DOC_TITLES` (`pld_lib_invoice_data.js`) เป็น `{th, en}` · ฝั่งซื้อเพิ่มใน `PURCHASE_SIDE` (คุมเครื่องหมายจำนวนเงิน) · curated ตอนนี้: `invoice` `creditmemo` `estimate` `salesorder` `purchaseorder` — rectype ที่ไม่อยู่ในลิสต์นี้ยังพิมพ์ได้ผ่าน raw record binding (ชุดสำเนาทำงานครบตั้งแต่ #159) แต่ไม่มีชื่อเอกสารไทย/VAT breakdown/ตัวอักษรไทย
+1. engine — เพิ่ม rectype ใน `DOC_TITLES` (`pld_lib_invoice_data.js`) เป็น `{th, en}` · ฝั่งซื้อเพิ่มใน `PURCHASE_SIDE` (คุมเครื่องหมายจำนวนเงิน) · curated ตอนนี้: `invoice` `creditmemo` `estimate` `salesorder` `purchaseorder` `cashsale` `vendorbill` `returnauthorization` — rectype ที่ไม่อยู่ในลิสต์นี้ยังพิมพ์ได้ผ่าน raw record binding (ชุดสำเนาทำงานครบตั้งแต่ #159) แต่ไม่มีชื่อเอกสารไทย/VAT breakdown/ตัวอักษรไทย
    · แก้ลิสต์แล้วต้องอัปเดต `RAW_PATH_TYPES` ใน `engine/tests/rectype-coverage.test.js` ให้ตรง (test บังคับว่า ปุ่ม/curated/dropdown ต้องสอดคล้องกัน — #159)
+   · **การย้าย rectype จาก raw มา curated เป็น breaking change ต่อ template ที่ deploy ไปแล้ว** (#170) — binding เปลี่ยนจาก record ดิบเป็น object ของ engine ทั้งก้อน `${record.<key>}` ที่ไม่อยู่ใน `RAW_ALIAS_KEYS` จึงพิมพ์ว่างเงียบ ๆ · `custbody_*` ปลอดภัยแล้ว (builder republish ให้ที่ระดับบนสุด) แต่ field มาตรฐานนอกลิสต์ไม่ปลอดภัย — ก่อนเพิ่ม rectype ให้กวาด master + template บน account ว่า bind key อะไรบ้าง แล้วเติม alias พร้อม**จ่ายค่าจริง** ไม่ใช่แค่ประกาศชื่อ
 2. designer — เพิ่มใน `RECORD_TYPES` (`designer/src/constants/record-types.ts`) โดย `value` = **record type id จริงของ NetSuite** เท่านั้น (engine filter ตรงตัว — ค่า pseudo แบบ `transaction` ทำให้ Print ขึ้น `No template found` ตลอดไป #158); unit test คุมว่า rectype ที่ปุ่มโผล่ต้องมีในลิสต์ครบ
 3. template — `templates/master/<doc>.xml` (copy skeleton) + `templates/samples/<doc>.sample.json` สังเคราะห์
 4. ตั้ง default template ต่อ rectype บน account ผ่านปุ่ม `⚙ ตั้งค่าการบันทึก` ไม่งั้น Print คืน `No template found` (R4)

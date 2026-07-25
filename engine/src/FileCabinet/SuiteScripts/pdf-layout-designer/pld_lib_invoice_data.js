@@ -97,12 +97,19 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   // Curated schema is shared; only the record type, document titles, and the
   // GL sign of line amounts differ. Sales-side transactions store item lines
   // GL-negative (negate for display, #67); purchase-side lines are positive.
+  // Titles mirror designer/src/constants/record-types.ts so the picker label and the
+  // printed header agree — except cashsale, where the picker needs the "(ขายสด)"
+  // disambiguator (it shares "ใบเสร็จรับเงิน" with customerpayment) but the printed
+  // document must not carry it.
   var DOC_TITLES = {
-    invoice:       { th: 'ใบแจ้งหนี้/ใบกำกับภาษี', en: 'INVOICE/TAX INVOICE' },
-    creditmemo:    { th: 'ใบลดหนี้', en: 'CREDIT NOTE' },
-    estimate:      { th: 'ใบเสนอราคา', en: 'QUOTATION' },
-    salesorder:    { th: 'ใบสั่งขาย', en: 'SALES ORDER' },
-    purchaseorder: { th: 'ใบสั่งซื้อ', en: 'PURCHASE ORDER' }
+    invoice:             { th: 'ใบแจ้งหนี้/ใบกำกับภาษี', en: 'INVOICE/TAX INVOICE' },
+    creditmemo:          { th: 'ใบลดหนี้', en: 'CREDIT NOTE' },
+    estimate:            { th: 'ใบเสนอราคา', en: 'QUOTATION' },
+    salesorder:          { th: 'ใบสั่งขาย', en: 'SALES ORDER' },
+    purchaseorder:       { th: 'ใบสั่งซื้อ', en: 'PURCHASE ORDER' },
+    cashsale:            { th: 'ใบเสร็จรับเงิน/ใบกำกับภาษี', en: 'RECEIPT/TAX INVOICE' },
+    vendorbill:          { th: 'ใบรับวางบิล', en: 'VENDOR BILL' },
+    returnauthorization: { th: 'ใบรับคืนสินค้า', en: 'RETURN AUTHORIZATION' }
   };
   var PURCHASE_SIDE = { purchaseorder: true, vendorbill: true };
 
@@ -156,7 +163,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   var COPY_BINDING_KEYS = ['th', 'en', 'label'];
 
   /**
-   * @param {string} recType  NetSuite record type (invoice/estimate/salesorder/purchaseorder/creditmemo)
+   * @param {string} recType  NetSuite record type — any key of DOC_TITLES. On a
+   *   purchase-side type (vendorbill) `customer.*` / `entity` carry the VENDOR:
+   *   the curated schema names the counterparty once and the side decides who it is.
    * @param {string|number} recId  transaction internal id
    * @param {string} [copyLabelTH] e.g. 'ต้นฉบับ' / 'สำเนา' (multi-copy); default original
    * @param {string} [copyLabelEN] e.g. 'Original' / 'Copy'
@@ -360,7 +369,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var rawSubtotal = grossTotal || baseAmount;
     var rawDiscount = baseAmount - rawSubtotal;
 
-    return {
+    var out = {
       // Exposed so callers that render from this curated object without their own
       // record handle (e.g. renderCopiesPdf, #144) can still subsidiary-scope the
       // top-level ${company.*} data source — not itself bound by any template.
@@ -455,6 +464,24 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       totalText: money(grandTotal),
       bahtText: bahtText.bahtText(grandTotal)
     };
+
+    // ── custbody_* passthrough at the top level (#170) ──────────────────────────
+    // Adding a record type to DOC_TITLES flips it from NetSuite's raw record
+    // binding to THIS object (pld_sl_render_pdf.makeRenderer), so a template that
+    // already printed ${record.custbody_xxx} on an account would start printing
+    // BLANK the day its type becomes curated — null-safe bindings swallow it, so
+    // nobody would see an error (#155). Republish those keys where they were.
+    // Curated keys cannot collide with the custbody prefix (same argument as the
+    // per-row custcol_* merge, #89), and the explicit entries above win — notably
+    // custbody_doc_copy_label, which must follow the copy being rendered (#159),
+    // not whatever is stored on the record.
+    Object.keys(bodyFields).forEach(function (fld) {
+      if (fld.indexOf('custbody') !== 0) return;
+      if (Object.prototype.hasOwnProperty.call(out, fld)) return;
+      out[fld] = bodyFields[fld];
+    });
+
+    return out;
   }
 
   /** Back-compat wrapper — the original invoice-only entry point */
