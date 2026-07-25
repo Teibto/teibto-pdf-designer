@@ -14,7 +14,7 @@
  * @author Wichit Wongta
  * @since 2026-07-17
  */
-define(['N/search', 'N/log'], function (search, log) {
+define(['N/search', 'N/file', 'N/log'], function (search, file, log) {
 
   var CFG_RECORD_TYPE = 'customrecord_pld_config';
   var SUBSIDIARY_FIELD = 'custrecord_pld_cfg_subsidiary';
@@ -51,10 +51,52 @@ define(['N/search', 'N/log'], function (search, log) {
     }).run().getRange({ start: 0, end: 1000 });
   }
 
+  // ── File Cabinet URL ที่ไม่หมดอายุ (#167) ───────────────────────────────────
+  // URL ของ File Cabinet มี token `h=` ที่เปลี่ยนทุกครั้งที่ไฟล์ถูก re-save — และ
+  // "re-save" รวมถึงการ deploy engine ทับด้วย ดังนั้น config ที่เก็บ URL ดิบจะกลายเป็น
+  // ของเก่าเงียบ ๆ แล้ว BFO โหลดฟอนต์/โลโก้ไม่ได้ (ไม่ error, glyph ไทยหายทั้งใบ).
+  //
+  // ทางแก้: เก็บ **file id** ใน config แล้ว resolve URL สดตอน render — และถ้า config
+  // ยังเก็บ URL แบบเดิม ก็ดึง id ออกจาก URL นั้นมา resolve ใหม่ให้ ผู้ดูแลไม่ต้องแก้อะไร
+  // ค่าที่ไม่ใช่ทั้ง id และ File Cabinet URL (เช่น CDN ภายนอก) ใช้ตามที่ตั้งไว้
+  var FILE_URL_ALIASES = { fontRegular: true, fontBold: true, logo: true };
+  var URL_FILE_ID = /[?&]id=(\d+)/;
+  // per-execution cache: หนึ่ง render อ่าน config ซ้ำหลายรอบ (copy set ยิง load() ต่อชุด)
+  var urlCache = {};
+
+  function fileUrlById(fileId) {
+    if (Object.prototype.hasOwnProperty.call(urlCache, fileId)) return urlCache[fileId];
+    var url = file.load({ id: fileId }).url;
+    urlCache[fileId] = url;
+    return url;
+  }
+
+  function resolveFileUrl(raw, alias) {
+    var value = String(raw == null ? '' : raw).trim();
+    if (!value) return '';
+
+    var fileId = /^\d+$/.test(value) ? value : (value.match(URL_FILE_ID) || [])[1];
+    if (!fileId) return value;
+
+    try {
+      return fileUrlById(fileId);
+    } catch (e) {
+      // ฟอนต์/โลโก้ต้องไม่ทำให้เอกสารพิมพ์ไม่ออก แต่ห้ามเงียบ (R4) — log ให้เห็นว่าทำไม
+      // PDF อาจไม่มีตัวอักษรไทยหรือไม่มีโลโก้ แล้วใช้ค่าที่ตั้งไว้ต่อไปตามเดิม
+      log.audit({
+        title: 'PLD config file url unresolved',
+        details: alias + ': file id ' + fileId + ' โหลดไม่ได้ (' + ((e && e.message) || e) +
+          ') — ใช้ค่าที่ตั้งไว้ตามเดิม; ถ้าเป็น URL เก่าที่ token หมดอายุ ฟอนต์/โลโก้จะไม่ขึ้นใน PDF (#167)'
+      });
+      return value;
+    }
+  }
+
   function toInfo(resultRow) {
     var info = {};
     Object.keys(CFG_FIELD_MAP).forEach(function (alias) {
-      info[alias] = resultRow.getValue(CFG_FIELD_MAP[alias]) || '';
+      var raw = resultRow.getValue(CFG_FIELD_MAP[alias]) || '';
+      info[alias] = FILE_URL_ALIASES[alias] ? resolveFileUrl(raw, alias) : raw;
     });
     return info;
   }
