@@ -17,7 +17,7 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
 import { saveTemplateToNetSuite } from '../../services/template.service';
 import { getNsContext } from '../../services/netsuite-adapter.service';
-import { recordTypeOptions } from '../../constants/record-types';
+import { recordTypeOptions, DEFAULT_RECORD_TYPE } from '../../constants/record-types';
 import { showToast } from '../shared/toast-notification';
 import '../shared/modal';
 
@@ -28,7 +28,7 @@ export class PldSaveNsModal extends LitElement {
 
   @property({ type: Boolean }) open = false;
 
-  @state() private recordType = 'transaction';
+  @state() private recordType = DEFAULT_RECORD_TYPE;
   // Default on: a template designed from a record is almost always the one Print
   // should use (#70). The Print button loads the rectype default (no tplid).
   @state() private setAsDefault = true;
@@ -82,12 +82,16 @@ export class PldSaveNsModal extends LitElement {
       <pld-modal .open=${this.open} modalTitle="💾 บันทึกเข้า NetSuite" size="md" @close=${this._close}>
         <div slot="body">
           <div class="field">
-            <label>NetSuite Record Type</label>
+            <label>ประเภทเอกสาร (NetSuite Record Type)</label>
             <select @change=${(e: Event) => { this.recordType = (e.target as HTMLSelectElement).value; }}>
               ${recordTypeOptions(this.recordType).map((rt) => html`
                 <option value=${rt.value} ?selected=${rt.value === this.recordType}>${rt.label}</option>
               `)}
             </select>
+            <p class="hint">
+              ต้องตรงกับ record type ที่จะกดปุ่ม Print PDF — engine หาเทมเพลตแบบตรงตัว
+              เทมเพลตเดียวใช้ข้าม record type ไม่ได้ (#158)
+            </p>
           </div>
           <div class="field">
             <label class="check-item">

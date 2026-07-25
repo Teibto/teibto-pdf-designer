@@ -12,7 +12,7 @@ import { storeContext, AppStore } from '../../state/store';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { showToast } from '../shared/toast-notification';
 import { getNsContext, isNetSuiteEnv, hasThaiFontConfigured } from '../../services/netsuite-adapter.service';
-import { recordTypeOptions } from '../../constants/record-types';
+import { recordTypeOptions, DEFAULT_RECORD_TYPE } from '../../constants/record-types';
 import '../shared/modal';
 
 @customElement('pld-bfo-export-modal')
@@ -24,7 +24,7 @@ export class PldBfoExportModal extends LitElement {
 
   // recordType here only drives the FreeMarker preview hints — saving to NetSuite
   // (and choosing the record type it targets) moved to <pld-save-ns-modal> (#138).
-  @state() private recordType = 'transaction';
+  @state() private recordType = DEFAULT_RECORD_TYPE;
   @state() private useFreeMarker = true;
   @state() private includePageHeaders = true;
   @state() private xmlPreview = '';
