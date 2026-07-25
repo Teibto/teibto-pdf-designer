@@ -130,7 +130,22 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     itemfulfillment:     { th: 'ใบส่งสินค้า', en: 'DELIVERY NOTE' },
     customerpayment:     { th: 'ใบเสร็จรับเงิน', en: 'RECEIPT' }
   };
-  var PURCHASE_SIDE = { purchaseorder: true, vendorbill: true };
+  // Record types whose transactionline quantities are already the printed sign, so
+  // they must NOT be negated (#176). Purchase-side documents were the original case;
+  // a return authorization joined them after QA on SB2 proved it stores +0.5 and the
+  // sales-side negation printed -0.5 on the customer's copy. The name says what the
+  // flag DOES — it is not a statement about which side of the business a document is.
+  var KEEP_LINE_SIGN = { purchaseorder: true, vendorbill: true, returnauthorization: true };
+  // Record types whose transactionline rows are NOT the printed lines (#176).
+  // An item fulfillment stores an accounting PAIR per shipped item — the item line and
+  // its Cost of Sales counterpart — both `mainline='F' AND taxline='F'`, so the filter
+  // that is correct for an invoice returns both: the delivery note printed the same
+  // product twice, once with a negative quantity, with the account name as its
+  // sub-line, and no unit. The record's own `item` sublist holds exactly one row per
+  // shipped item, already in display units, with the unit text attached.
+  // Proven on SB2 IFS-TH-260700003: transactionline → 2 rows (-168 / +168, unit
+  // blank); `item` sublist → 1 row (quantity 7, unitsdisplay "Tray24").
+  var SUBLIST_ITEMS = { itemfulfillment: true };
   // Types with NO statutory VAT breakdown (#170). The Thai 9-row summary comes from
   // customrecord_thl_summarytotal, which these records have no rows in — so every
   // money figure would otherwise print a truthful-looking "0.00" and a delivery note
@@ -219,12 +234,14 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var id = Number(recId);
     var titles = DOC_TITLES[recType] || DOC_TITLES.invoice;
     // '-' negates GL-signed sales lines for display; '' keeps purchase lines as-is
-    var sign = PURCHASE_SIDE[recType] ? '' : '-';
+    var sign = KEEP_LINE_SIGN[recType] ? '' : '-';
     // Documents with no statutory VAT breakdown print no summary at all (#170).
     var showTotals = !NO_TOTALS[recType];
     function totalsText(v) { return showTotals ? money(v) : ''; }
     // A receipt's rows come from the `apply` sublist, not from transactionline (#170).
     var isPayment = !!APPLY_SOURCE[recType];
+    // A delivery note's rows come from the `item` sublist, for the same reason (#176).
+    var isSublistItems = !!SUBLIST_ITEMS[recType];
     var rec = record.load({ type: recType, id: id });
 
     var hdr = first(
@@ -281,7 +298,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     //    quantity is GL-signed (negative for charges) → negate for display. The
     //    reference shows expense-item lines GL-negative (-50/-1,500) but that
     //    contradicts the record UI and its own summary sum — kept record-signed.
-    var lines = isPayment ? [] : many(
+    var lines = (isPayment || isSublistItems) ? [] : many(
       "SELECT tl.linesequencenumber AS seq, tl.itemtype, " +
       "  BUILTIN.DF(tl.item) AS item_code, itm.displayname AS item_name, tl.memo, " +
       "  " + sign + "tl.quantity AS quantity, tl.rate AS unit_price, " +
@@ -304,7 +321,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     //    (BUILTIN.DF can't wildcard) — text/number/date custcols print as-is.
     var custcolBySeq = {};
     try {
-      (isPayment ? [] : many(
+      ((isPayment || isSublistItems) ? [] : many(
         "SELECT * FROM transactionline WHERE transaction = ? AND mainline = 'F' AND taxline = 'F'",
         [id]
       )).forEach(function (row) {
@@ -384,6 +401,68 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       });
       prevMemo = memo;
     });
+
+    // ── Shipped-item rows from the record's own sublist (#176) ─────────────────
+    // See SUBLIST_ITEMS. Quantities here are ALREADY in display units (7 Tray24, not
+    // 168 base) and the unit text comes with them, so none of the transactionline
+    // arithmetic (uom conversion, GL sign) applies. Money stays blank: the fulfillment
+    // sublist carries no rate or amount at all — a delivery note prices nothing.
+    // getLineCount is not guarded, for the same reason as the apply list (R4): a
+    // fulfillment with no item sublist is a broken assumption, not a blank table.
+    if (isSublistItems) {
+      var itemFields = [];
+      try { itemFields = rec.getSublistFields({ sublistId: 'item' }) || []; } catch (e) { itemFields = []; }
+      var custcolFields = itemFields.filter(function (f) { return String(f).indexOf('custcol') === 0; });
+
+      var sv = function (fld, line) {
+        try {
+          var v = rec.getSublistValue({ sublistId: 'item', fieldId: fld, line: line });
+          return v == null ? '' : v;
+        } catch (e) { return ''; }
+      };
+
+      var itemCount = rec.getLineCount({ sublistId: 'item' });
+      for (var li = 0; li < itemCount; li++) {
+        var code = String(sv('itemname', li) || '');
+        var dName = String(sv('displayname', li) || '');
+        var lineName = code + (dName && dName !== code ? ' ' + dName : '');
+        var lineMemo = String(sv('itemdescription', li) || '');
+        var qty = sv('quantity', li);
+        var unitText = String(sv('unitsdisplay', li) || '');
+
+        var srow = {
+          no: items.length + 1,
+          code: code,
+          name: wordbreak.breakThai(lineName),
+          memo: wordbreak.breakThai(lineMemo),
+          quantity: qty === '' ? '' : qtyText(num(qty)),
+          unit: unitText,
+          unit_price: '',
+          discount: '',
+          amount: '',
+          description: wordbreak.breakThai(lineName + (lineMemo ? '\n' + lineMemo : ''))
+        };
+        // custcol_* on the row, same contract as the transactionline path (#89)
+        custcolFields.forEach(function (f) {
+          var v = sv(f, li);
+          srow[f] = typeof v === 'string' ? wordbreak.breakThai(v) : v;
+        });
+        items.push(srow);
+
+        rawItems.push({
+          item: srow.name,
+          description: srow.memo,
+          quantity: qty === '' ? null : num(qty),
+          units: unitText,
+          rate: null,
+          amount: null,
+          quantityText: srow.quantity,
+          rateText: '',
+          amountText: '',
+          refnum: '', applydate: '', total: null, totalText: ''
+        });
+      }
+    }
 
     // ── Settled-document rows (#170) ───────────────────────────────────────────
     // A customer payment has no item lines: what a receipt prints is the list of

@@ -86,6 +86,23 @@ const APPLY_LINES = [
   { apply: true, refnum: 'INV2026-0011', applydate: new Date(2026, 6, 27), total: 3210, amount: 1000 },
 ];
 
+/**
+ * `item` sublist of an item fulfillment (#176). Quantities here are in DISPLAY units
+ * and carry their own unit text — unlike transactionline, which stores base units and
+ * an accounting pair per shipped item. A custcol_* rides along to pin that #89 keeps
+ * working on this path too.
+ */
+const ITEM_LINES = [
+  {
+    itemname: 'CHOP-001', displayname: 'ปลากระป๋องอบแห้ง', itemdescription: 'ล็อตผลิตเดือนกรกฎาคม',
+    quantity: 7, unitsdisplay: 'Tray24', custcol_lot_no: 'LOT-2607',
+  },
+  {
+    itemname: 'CHOP-002', displayname: 'น้ำพริกเผา', itemdescription: '',
+    quantity: 1200, unitsdisplay: 'ขวด', custcol_lot_no: 'LOT-2608',
+  },
+];
+
 /** Returns the module plus the query stub, so a test can assert on the SQL issued. */
 function buildLibWith(overrides = {}) {
   const values = { ...BODY_VALUES, ...(overrides.values || {}) };
@@ -101,7 +118,10 @@ function buildLibWith(overrides = {}) {
       id: 42,
       values,
       texts: BODY_TEXTS,
-      sublists: { apply: overrides.apply || APPLY_LINES },
+      sublists: {
+        apply: overrides.apply || APPLY_LINES,
+        item: overrides.itemLines || ITEM_LINES,
+      },
     }).module,
     'N/format': formatStub,
     './pld_lib_company_config': companyConfigStub,
@@ -347,10 +367,57 @@ test('an item fulfillment still prints its lines, quantities and units', () => {
   const data = buildLib().buildTransactionData('itemfulfillment', 42);
 
   assert.equal(data.document.titleTH, 'ใบส่งสินค้า (ต้นฉบับ)');
-  assert.ok(data.item.length > 0, 'the item table is the whole point of a delivery note');
-  assert.equal(data.item[0].quantityText, '1');
-  assert.equal(data.item[0].units, 'Pack12');
-  assert.equal(plain(data.item[0].item), 'PD0001 สินค้าทดสอบ ก');
+  assert.equal(data.item.length, 2, 'one row per shipped item — see #176');
+  assert.equal(data.item[0].quantityText, '7');
+  assert.equal(data.item[0].units, 'Tray24');
+  assert.equal(plain(data.item[0].item), 'CHOP-001 ปลากระป๋องอบแห้ง');
+  assert.equal(plain(data.item[0].description), 'ล็อตผลิตเดือนกรกฎาคม');
+  assert.equal(data.item[1].quantityText, '1,200', 'display quantity is comma-grouped');
+});
+
+// ─── #176: transactionline is the wrong line source for some record types ────
+test('a delivery note prints one row per shipped item, never the accounting pair', () => {
+  // transactionline stores the item line AND its Cost of Sales counterpart for a
+  // fulfillment — both mainline='F' taxline='F'. Printing both put the same product
+  // on the delivery note twice, once with a negative quantity and no unit.
+  const built = buildLibWith();
+  const data = built.lib.buildTransactionData('itemfulfillment', 42);
+
+  for (const row of data.item) {
+    assert.ok(String(row.quantityText).indexOf('-') === -1,
+      `a delivery note must never print a negative quantity, got "${row.quantityText}"`);
+    assert.notEqual(row.units, '', 'the unit column must not be blank');
+  }
+  const names = data.item.map((r) => plain(r.item));
+  assert.equal(new Set(names).size, names.length, 'no product may appear twice');
+});
+
+test('a delivery note asks transactionline for nothing at all', () => {
+  const built = buildLibWith();
+  built.lib.buildTransactionData('itemfulfillment', 42);
+
+  for (const { query } of built.query.seen) {
+    assert.ok(query.indexOf('transactionline') === -1,
+      `the item sublist is the source for a fulfillment, not transactionline (#176):\n${query}`);
+  }
+});
+
+test('custcol_* still ride on the row when lines come from the sublist', () => {
+  // custcol_* live on the curated rows (`items`), the ones the designer column picker
+  // lists — same as the transactionline path, not on the raw `item` aliases.
+  const row = buildLib().buildTransactionData('itemfulfillment', 42).items[0];
+  assert.equal(plain(row.custcol_lot_no), 'LOT-2607', '#89 must keep working on this path');
+});
+
+test('a return authorization keeps the sign the record stores', () => {
+  // QA on SB2 (CR-TTL-260100001) proved the record stores +0.5 — negating it like a
+  // sales invoice printed -0.5 on the customer's copy.
+  const built = buildLibWith();
+  built.lib.buildTransactionData('returnauthorization', 42);
+  const sql = built.query.seen.map((s) => s.query).join('\n');
+
+  assert.ok(sql.indexOf('-tl.quantity') === -1,
+    'returnauthorization quantities are already positive — do not negate them (#176)');
 });
 
 test('the money-blanking is per record type, not global', () => {
