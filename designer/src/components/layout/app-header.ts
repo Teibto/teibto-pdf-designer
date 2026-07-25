@@ -10,7 +10,7 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { switchView } from '../../state/actions';
 import { getTheme, toggleTheme, type Theme } from '../../services/theme.service';
-import { isNetSuiteEnv } from '../../services/netsuite-adapter.service';
+import { isNetSuiteEnv, canEditNsTemplates, READ_ONLY_REASON } from '../../services/netsuite-adapter.service';
 
 @customElement('pld-header')
 export class PldHeader extends LitElement {
@@ -20,6 +20,14 @@ export class PldHeader extends LitElement {
   @state() private activeView: 'design' | 'flow' = 'design';
 
   @state() private theme: Theme = getTheme();
+
+  /**
+   * บทบาทนี้แก้เทมเพลตบน NetSuite ไม่ได้ (#189) — ปิดปุ่มที่จะถูกปฏิเสธอยู่ดี
+   * แทนที่จะให้ผู้ใช้ออกแบบเสร็จแล้วค่อยเจอ error ตอนกดบันทึก
+   */
+  private get readOnly(): boolean {
+    return isNetSuiteEnv() && !canEditNsTemplates();
+  }
 
   static styles = css`
     :host {
@@ -127,6 +135,26 @@ export class PldHeader extends LitElement {
       font-size: 11.5px;
     }
 
+    .btn:disabled,
+    .btn:disabled:hover {
+      opacity: 0.45;
+      cursor: not-allowed;
+      background: var(--color-bg-card);
+      border-color: var(--color-border);
+    }
+
+    .read-only-badge {
+      display: flex;
+      align-items: center;
+      padding: 5px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-muted);
+      font-size: 11.5px;
+      cursor: help;
+      white-space: nowrap;
+    }
+
     .btn-primary {
       background: var(--color-accent);
       border-color: var(--color-accent);
@@ -193,10 +221,18 @@ export class PldHeader extends LitElement {
           ${this.theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
         </button>
         <button class="btn btn-sm" @click=${this._onTemplates}>📁 เทมเพลต</button>
-        <button class="btn btn-sm" @click=${this._onSave}>💾 บันทึก</button>
+        <button class="btn btn-sm" @click=${this._onSave}
+          ?disabled=${this.readOnly}
+          title=${this.readOnly ? READ_ONLY_REASON : 'บันทึกเทมเพลต'}>
+          💾 บันทึก
+        </button>
         ${isNetSuiteEnv() ? html`
-          <button class="btn btn-sm" title="เลือก record type + ตั้งเป็น default template"
+          <button class="btn btn-sm" ?disabled=${this.readOnly}
+            title=${this.readOnly ? READ_ONLY_REASON : 'เลือก record type + ตั้งเป็น default template'}
             @click=${this._onSaveSettings}>⚙ ตั้งค่าการบันทึก</button>
+        ` : nothing}
+        ${this.readOnly ? html`
+          <span class="read-only-badge" title=${READ_ONLY_REASON}>🔒 อ่านอย่างเดียว</span>
         ` : nothing}
         <button class="btn btn-sm" @click=${this._onExportJson}>⟨/⟩ JSON</button>
         <button class="btn btn-sm" @click=${this._onSample}>★ ตัวอย่าง</button>

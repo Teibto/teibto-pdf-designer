@@ -24,6 +24,35 @@ export class SessionExpiredError extends Error {
   }
 }
 
+/**
+ * Thrown when the engine refuses a write because the current NetSuite role is not
+ * allowed to edit templates (#189). Distinct from a generic failure so the UI can
+ * say "ดูได้แต่แก้ไม่ได้" instead of inviting the user to retry something that will
+ * never succeed.
+ */
+export class PermissionDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermissionDeniedError';
+  }
+}
+
+/**
+ * Read one Suitelet JSON reply.
+ *
+ * The engine's failure body is `{error: true, message: "…"}` since #157 — reading
+ * `.error` as the message therefore produced the literal string "true". Everything
+ * goes through here so that stays fixed in one place.
+ */
+function unwrap<T>(result: unknown): T {
+  const body = result as { error?: unknown; denied?: boolean; message?: string };
+  if (!body || !body.error) return result as T;
+
+  const message = body.message || (typeof body.error === 'string' ? body.error : 'NetSuite ตอบกลับว่าทำรายการไม่สำเร็จ');
+  if (body.denied) throw new PermissionDeniedError(message);
+  throw new Error(message);
+}
+
 /** NetSuite context injected by the Suitelet */
 export interface NsContext {
   userId: number;
@@ -46,6 +75,12 @@ export interface NsContext {
    */
   fontRegularUrl?: string | null;
   fontBoldUrl?: string | null;
+  /**
+   * Whether this role may save/delete templates (#189). Absent on an engine older
+   * than #189 — the UI then behaves as before and lets the server decide, which is
+   * the only authority either way.
+   */
+  canEditTemplates?: boolean;
 }
 
 /** Saved template metadata from NetSuite custom record */
@@ -56,6 +91,29 @@ export interface NsTemplate {
   isDefault: boolean;
   created: string;
   modified: string;
+}
+
+/** One row of a template's change history (#189) */
+export interface NsTemplateVersion {
+  id: string;
+  version: number;
+  action: 'create' | 'update' | 'rollback' | 'delete' | 'baseline' | string;
+  name: string;
+  rectype: string;
+  userId: string;
+  userName: string;
+  roleId: string;
+  note: string;
+  /** false = เนื้อไฟล์ถูกตัดตามโควตาแล้ว กู้คืนเวอร์ชันนี้ไม่ได้ */
+  hasPayload: boolean;
+  created: string;
+}
+
+export interface NsTemplateHistory {
+  tplid: string;
+  canEdit: boolean;
+  keepPayload: number;
+  versions: NsTemplateVersion[];
 }
 
 // ═══════════════════════════════════════
@@ -69,6 +127,23 @@ export function isNetSuiteEnv(): boolean {
 export function getNsContext(): NsContext | null {
   return (window as any).__NS_CONTEXT__ || null;
 }
+
+/**
+ * Whether the UI should offer to save/delete NetSuite templates (#189).
+ *
+ * นอก NetSuite (dev server) เทมเพลตอยู่ใน localStorage — ไม่มีอะไรให้กัน
+ * ในNetSuite ค่านี้มาจาก engine ที่ตัดสินด้วย role จริง · ถ้า engine เก่ากว่า #189
+ * ไม่ส่งค่ามา ให้ UI ทำงานเหมือนเดิม — **นี่เป็นแค่คำใบ้ ไม่ใช่ด่าน** ด่านจริงอยู่
+ * ที่ server ซึ่งปฏิเสธทุกคำขอที่ไม่มีสิทธิ์อยู่แล้ว
+ */
+export function canEditNsTemplates(): boolean {
+  if (!isNetSuiteEnv()) return true;
+  return getNsContext()?.canEditTemplates !== false;
+}
+
+/** ข้อความเดียวที่ทุกหน้าจอใช้อธิบายว่าทำไมปุ่มบันทึก/ลบถูกปิด (#189) */
+export const READ_ONLY_REASON =
+  'บทบาทของคุณดูและพิมพ์เอกสารได้ แต่แก้ไขเทมเพลตไม่ได้ — ให้ผู้ดูแลระบบเพิ่ม role นี้ในช่อง "Template Editor Roles" ของ PLD Company Config';
 
 /**
  * Whether this account can render Thai text at all (#156).
@@ -198,8 +273,7 @@ export async function loadRecordData(
     rectype: recordType,
     recid: recordId,
   });
-  if ((result as any).error) throw new Error((result as any).error);
-  return result as Record<string, unknown>;
+  return unwrap<Record<string, unknown>>(result);
 }
 
 export async function autoLoadRecordIfAvailable(): Promise<Record<string, unknown> | null> {
@@ -219,8 +293,7 @@ export async function listNsTemplates(
   if (recordType) params.rectype = recordType;
 
   const result = await suiteletFetch(getRendererUrl() || getDesignerUrl(), 'list', params);
-  if ((result as any).error) throw new Error((result as any).error);
-  return result as NsTemplate[];
+  return unwrap<NsTemplate[]>(result);
 }
 
 /**
@@ -234,7 +307,7 @@ export async function saveNsTemplate(opts: {
   xml: string;     // BFO XML output
   rectype?: string;
   isDefault?: boolean;
-}): Promise<{ id: string; success: boolean }> {
+}): Promise<{ id: string; success: boolean; version?: number }> {
   const baseUrl = getRendererUrl() || getDesignerUrl();
   const result = await suiteletFetch(baseUrl, 'save', {}, 'POST', {
     id: opts.id || null,
@@ -244,8 +317,7 @@ export async function saveNsTemplate(opts: {
     rectype: opts.rectype || '',
     isDefault: opts.isDefault || false,
   });
-  if ((result as any).error) throw new Error((result as any).error);
-  return result as { id: string; success: boolean };
+  return unwrap<{ id: string; success: boolean; version?: number }>(result);
 }
 
 export async function getNsTemplate(
@@ -253,8 +325,7 @@ export async function getNsTemplate(
 ): Promise<{ id: string; name: string; data: string; xml: string; rectype: string }> {
   const baseUrl = getRendererUrl() || getDesignerUrl();
   const result = await suiteletFetch(baseUrl, 'get', { tplid: tplId });
-  if ((result as any).error) throw new Error((result as any).error);
-  return result as any;
+  return unwrap(result);
 }
 
 /**
@@ -268,8 +339,33 @@ export async function deleteNsTemplate(
 ): Promise<{ success: boolean; wasDefault?: boolean }> {
   const baseUrl = getRendererUrl() || getDesignerUrl();
   const result = await suiteletFetch(baseUrl, 'delete', { tplid: tplId }, 'POST');
-  if ((result as any).error) throw new Error((result as any).error);
-  return result as { success: boolean; wasDefault?: boolean };
+  return unwrap<{ success: boolean; wasDefault?: boolean }>(result);
+}
+
+/**
+ * ประวัติการแก้ของเทมเพลตหนึ่งตัว (#189) — ใคร role ไหน ทำอะไร เมื่อไหร่
+ * อ่านได้ทุก role · `canEdit` ในผลลัพธ์คือคำตอบสด ๆ จาก server ว่าปุ่มกู้คืนจะทำงานไหม
+ */
+export async function getNsTemplateHistory(
+  tplId: string,
+): Promise<NsTemplateHistory> {
+  const baseUrl = getRendererUrl() || getDesignerUrl();
+  const result = await suiteletFetch(baseUrl, 'history', { tplid: tplId });
+  return unwrap<NsTemplateHistory>(result);
+}
+
+/**
+ * กู้เทมเพลตกลับไปเวอร์ชันหนึ่ง (#189). Server เขียนเป็น **เวอร์ชันใหม่** เสมอ
+ * ประวัติจึงไม่หาย และย้อนของย้อนได้ · เทมเพลตที่ถูกลบไปแล้วกลับมาเป็น record ใหม่
+ * (`recreated: true`) ซึ่งจะไม่ใช่ default ของ record type นั้น
+ */
+export async function rollbackNsTemplate(
+  tplId: string,
+  version: number,
+): Promise<{ success: boolean; id: string; version: number; restoredFrom: number; recreated: boolean }> {
+  const baseUrl = getRendererUrl() || getDesignerUrl();
+  const result = await suiteletFetch(baseUrl, 'rollback', { tplid: tplId, version: String(version) }, 'POST');
+  return unwrap(result);
 }
 
 /**

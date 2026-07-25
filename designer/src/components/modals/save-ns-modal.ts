@@ -16,7 +16,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
 import { saveTemplateToNetSuite } from '../../services/template.service';
-import { getNsContext } from '../../services/netsuite-adapter.service';
+import { getNsContext, canEditNsTemplates, READ_ONLY_REASON } from '../../services/netsuite-adapter.service';
 import { recordTypeOptions, DEFAULT_RECORD_TYPE } from '../../constants/record-types';
 import { showToast } from '../shared/toast-notification';
 import '../shared/modal';
@@ -66,6 +66,16 @@ export class PldSaveNsModal extends LitElement {
       padding: 8px 10px;
       margin-top: 8px;
     }
+    .denied-hint {
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--color-warning, #f5a623);
+      background: rgba(245, 166, 35, 0.1);
+      border: 1px solid var(--color-warning, #f5a623);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+    }
     .footer-btns { display: flex; gap: 8px; justify-content: flex-end; }
     .btn {
       padding: 8px 16px; border-radius: 6px; border: 1px solid var(--color-border, #2a2c3a);
@@ -81,6 +91,9 @@ export class PldSaveNsModal extends LitElement {
     return html`
       <pld-modal .open=${this.open} modalTitle="💾 บันทึกเข้า NetSuite" size="md" @close=${this._close}>
         <div slot="body">
+          ${canEditNsTemplates() ? nothing : html`
+            <div class="denied-hint">🔒 ${READ_ONLY_REASON}</div>
+          `}
           <div class="field">
             <label>ประเภทเอกสาร (NetSuite Record Type)</label>
             <select @change=${(e: Event) => { this.recordType = (e.target as HTMLSelectElement).value; }}>
@@ -114,7 +127,8 @@ export class PldSaveNsModal extends LitElement {
         <div slot="footer">
           <div class="footer-btns">
             <button class="btn" @click=${this._close} ?disabled=${this.saving}>ยกเลิก</button>
-            <button class="btn btn-primary" @click=${this._save} ?disabled=${this.saving}>
+            <button class="btn btn-primary" @click=${this._save}
+              ?disabled=${this.saving || !canEditNsTemplates()}>
               ${this.saving ? 'กำลังบันทึก…' : 'บันทึกเข้า NetSuite'}
             </button>
           </div>

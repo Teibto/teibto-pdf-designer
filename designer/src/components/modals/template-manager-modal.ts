@@ -25,7 +25,12 @@ import {
   getNsTemplate,
   duplicateNsTemplate,
   deleteNsTemplate,
+  getNsTemplateHistory,
+  rollbackNsTemplate,
+  canEditNsTemplates,
+  READ_ONLY_REASON,
   type NsTemplate,
+  type NsTemplateHistory,
 } from '../../services/netsuite-adapter.service';
 import { elementsToBands } from '../../services/band-layout.service';
 import { getSampleTemplates } from '../../constants/sample-templates';
@@ -48,6 +53,10 @@ export class PldTemplateManagerModal extends LitElement {
   @state() private loading = false;
   @state() private nsLoading = false;
   @state() private importJson = '';
+  /** เทมเพลตที่กำลังกางประวัติอยู่ (#189) — กางได้ทีละใบ */
+  @state() private historyFor: string | null = null;
+  @state() private history: NsTemplateHistory | null = null;
+  @state() private historyLoading = false;
 
   static styles = css`
     .tabs {
@@ -234,6 +243,59 @@ export class PldTemplateManagerModal extends LitElement {
       justify-content: space-between;
     }
 
+    .tpl-btn:disabled,
+    .tpl-btn:disabled:hover {
+      opacity: 0.4;
+      cursor: not-allowed;
+      background: var(--color-bg-deep, #0a0b10);
+      color: var(--color-text-dim, #8a8ca0);
+      border-color: var(--color-border, #2a2c3a);
+    }
+
+    /* ─── Version history (#189) ─── */
+    .ns-read-only {
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: rgba(245, 166, 35, 0.1);
+      border: 1px solid var(--color-warning, #f5a623);
+      border-radius: 8px;
+      color: var(--color-warning, #f5a623);
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+
+    .history {
+      margin-top: 10px;
+      border-top: 1px solid var(--color-border, #2a2c3a);
+      padding-top: 8px;
+    }
+
+    .history-note {
+      font-size: 10.5px;
+      color: var(--color-text-dim, #8a8ca0);
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+
+    .history-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 10.5px;
+      color: var(--color-text-dim, #8a8ca0);
+      border-bottom: 1px solid var(--color-bg-deep, #0a0b10);
+    }
+
+    .history-row .ver {
+      font-weight: 600;
+      color: var(--color-text, #e8e9f0);
+      min-width: 34px;
+    }
+
+    .history-row .who { flex: 1; }
+    .history-row .when { white-space: nowrap; }
+
     .ns-no-default-warning {
       padding: 10px 12px;
       margin-bottom: 10px;
@@ -390,8 +452,10 @@ export class PldTemplateManagerModal extends LitElement {
     }
 
     const missingDefault = this._rectypesMissingDefault();
+    const readOnly = !canEditNsTemplates();
 
     return html`
+      ${readOnly ? html`<div class="ns-read-only">🔒 ${READ_ONLY_REASON}</div>` : nothing}
       ${missingDefault.length > 0 ? html`
         <div class="ns-no-default-warning">
           ⚠ ไม่มีเทมเพลตค่าเริ่มต้น — ${missingDefault.join(', ')}. การพิมพ์${missingDefault.length > 1 ? 'ประเภทเอกสารเหล่านี้' : 'ประเภทเอกสารนี้'}จะล้มเหลวด้วย "No template found" จนกว่าจะตั้งค่าเริ่มต้น
@@ -408,13 +472,119 @@ export class PldTemplateManagerModal extends LitElement {
             <div class="tpl-elements">NetSuite ID: ${tpl.id}</div>
             <div class="tpl-actions">
               <button class="tpl-btn primary" @click=${() => this._loadNsTemplate(tpl.id)}>Load</button>
-              <button class="tpl-btn" @click=${() => this._duplicateNsTemplate(tpl.id)}>Duplicate</button>
-              <button class="tpl-btn danger" @click=${() => this._deleteNsTemplate(tpl.id, tpl.name)}>Delete</button>
+              <button class="tpl-btn" ?disabled=${readOnly}
+                title=${readOnly ? READ_ONLY_REASON : 'สร้างสำเนาใน NetSuite'}
+                @click=${() => this._duplicateNsTemplate(tpl.id)}>Duplicate</button>
+              <button class="tpl-btn" @click=${() => this._toggleHistory(tpl.id)}>
+                ${this.historyFor === tpl.id ? '🕘 ปิดประวัติ' : '🕘 ประวัติ'}
+              </button>
+              <button class="tpl-btn danger" ?disabled=${readOnly}
+                title=${readOnly ? READ_ONLY_REASON : 'ลบเทมเพลตนี้ออกจาก NetSuite'}
+                @click=${() => this._deleteNsTemplate(tpl.id, tpl.name)}>Delete</button>
             </div>
+            ${this.historyFor === tpl.id ? this._renderHistory(readOnly) : nothing}
           </div>
         `)}
       </div>
     `;
+  }
+
+  /** คำอธิบายไทยของ action ที่ engine บันทึกไว้ (#189) */
+  private static readonly ACTION_LABELS: Record<string, string> = {
+    create: 'สร้าง',
+    update: 'แก้ไข',
+    rollback: 'กู้คืน',
+    'delete': 'ลบ',
+    baseline: 'สถานะก่อนเริ่มเก็บประวัติ',
+  };
+
+  /**
+   * ประวัติการแก้ของเทมเพลตหนึ่งใบ (#189) — ใคร role ไหน ทำอะไร เมื่อไหร่ พร้อมปุ่มกู้คืน
+   * เวอร์ชันที่เนื้อไฟล์ถูกตัดตามโควตาแล้ว (`hasPayload: false`) ยังแสดงเป็นร่องรอย
+   * แต่กดกู้คืนไม่ได้ — บอกตรง ๆ ดีกว่าปล่อยให้กดแล้วเจอ error
+   */
+  private _renderHistory(readOnly: boolean) {
+    if (this.historyLoading) {
+      return html`<div class="history"><div class="history-note">กำลังโหลดประวัติ…</div></div>`;
+    }
+    if (!this.history) return nothing;
+    if (this.history.versions.length === 0) {
+      return html`
+        <div class="history">
+          <div class="history-note">ยังไม่มีประวัติ — เวอร์ชันแรกจะถูกบันทึกตอนกดบันทึกครั้งถัดไป</div>
+        </div>
+      `;
+    }
+
+    return html`
+      <div class="history">
+        <div class="history-note">
+          เก็บเนื้อไฟล์ไว้ ${this.history.keepPayload} เวอร์ชันล่าสุด — ที่เก่ากว่านั้นยังเห็นว่าใครแก้เมื่อไหร่ แต่กู้คืนไม่ได้
+        </div>
+        ${this.history.versions.map((v) => html`
+          <div class="history-row">
+            <span class="ver">v${v.version}</span>
+            <span class="who">
+              ${PldTemplateManagerModal.ACTION_LABELS[v.action] ?? v.action}
+              · ${v.userName || `user ${v.userId}`} (role ${v.roleId})
+              ${v.note ? html`· ${v.note}` : nothing}
+            </span>
+            <span class="when">${v.created}</span>
+            <button class="tpl-btn" ?disabled=${readOnly || !v.hasPayload}
+              title=${!v.hasPayload
+                ? 'เนื้อไฟล์ของเวอร์ชันนี้ถูกตัดตามโควตาแล้ว กู้คืนไม่ได้'
+                : readOnly ? READ_ONLY_REASON : 'เขียนเนื้อของเวอร์ชันนี้กลับเป็นเวอร์ชันใหม่'}
+              @click=${() => this._rollbackNs(v.version)}>กู้คืน</button>
+          </div>
+        `)}
+      </div>
+    `;
+  }
+
+  private async _toggleHistory(id: string) {
+    if (this.historyFor === id) {
+      this.historyFor = null;
+      this.history = null;
+      return;
+    }
+    this.historyFor = id;
+    this.history = null;
+    this.historyLoading = true;
+    try {
+      this.history = await getNsTemplateHistory(id);
+    } catch (err) {
+      this.historyFor = null;
+      showToast(`โหลดประวัติไม่สำเร็จ: ${(err as Error).message}`, 'error');
+    } finally {
+      this.historyLoading = false;
+    }
+  }
+
+  /**
+   * กู้เทมเพลตกลับไปเวอร์ชันที่เลือก (#189). Server เขียนเป็นเวอร์ชันใหม่เสมอ จึงย้อน
+   * ของย้อนได้ · ถ้าเทมเพลตถูกลบไปแล้ว จะได้ record ใหม่ที่ **ไม่ใช่** default ของ
+   * record type นั้น — ต้องบอกผู้ใช้ ไม่งั้นเขาจะคิดว่าปุ่ม Print กลับมาทำงานแล้ว
+   */
+  private async _rollbackNs(version: number) {
+    const id = this.historyFor;
+    if (!id) return;
+    if (!confirm(`กู้เทมเพลตกลับไปเวอร์ชัน ${version}? ระบบจะบันทึกเป็นเวอร์ชันใหม่ ประวัติเดิมไม่หาย`)) return;
+
+    try {
+      const res = await rollbackNsTemplate(id, version);
+      await this._refreshNs();
+      this.history = await getNsTemplateHistory(res.recreated ? res.id : id);
+      if (res.recreated) this.historyFor = res.id;
+      showToast(`กู้คืนเวอร์ชัน ${version} แล้ว — บันทึกเป็นเวอร์ชัน ${res.version}`, 'success');
+      if (res.recreated) {
+        showToast(
+          `เทมเพลตถูกลบไปก่อนหน้านี้ จึงถูกสร้างกลับมาเป็น ID ${res.id} และ **ยังไม่ใช่ default** — ตั้งค่าเริ่มต้นก่อนจึงจะกด Print ได้`,
+          'warning',
+        );
+      }
+    } catch (err) {
+      showToast(`กู้คืนไม่สำเร็จ: ${(err as Error).message}`, 'error');
+    }
   }
 
   private _renderImportExport() {

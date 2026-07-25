@@ -24,7 +24,7 @@
 | เช็ค | คำสั่ง | baseline |
 |---|---|---|
 | Type | `npx tsc --noEmit` | 0 error |
-| Unit + component | `npx vitest run` | 545 passed |
+| Unit + component | `npx vitest run` | 557 passed |
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
@@ -46,7 +46,7 @@ CI `quality-gate` รัน lint + vitest + e2e + template validator + engine un
 ## ⚙️ กับดัก engine (SuiteScript / SDF)
 
 - render engine ต้องไม่พังเงียบ (R4) — fail ต้อง error ให้เห็น ไม่คืน PDF เปล่า · เวลาเพิ่ม log ใช้ structured `N/log` + `errorId` correlation (fail ยิง `log.error` พร้อม context ครบ และแนบ `errorId` ใน response · success ยิง `log.audit` ครั้งเดียว) ดู `pld_sl_render_pdf.js` (#149)
-- **รูปร่างของ error ขึ้นกับคนอ่าน (#157)**: action ที่เบราว์เซอร์เปิดเอง (`render`, `preview`, ไม่ระบุ action) คืนหน้า HTML ไทย + `errorId` · action ที่ designer เรียกผ่าน fetch (`list` `get` `save` `delete` `preview-live` `version`) คืน JSON · **ห้ามส่ง `stack` กลับ client ทั้งสองทาง** — stack อยู่ใน Script Execution Log อย่างเดียว · เพิ่ม action ใหม่ที่เบราว์เซอร์เปิดตรง ต้องใส่ใน `BROWSER_ACTIONS` ไม่งั้นผู้ใช้เจอ JSON
+- **รูปร่างของ error ขึ้นกับคนอ่าน (#157)**: action ที่เบราว์เซอร์เปิดเอง (`render`, `preview`, ไม่ระบุ action) คืนหน้า HTML ไทย + `errorId` · action ที่ designer เรียกผ่าน fetch (`list` `get` `save` `delete` `history` `rollback` `preview-live` `version`) คืน JSON · **ห้ามส่ง `stack` กลับ client ทั้งสองทาง** — stack อยู่ใน Script Execution Log อย่างเดียว · เพิ่ม action ใหม่ที่เบราว์เซอร์เปิดตรง ต้องใส่ใน `BROWSER_ACTIONS` ไม่งั้นผู้ใช้เจอ JSON
 - **render core อยู่ที่ `pld_lib_render.js` ที่เดียว (#181)** — โหลด template + ตีความชุดสำเนา + ประกอบ renderer (data source `record`/`copy`/`company`/`context`) + รวม `<pdfset>` · Suitelet พิมพ์ทีละใบ, live preview และการพิมพ์เป็นชุด เรียก lib ตัวนี้ทั้งหมด · **ห้ามเรียก `addCustomDataSource` จากไฟล์อื่น** — unit test `render-core.test.js` fail ทันทีถ้ามีไฟล์ที่สองเริ่ม bind เอง (กันไม่ให้ product กลับไปมีหลาย render path อีก)
 - **พิมพ์เป็นชุดถูกจำกัดด้วย governance ไม่ใช่ด้วยตัวเลขที่ตั้งไว้ (#181)** — `pld_sl_batch_print.js` วัด `getRemainingUsage()` คร่อมการ render แต่ละใบ แล้วใช้ต้นทุนที่แพงที่สุดที่วัดได้ตัดสินใจว่าจะขึ้นใบถัดไปไหว (กันไว้ 100 units ให้ขั้นตอนรวมไฟล์) · ผลลัพธ์มีสองแบบเท่านั้น: **ครบทุกใบ → PDF** หรือ **ไม่ครบ → หน้าสรุป** ที่บอกว่าใบไหนสำเร็จ/ล้มเหลว/ยังไม่ได้พิมพ์ ห้ามส่งไฟล์ที่ขาดใบไปเงียบ ๆ (R4) · หน้าจอนี้ค้นเอกสารด้วย **saved-search API ไม่ใช่ SuiteQL** เพราะ search รู้จัก record type ตรง ๆ ไม่ต้องแปลงเป็น type code เอง (บทเรียน #174)
 - **ชุดใหญ่วิ่งบน Map/Reduce หนึ่งเอกสารต่อหนึ่ง key (#181)** — `pld_mr_batch_print.js` ได้ 1,000 units **ต่อ map invocation** ชุด 500 ใบจึงไม่ชนโควตา · การรวมเป็น `<pdfset>` ต้องใช้ XML ที่ resolve แล้วของทุกใบพร้อมกัน ซึ่งใหญ่เกินกว่าจะส่งผ่าน key/value ของ MR — map จึงเขียนเป็นไฟล์ชั่วคราวแล้วส่งต่อแค่ file id ส่วน summarize โหลดกลับมาต่อกันครั้งเดียวแล้วลบทิ้ง · รายการเอกสารส่งผ่าน **ไฟล์ job spec** ไม่ใช่ script parameter (ชุด 300 ใบยาวเกินกว่าจะยัดลง parameter) · โฟลเดอร์ปลายทางหาจาก `pld_version.txt` ที่ `deploy.sh` stamp ไว้เสมอ จึงไม่ต้องตั้ง folder id ต่อ account
