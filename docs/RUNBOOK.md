@@ -87,6 +87,7 @@ Validate แล้ว smoke-test:
 
 - local + CI: `bash scripts/validate-templates.sh`
 - render จริง: save XML เข้า `customrecord_pld_template` แล้วเปิด `?action=render&rectype=<doc>&recid=<n>&tplid=<id>` · ตรวจฟอนต์ไทยไม่เป็น □ และ header/footer ซ้ำทุกหน้า
+- **สงสัยว่า binding มาถึงเป็นชนิดอะไร → ถาม FreeMarker ตรง ๆ ด้วย probe template** (เทคนิคที่ไขปม #165): POST `?action=preview-live` ด้วย XML สั้น ๆ ที่พิมพ์ `${x!"MISSING"}` · `${x?is_number?string("YES","NO")}` · `${x?string("#,##0.00")}` เทียบกัน แล้วเปิด blob ที่ได้ดู — ไม่ต้อง save template, ไม่ต้องมี test data, เห็นคำตอบในหน้าเดียว (PDF ที่ embed ฟอนต์ไทยอ่าน text ไม่ได้ ใช้ probe แบบ ASCII แล้วดูจาก screenshot)
 
 facts เต็มเรื่อง BFO/FreeMarker (font embedding · `?then` vs ternary · macrolist multi-page · zero-test-data smoke) อยู่ที่ skill `netsuite-bfo-pdf` และ `docs/TOOLSTACK.md` ไม่ทำซ้ำที่นี่.
 
