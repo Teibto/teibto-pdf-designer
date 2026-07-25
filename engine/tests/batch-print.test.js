@@ -18,6 +18,7 @@ const assert = require('node:assert/strict');
 const { loadAmd } = require('./helpers/amd');
 const {
   formatStub, logStub, companyConfigStub, xmlStub, runtimeStub, renderStub, contextStub,
+  fileSystemStub, taskStub,
 } = require('./helpers/ns-stubs');
 
 const TPL_XML = '<pdf><body>ok</body></pdf>';
@@ -70,14 +71,23 @@ function typedSearchStub(byType) {
  * @param {Array}  opts.failIds    record ids whose record.load blows up
  * @param {Function} opts.usage    getRemainingUsage() sequence
  */
-function buildBatch({ documents = [], templates = [], failIds = [], usage, asString } = {}) {
+function buildBatch({
+  documents = [], templates = [], failIds = [], usage, asString, folders = [],
+} = {}) {
   const log = logStub();
   const render = renderStub(asString === undefined ? {} : { asString });
   const search = typedSearchStub({
     itemfulfillment: documents,
     invoice: documents,
     customrecord_pld_template: templates,
+    folder: folders,
   });
+  const files = fileSystemStub({
+    // the deploy stamp: where the engine lives on this account (#181)
+    files: { '/SuiteScripts/pdf-layout-designer/pld_version.txt': { folder: '55', getContents: () => '{}' } },
+  });
+  const task = taskStub();
+  const folderRecords = [];
   const stubs = {
     'N/search': search.module,
     'N/runtime': runtimeStub({ usage }),
@@ -85,8 +95,18 @@ function buildBatch({ documents = [], templates = [], failIds = [], usage, asStr
     'N/xml': xmlStub,
     'N/format': formatStub,
     'N/render': render.module,
+    'N/file': files.module,
+    'N/task': task.module,
     'N/record': {
       Type: {},
+      create: ({ type }) => {
+        const values = {};
+        folderRecords.push({ type, values });
+        return {
+          setValue: ({ fieldId, value }) => { values[fieldId] = value; },
+          save: () => '77',
+        };
+      },
       load: ({ id }) => {
         if (failIds.indexOf(String(id)) !== -1) {
           throw new Error('This record does not exist: ' + id);
@@ -111,7 +131,7 @@ function buildBatch({ documents = [], templates = [], failIds = [], usage, asStr
       docTitles: DOC_TITLES,
     },
   };
-  return { suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search };
+  return { suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search, files, task, folderRecords };
 }
 
 const DOCS = [
@@ -380,4 +400,103 @@ test('ยอดเงินในตารางจัดรูปให้อ�
 
   assert.match(response.state.body, /53\.26/);
   assert.ok(response.state.body.indexOf('53.261') === -1, 'ไม่โชว์ค่าดิบจาก search');
+});
+
+// ─── ส่งชุดใหญ่เข้าคิว Map/Reduce (#181) ──────────────────────────────────────
+
+function queueRequest(ids, extra = {}) {
+  return contextStub({
+    method: 'POST',
+    parameters: Object.assign(
+      { action: 'queue', rectype: 'itemfulfillment', docids: ids.join(',') },
+      extra,
+    ),
+  });
+}
+
+test('ชุดใหญ่ถูกส่งเป็น job ให้ Map/Reduce พร้อมรายการเอกสารครบ', () => {
+  const { suitelet, files, task } = buildBatch({ documents: DOCS, templates: TEMPLATES });
+  const ids = ['11', '12', '13', '14', '15', '16', '17', '18'];
+  const { context, response } = queueRequest(ids, { tplid: '7' });
+
+  suitelet.onRequest(context);
+
+  const jobFile = files.created.find((f) => /^pld_job_/.test(f.name));
+  assert.ok(jobFile, 'ต้องเขียน job spec ลง File Cabinet');
+  const job = JSON.parse(jobFile.contents);
+  assert.deepEqual(job.ids, ids, 'รายการเอกสารต้องครบ — parameter เดียวใส่ไม่พอสำหรับชุดใหญ่');
+  assert.equal(job.rectype, 'itemfulfillment');
+  assert.equal(job.tplid, '7');
+  assert.ok(job.requester.id, 'ต้องรู้ว่าใครสั่ง เพื่ออีเมลผลกลับ');
+
+  assert.equal(task.submitted.length, 1);
+  assert.equal(task.submitted[0].taskType, 'MAP_REDUCE');
+  assert.equal(task.submitted[0].scriptId, 'customscript_pld_batch_mr');
+  assert.equal(task.submitted[0].params.custscript_pld_mr_job, jobFile.id,
+    'MR ต้องได้ file id ของ job spec');
+
+  assert.equal(response.state.files.length, 0, 'หน้าจอไม่รอผล — ไม่มี PDF ตรงนี้');
+  assert.match(response.state.body, /ส่งเข้าคิวแล้ว/);
+  assert.match(response.state.body, /MAPREDUCETASK_1/, 'บอกหมายเลขงานให้ตามต่อได้');
+});
+
+test('ไม่มี template = ไม่ส่งงานเข้าคิว (ไม่งั้น map พังทีละใบทั้งชุด)', () => {
+  const { suitelet, task } = buildBatch({ documents: DOCS, templates: [] });
+  const { context, response } = queueRequest(['11', '12']);
+
+  suitelet.onRequest(context);
+
+  assert.equal(task.submitted.length, 0);
+  assert.match(response.state.body, /No template found/);
+});
+
+test('เกินเพดานต่อหนึ่ง job = บอกให้แบ่งส่ง ไม่ใช่ตัดให้เงียบ ๆ', () => {
+  const { suitelet, task } = buildBatch({ documents: DOCS, templates: TEMPLATES });
+  const many = [];
+  for (let i = 0; i < 501; i += 1) many.push(String(1000 + i));
+  const { context, response } = queueRequest(many);
+
+  suitelet.onRequest(context);
+
+  assert.equal(task.submitted.length, 0);
+  assert.match(response.state.body, /ไม่เกิน 500 ใบ/);
+  assert.match(response.state.body, /501/);
+});
+
+test('ไฟล์ของงานไปอยู่ในโฟลเดอร์ pld-batch ใต้โฟลเดอร์ของ engine', () => {
+  const { suitelet, files, folderRecords } = buildBatch({ documents: DOCS, templates: TEMPLATES });
+  const { context } = queueRequest(['11', '12']);
+
+  suitelet.onRequest(context);
+
+  assert.equal(folderRecords.length, 1, 'ยังไม่มีโฟลเดอร์ → สร้างให้ครั้งเดียว');
+  assert.equal(folderRecords[0].type, 'folder');
+  assert.equal(folderRecords[0].values.name, 'pld-batch');
+  assert.equal(folderRecords[0].values.parent, '55', 'ใต้โฟลเดอร์ที่ deploy stamp ชี้ไว้');
+  assert.equal(files.created.find((f) => /^pld_job_/.test(f.name)).folder, '77');
+});
+
+test('มีโฟลเดอร์อยู่แล้วก็ใช้ตัวเดิม ไม่สร้างซ้ำทุกครั้งที่สั่งพิมพ์', () => {
+  const { suitelet, files, folderRecords } = buildBatch({
+    documents: DOCS, templates: TEMPLATES, folders: [{ id: '88', values: {} }],
+  });
+  const { context } = queueRequest(['11', '12']);
+
+  suitelet.onRequest(context);
+
+  assert.equal(folderRecords.length, 0);
+  assert.equal(files.created.find((f) => /^pld_job_/.test(f.name)).folder, '88');
+});
+
+test('ปุ่มส่งเข้าคิวอยู่บนหน้าจอ และสลับปลายทางผ่าน hidden field เดียว', () => {
+  const { suitelet } = buildBatch({ documents: DOCS, templates: TEMPLATES });
+  const { context, response } = contextStub({ parameters: { rectype: 'itemfulfillment' } });
+
+  suitelet.onRequest(context);
+  const body = response.state.body;
+
+  assert.match(body, /ส่งเข้าคิว \(ชุดใหญ่\)/);
+  assert.equal((body.match(/name="action"/g) || []).length, 1,
+    'ปลายทางต้องมาจาก field เดียว — field ชื่อซ้ำส่งถึง Suitelet แค่ค่าแรก');
+  assert.match(body, /act\.value="queue"/);
 });

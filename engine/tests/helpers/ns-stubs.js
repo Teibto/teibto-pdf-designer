@@ -207,8 +207,24 @@ function searchStub(rows = []) {
 }
 
 /** N/render stub — records what was rendered so tests can assert on it. */
-function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf>' } = {}) {
-  const calls = { created: 0, dataSources: [], records: [], renderedAsPdf: 0, renderedAsString: 0, xmlToPdf: [] };
+function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf>', fileSystem = null } = {}) {
+  const calls = {
+    created: 0, dataSources: [], records: [], renderedAsPdf: 0, renderedAsString: 0,
+    xmlToPdf: [], savedFiles: [],
+  };
+  // The file N/render hands back is a real file object: batch print names it and
+  // saves it into the File Cabinet (#181), single Print only streams it.
+  let fileSeq = 500;
+  const pdfFile = () => ({
+    name: pdfName,
+    save() {
+      const id = String(fileSeq++);
+      calls.savedFiles.push({ id, name: this.name, folder: this.folder });
+      // the saved PDF must be loadable afterwards (batch print reads its url)
+      if (fileSystem) fileSystem.register(id, '%PDF-1.4');
+      return id;
+    },
+  });
   return {
     calls,
     module: {
@@ -219,7 +235,7 @@ function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf
           templateContent: '',
           addCustomDataSource(ds) { calls.dataSources.push(ds); },
           addRecord(r) { calls.records.push(r); },
-          renderAsPdf() { calls.renderedAsPdf += 1; return { name: pdfName }; },
+          renderAsPdf() { calls.renderedAsPdf += 1; return pdfFile(); },
           // asString may be a function of the pass index, so a test can make ONE
           // document in a batch resolve to broken XML (#181/#184)
           renderAsString() {
@@ -229,7 +245,7 @@ function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf
           },
         };
       },
-      xmlToPdf(opts) { calls.xmlToPdf.push(opts); return { name: pdfName }; },
+      xmlToPdf(opts) { calls.xmlToPdf.push(opts); return pdfFile(); },
     },
   };
 }
@@ -237,6 +253,64 @@ function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf
 /** N/file stub — only load() is used (version stamp). */
 function fileStub({ contents = '{"version":"test"}' } = {}) {
   return { load: () => ({ getContents: () => contents }) };
+}
+
+/**
+ * N/file stub with create/load/delete, for the batch print job spec and the
+ * temporary per-document XML parts (#181). `files` seeds fixed entries by id or
+ * path (the version stamp the output folder is resolved from).
+ */
+function fileSystemStub({ files = {}, folder = 90 } = {}) {
+  const created = [];
+  const deleted = [];
+  const contents = {};
+  let seq = 1000;
+  return {
+    created,
+    deleted,
+    contents,
+    register(id, body) { contents[id] = body; },
+    module: {
+      Type: { PLAINTEXT: 'PLAINTEXT', JSON: 'JSON' },
+      Encoding: { UTF8: 'UTF-8' },
+      create(opts) {
+        return Object.assign({}, opts, {
+          save() {
+            const id = String(seq++);
+            created.push(Object.assign({ id }, opts));
+            contents[id] = opts.contents;
+            return id;
+          },
+        });
+      },
+      load({ id }) {
+        if (Object.prototype.hasOwnProperty.call(files, id)) return files[id];
+        if (Object.prototype.hasOwnProperty.call(contents, id)) {
+          return {
+            getContents: () => contents[id],
+            url: '/core/media/media.nl?id=' + id,
+            folder,
+          };
+        }
+        throw new Error('That file does not exist: ' + id);
+      },
+      delete({ id }) { deleted.push(String(id)); },
+    },
+  };
+}
+
+/** N/task stub — records the Map/Reduce submissions the Suitelet makes (#181). */
+function taskStub({ taskId = 'MAPREDUCETASK_1' } = {}) {
+  const submitted = [];
+  return {
+    submitted,
+    module: {
+      TaskType: { MAP_REDUCE: 'MAP_REDUCE', SCHEDULED_SCRIPT: 'SCHEDULED_SCRIPT' },
+      create(opts) {
+        return { submit() { submitted.push(opts); return taskId; } };
+      },
+    },
+  };
 }
 
 /** Suitelet response recorder. */
@@ -261,5 +335,6 @@ function contextStub({ parameters = {}, method = 'GET', body = '' } = {}) {
 
 module.exports = {
   queryStub, recordStub, formatStub, logStub, companyConfigStub,
-  xmlStub, runtimeStub, searchStub, renderStub, fileStub, responseStub, contextStub,
+  xmlStub, runtimeStub, searchStub, renderStub, fileStub, fileSystemStub, taskStub,
+  responseStub, contextStub,
 };
