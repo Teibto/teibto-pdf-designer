@@ -27,15 +27,14 @@ const DESIGNER_CONSTANTS = path.join(
 );
 
 /**
- * Types that print through the raw record binding — no curated Thai document data yet.
+ * Types that print through the raw record binding — no curated Thai document data.
  *
- * Shrinking as #170 lands. What is left is the one type whose rows do not come from
- * transactionline at all: a customerpayment has no item lines — its rows are the
- * invoices being paid.
+ * Empty since #170: every record type with a Print button now gets the curated Thai
+ * schema. Adding a button for a new type therefore forces a decision — curate it in
+ * pld_lib_invoice_data.js, or list it here and accept that it prints without a Thai
+ * document title, VAT breakdown or amount in words.
  */
-const RAW_PATH_TYPES = [
-  'customerpayment',
-];
+const RAW_PATH_TYPES = [];
 
 function read(file) {
   return fs.readFileSync(file, 'utf8');

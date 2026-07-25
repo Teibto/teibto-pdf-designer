@@ -26,8 +26,19 @@ function queryStub(fixtures) {
   };
 }
 
-/** N/record stub exposing one record's body fields. */
-function recordStub({ id = 1, values = {}, texts = {} } = {}) {
+/**
+ * N/record stub exposing one record's body fields, and optionally its sublists —
+ * `sublists` is { [sublistId]: [ {fieldId: value}, … ] }, used by the customer
+ * payment `apply` list (#170). Reading a sublist that was not provided throws, the
+ * same way the real record does, so a test can never pass on an empty table.
+ */
+function recordStub({ id = 1, values = {}, texts = {}, sublists = {} } = {}) {
+  const rows = (sublistId) => {
+    if (!Object.prototype.hasOwnProperty.call(sublists, sublistId)) {
+      throw new Error(`record has no sublist "${sublistId}"`);
+    }
+    return sublists[sublistId];
+  };
   const rec = {
     id,
     getValue({ fieldId }) {
@@ -40,6 +51,14 @@ function recordStub({ id = 1, values = {}, texts = {} } = {}) {
     },
     getFields() {
       return Object.keys(values);
+    },
+    getLineCount({ sublistId }) {
+      return rows(sublistId).length;
+    },
+    getSublistValue({ sublistId, fieldId, line }) {
+      const row = rows(sublistId)[line];
+      if (!row) throw new Error(`line ${line} out of range on "${sublistId}"`);
+      return Object.prototype.hasOwnProperty.call(row, fieldId) ? row[fieldId] : '';
     },
   };
   return {

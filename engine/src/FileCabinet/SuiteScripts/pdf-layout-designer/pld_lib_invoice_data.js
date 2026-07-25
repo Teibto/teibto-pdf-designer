@@ -51,6 +51,16 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   function bodyValue(rec, fld) {
     try { return rec.getValue({ fieldId: fld }); } catch (e) { return ''; }
   }
+  // Date → DD/MM/YYYY. Duck-typed rather than `instanceof Date` because the engine
+  // unit tests mount this module in a separate vm realm, where a Date constructed
+  // outside it fails instanceof; behaviour on NetSuite is identical either way.
+  function dateText(v) {
+    if (v == null || v === '') return '';
+    if (typeof v.getTime === 'function') {
+      return format.format({ value: v, type: format.Type.DATE });
+    }
+    return String(v);
+  }
 
   // ── Generic body-field exposure (#79) ──
   // Every custbody_* plus a shortlist of standard body fields, so a template
@@ -61,6 +71,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     'memo', 'salesrep', 'terms', 'currency', 'location',
     'department', 'class', 'subsidiary', 'shipmethod', 'trackingnumbers',
     'employee',  // requestor on purchase orders (master pack binds ${record.employee}, #155)
+    'paymentmethod', 'checknum',  // receipt: how it was paid + cheque/ref no (#170)
     // Source document of a fulfillment ("ใบสั่งขาย (SO No.)" on the master delivery
     // note, #170). Read off the LOADED RECORD, never from SuiteQL: `createdfrom` is
     // not an identifier the transaction table accepts, and selecting it threw
@@ -116,17 +127,25 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     cashsale:            { th: 'ใบเสร็จรับเงิน/ใบกำกับภาษี', en: 'RECEIPT/TAX INVOICE' },
     vendorbill:          { th: 'ใบรับวางบิล', en: 'VENDOR BILL' },
     returnauthorization: { th: 'ใบรับคืนสินค้า', en: 'RETURN AUTHORIZATION' },
-    itemfulfillment:     { th: 'ใบส่งสินค้า', en: 'DELIVERY NOTE' }
+    itemfulfillment:     { th: 'ใบส่งสินค้า', en: 'DELIVERY NOTE' },
+    customerpayment:     { th: 'ใบเสร็จรับเงิน', en: 'RECEIPT' }
   };
   var PURCHASE_SIDE = { purchaseorder: true, vendorbill: true };
-  // Documents that move goods, not money (#170). An item fulfillment carries line
-  // quantities but no rate and no amount, and it has no statutory VAT breakdown —
-  // so every money figure would otherwise print a truthful-looking "0.00" and the
-  // amount in words would read "(ศูนย์บาทถ้วน)" on a delivery note. Money TEXT is
-  // blank for these instead, which is also what a template branches on (#165):
-  // `<#if (record.totalText!"") != "">`. The numeric aliases stay 0 so the shape of
-  // the contract does not change per record type.
-  var NO_TOTALS = { itemfulfillment: true };
+  // Types with NO statutory VAT breakdown (#170). The Thai 9-row summary comes from
+  // customrecord_thl_summarytotal, which these records have no rows in — so every
+  // money figure would otherwise print a truthful-looking "0.00" and a delivery note
+  // would read "(ศูนย์บาทถ้วน)". Money TEXT is blank for these instead, which is also
+  // what a template branches on (#165): `<#if (record.totalText!"") != "">`. The
+  // numeric aliases stay 0 so the shape of the contract does not change per record
+  // type. A receipt still prints ONE figure — the amount received — through its own
+  // `payment`/`paymentText` aliases, not through the statutory rows.
+  var NO_TOTALS = { itemfulfillment: true, customerpayment: true };
+  // Types whose printed rows are NOT transaction lines (#170). A customer payment has
+  // no item lines at all: its rows are the documents it settles, which live on the
+  // `apply` sublist of the record itself. Reading that sublist (rather than joining
+  // transaction-link tables in SuiteQL) keeps the field names the same ones the master
+  // receipt already binds — refnum / applydate / total / amount ARE the sublist fields.
+  var APPLY_SOURCE = { customerpayment: true };
 
   /** Record types this builder supports (exported for the suitelet gates) */
   function isSupportedType(recType) {
@@ -165,13 +184,24 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // engine formats, the template prints. discounttotalText is EMPTY when there is
     // no discount, so a template branches on a string compare, never on a number.
     'subtotalText', 'discounttotalText', 'netAmountText', 'taxtotalText',
-    'totalText', 'bahtText'
+    'totalText', 'bahtText',
+    // Receipt (#170): the settled-document rows plus how the money arrived. `apply`
+    // is the same array as `item` — a payment's rows ARE the documents it settles —
+    // so a template can loop whichever name reads better for the document it prints.
+    'apply', 'payment', 'paymentText', 'paymentmethod', 'checknum'
   ];
   var BINDING_KEYS = CURATED_KEYS.concat(RAW_ALIAS_KEYS);
+  // One row shape for every document (#170). A key that does not apply to the row's
+  // record type is present and EMPTY rather than absent, so the contract stays the
+  // same list everywhere and a template never binds a key that silently disappears
+  // on one record type (#155). Item rows leave the settlement keys blank; settlement
+  // rows leave the item keys blank.
   var ITEM_BINDING_KEYS = [
     'item', 'description', 'quantity', 'units', 'rate', 'amount',
     // formatted counterparts (#165) — what the item table actually prints
-    'quantityText', 'rateText', 'amountText'
+    'quantityText', 'rateText', 'amountText',
+    // settled-document rows on a receipt: which document, when, its total
+    'refnum', 'applydate', 'total', 'totalText'
   ];
   // ${copy.*} — data source ที่ pld_sl_render_pdf ใส่ให้ทุก render pass (#159)
   // ป้ายชุดเอกสารของ pass นั้น ใช้ได้ทั้ง curated และ raw-record binding
@@ -190,9 +220,11 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var titles = DOC_TITLES[recType] || DOC_TITLES.invoice;
     // '-' negates GL-signed sales lines for display; '' keeps purchase lines as-is
     var sign = PURCHASE_SIDE[recType] ? '' : '-';
-    // Goods-movement documents print no money at all (#170) — see NO_TOTALS.
+    // Documents with no statutory VAT breakdown print no summary at all (#170).
     var showTotals = !NO_TOTALS[recType];
     function totalsText(v) { return showTotals ? money(v) : ''; }
+    // A receipt's rows come from the `apply` sublist, not from transactionline (#170).
+    var isPayment = !!APPLY_SOURCE[recType];
     var rec = record.load({ type: recType, id: id });
 
     var hdr = first(
@@ -249,7 +281,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     //    quantity is GL-signed (negative for charges) → negate for display. The
     //    reference shows expense-item lines GL-negative (-50/-1,500) but that
     //    contradicts the record UI and its own summary sum — kept record-signed.
-    var lines = many(
+    var lines = isPayment ? [] : many(
       "SELECT tl.linesequencenumber AS seq, tl.itemtype, " +
       "  BUILTIN.DF(tl.item) AS item_code, itm.displayname AS item_name, tl.memo, " +
       "  " + sign + "tl.quantity AS quantity, tl.rate AS unit_price, " +
@@ -272,10 +304,10 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     //    (BUILTIN.DF can't wildcard) — text/number/date custcols print as-is.
     var custcolBySeq = {};
     try {
-      many(
+      (isPayment ? [] : many(
         "SELECT * FROM transactionline WHERE transaction = ? AND mainline = 'F' AND taxline = 'F'",
         [id]
-      ).forEach(function (row) {
+      )).forEach(function (row) {
         var cc = {};
         Object.keys(row).forEach(function (k) {
           if (k.indexOf('custcol') !== 0) return;
@@ -345,10 +377,58 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         // master and a designer-built template show identical figures.
         quantityText: row.quantity,
         rateText: row.unit_price,
-        amountText: row.amount
+        amountText: row.amount,
+        // Settlement keys are blank on an item row, not absent (#170) — one row
+        // shape for every document, so a template never binds a vanishing key.
+        refnum: '', applydate: '', total: null, totalText: ''
       });
       prevMemo = memo;
     });
+
+    // ── Settled-document rows (#170) ───────────────────────────────────────────
+    // A customer payment has no item lines: what a receipt prints is the list of
+    // documents the payment settles, which is the record's own `apply` sublist.
+    // Only the lines actually ticked are printed — the sublist also carries every
+    // OTHER open document of that customer, and printing those would tell the payer
+    // they paid invoices they did not. getLineCount is NOT guarded: a payment record
+    // without an apply sublist is a broken assumption, and R4 wants that loud rather
+    // than a receipt with an empty table.
+    if (isPayment) {
+      var applyCount = rec.getLineCount({ sublistId: 'apply' });
+      for (var ai = 0; ai < applyCount; ai++) {
+        var applied = rec.getSublistValue({ sublistId: 'apply', fieldId: 'apply', line: ai });
+        if (applied !== true && applied !== 'T') continue;
+        var refnum = rec.getSublistValue({ sublistId: 'apply', fieldId: 'refnum', line: ai });
+        var applyDate = rec.getSublistValue({ sublistId: 'apply', fieldId: 'applydate', line: ai });
+        var docTotal = rec.getSublistValue({ sublistId: 'apply', fieldId: 'total', line: ai });
+        var paidAmt = rec.getSublistValue({ sublistId: 'apply', fieldId: 'amount', line: ai });
+        items.push({
+          no: items.length + 1,
+          code: '', name: String(refnum == null ? '' : refnum), memo: '',
+          quantity: '', unit: '', unit_price: '', discount: '',
+          amount: moneyOrBlank(paidAmt),
+          description: String(refnum == null ? '' : refnum)
+        });
+        rawItems.push({
+          item: String(refnum == null ? '' : refnum),
+          description: '',
+          quantity: null, units: '', rate: null,
+          amount: paidAmt == null ? null : num(paidAmt),
+          quantityText: '', rateText: '', amountText: money(paidAmt),
+          refnum: String(refnum == null ? '' : refnum),
+          applydate: dateText(applyDate),
+          total: docTotal == null ? null : num(docTotal),
+          totalText: money(docTotal)
+        });
+      }
+    }
+
+    // The one figure a receipt prints, and the figure the amount-in-words describes
+    // (#170): the amount received on a payment, the grand total on a sales document,
+    // nothing at all on a delivery note (so no "(ศูนย์บาทถ้วน)" under an empty table).
+    var paymentAmount = isPayment ? num(bodyValue(rec, 'payment')) : 0;
+    var wordsAmount = isPayment ? paymentAmount : (showTotals ? grandTotal : null);
+    var wordsText = wordsAmount == null ? '' : bahtText.bahtText(wordsAmount);
 
     // Subsidiary scoping (OneWorld, issue #144): the transaction's own subsidiary
     // body field decides which customrecord_pld_config row companyConfig.load()
@@ -434,8 +514,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         grandTotal: totalsText(grandTotal),
         wht: totalsText(wht),
         cashCoupon: totalsText(cashCoupon),
-        customerPaid: totalsText(customerPaid),
-        bahtText: showTotals ? bahtText.bahtText(grandTotal) : '',
+        // On a receipt this row IS the document: the amount received (#170)
+        customerPaid: isPayment ? money(paymentAmount) : totalsText(customerPaid),
+        bahtText: wordsText,
         summaryRows: summaryRows,
         // backward-compat (#69)
         subtotal: totalsText(baseAmount),
@@ -475,6 +556,15 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       // printed "ต้นฉบับ" — including the สำเนา.
       custbody_doc_copy_label: (copyLabelTH || 'ต้นฉบับ') + ' (' + (copyLabelEN || 'Original') + ')',
       item: rawItems,
+      // Same rows under the name a receipt reads better with (#170) — the master
+      // receipt loops <#list (record.apply)![] as line>.
+      apply: rawItems,
+      // How the money arrived (#170). `payment` stays numeric like the other amount
+      // aliases; `paymentText` is what a template prints (#165).
+      payment: paymentAmount,
+      paymentText: isPayment ? money(paymentAmount) : '',
+      paymentmethod: bodyFields.paymentmethod || '',
+      checknum: bodyFields.checknum || '',
       subtotal: rawSubtotal,
       discounttotal: rawDiscount,
       taxtotal: vat,
@@ -487,7 +577,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       netAmountText: totalsText(baseAmount),
       taxtotalText: totalsText(vat),
       totalText: totalsText(grandTotal),
-      bahtText: showTotals ? bahtText.bahtText(grandTotal) : ''
+      bahtText: wordsText
     };
 
     // ── custbody_* passthrough at the top level (#170) ──────────────────────────

@@ -14,8 +14,12 @@
 
   Field mapping ฝั่ง customerpayment: entity = ผู้ชำระเงิน, payment = ยอดรับชำระ,
   paymentmethod = วิธีชำระเงิน, sublist apply = รายการเอกสารที่นำมาตัดชำระ
-  (line.refnum / applydate / total / amount) — billaddress ไม่มีบน payment record
+  (line.refnum / applydate / totalText / amountText) — billaddress ไม่มีบน payment record
   จึงแสดงว่างได้ (null-safe); account ที่ต้องการที่อยู่ผู้ชำระ ให้ map custom body field เอง
+
+  customerpayment วิ่งผ่าน curated schema แล้วตั้งแต่ #170 (เดิมเป็น raw record binding)
+  แถวในตารางมาจาก sublist apply ของ record เอง เฉพาะบรรทัดที่ติ๊กตัดชำระจริง และจำนวนเงิน
+  ทุกช่องพิมพ์จากค่าที่ engine format มาแล้ว (*Text) ไม่ใช่ค่า number ดิบ (#165)
 -->
 
 <#-- helper แปลงจำนวนเงินเป็นตัวอักษรถูกถอดออกใน #165 (ทำเลขคณิตกับค่าที่เป็น string
@@ -127,8 +131,8 @@ td.r { text-align: right; }
       <td class="c">${line_index + 1}</td>
       <td><p class="cell">${line.refnum!""}</p></td>
       <td class="c">${line.applydate!""}</td>
-      <td class="r">${line.total!""}</td>
-      <td class="r">${line.amount!""}</td>
+      <td class="r">${line.totalText!""}</td>
+      <td class="r">${line.amountText!""}</td>
     </tr>
     </#list>
   </tbody>
@@ -140,8 +144,8 @@ td.r { text-align: right; }
     <td style="width: 55%;">
       <p class="cell">
       <br />
-      <#-- ตัวอักษรไทยต้องมาจาก engine (record.bahtText) — customerpayment ยังไม่ได้ curated
-           data จึงซ่อนไว้ ไม่พิมพ์วงเล็บเปล่า; จะขึ้นเองเมื่อ #159 เพิ่ม rectype นี้ -->
+      <#-- ตัวอักษรไทยมาจาก engine (record.bahtText) = ยอดรับชำระเป็นตัวอักษร ตั้งแต่ #170
+           guard ไว้เผื่อ template นี้ถูก save ทับด้วย rectype อื่นที่ไม่มีค่านี้ -->
       <#if (record.bahtText!"") != "">
       <span class="section-label">จำนวนเงินที่รับชำระ (ตัวอักษร)</span><br />
       <span class="amount-text">(${record.bahtText})</span>
@@ -157,7 +161,7 @@ td.r { text-align: right; }
       <table style="width: 100%;">
         <tr class="grand">
           <td><p class="cell">จำนวนเงินที่รับชำระ (Amount Received)</p></td>
-          <td class="r">${record.payment!""}</td>
+          <td class="r">${record.paymentText!""}</td>
         </tr>
       </table>
     </td>
