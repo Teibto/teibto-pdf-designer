@@ -55,6 +55,14 @@ function recordStub({ id = 1, values = {}, texts = {}, sublists = {} } = {}) {
     getLineCount({ sublistId }) {
       return rows(sublistId).length;
     },
+    /** Union of the field ids present on the sublist's rows. */
+    getSublistFields({ sublistId }) {
+      const seen = [];
+      rows(sublistId).forEach((row) => {
+        Object.keys(row).forEach((k) => { if (seen.indexOf(k) === -1) seen.push(k); });
+      });
+      return seen;
+    },
     getSublistValue({ sublistId, fieldId, line }) {
       const row = rows(sublistId)[line];
       if (!row) throw new Error(`line ${line} out of range on "${sublistId}"`);
