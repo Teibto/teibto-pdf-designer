@@ -926,5 +926,10 @@ function listToHtml(el: ListElement, recordType: string, useFreeMarker: boolean)
  * N/render fails the entire render on an unresolvable expression (#4).
  */
 function convertBindingToFreeMarker(path: string, recordType: string): string {
-  return `\${${recordType}.${path}!''}`;
+  // ?xml is mandatory, not cosmetic (#184): BFO parses FreeMarker's output as XML,
+  // so a value carrying `&` or `<` (an item description "Laser & Inkjet", a company
+  // name "A & B") kills the WHOLE document — "Error Parsing XML: The entity name
+  // must immediately follow the '&'" — not just that field. Proven on SB2 with a
+  // real invoice; the master pack and validate-templates.sh enforce the same rule.
+  return `\${(${recordType}.${path}!'')?xml}`;
 }

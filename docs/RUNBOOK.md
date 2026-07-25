@@ -24,7 +24,7 @@
 | เช็ค | คำสั่ง | baseline |
 |---|---|---|
 | Type | `npx tsc --noEmit` | 0 error |
-| Unit + component | `npx vitest run` | 544 passed |
+| Unit + component | `npx vitest run` | 545 passed |
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
@@ -86,6 +86,7 @@ Skeleton บังคับ copy จาก `templates/master/tax-invoice.xml` �
 | C-ternary `${a ? b : c}` | `?then(a,b)` หรือ `<#if>` | 1 |
 | binding ไม่ null-safe `${record.x}` | `${record.x!""}` ทุกตัว | 2 |
 | bake URL หรือฟอนต์ต่อ template | `${company.fontRegular}` ผ่าน `?xml` — BFO ไม่ apply GPOS ฟอนต์ผิดพังเงียบ | 32 |
+| **binding ข้อมูลที่ไม่ผ่าน `?xml`** — `${record.entity!""}` | `${(record.entity!"")?xml}` ทุกตัวที่ค่ามาจาก `record.*` `line.*` `company.*` `copy.*` — BFO parse ผลของ FreeMarker เป็น XML อีกที ค่าที่มี `&` หรือ `<` (คำอธิบายสินค้า "Laser & Inkjet") จึงทำให้**ทั้งใบ**พิมพ์ไม่ออก ไม่ใช่แค่ช่องนั้น | 184 |
 | CSS `object-fit` `text-overflow` `@page` margin box `counter(page)` | หลีกเลี่ยง (BFO เมินเงียบ) | 3, 5 |
 | `<div>` ระดับ body | `<p>` หรือ `<table>` (BFO ทิ้ง div ทั้ง element เงียบ) | 10 |
 | สตริงไทยยาวตัดกลางคำ | แทรก ZWSP `\x200B` ระหว่างหน่วย (BFO ไม่มี Thai word-break) | 35 |

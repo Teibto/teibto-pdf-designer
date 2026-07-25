@@ -37,18 +37,18 @@
       <tr>
         <td style="width: 58%;">
           <p class="cell">
-          <span class="company-name">${company.name!""}</span><br />
-          <span>${company.address!""}</span><br />
-          <span>โทร. ${company.phone!""}<#if (company.email!"") != ""> อีเมล ${company.email}</#if></span><br />
-          <span class="bold">เลขประจำตัวผู้เสียภาษี ${company.taxId!""} ${company.branch!"สำนักงานใหญ่ (Head Office)"}</span>
+          <span class="company-name">${(company.name!"")?xml}</span><br />
+          <span>${(company.address!"")?xml}</span><br />
+          <span>โทร. ${(company.phone!"")?xml}<#if (company.email!"") != ""> อีเมล ${(company.email!"")?xml}</#if></span><br />
+          <span class="bold">เลขประจำตัวผู้เสียภาษี ${(company.taxId!"")?xml} ${(company.branch!"สำนักงานใหญ่ (Head Office)")?xml}</span>
           </p>
         </td>
         <td style="width: 42%; text-align: right;">
           <span class="doc-title">ใบส่งสินค้า</span><br />
           <span class="doc-title-en">DELIVERY NOTE</span><br />
-          <span class="doc-copy">${copy.label!"ต้นฉบับ (Original)"}</span><br />
-          <span>เลขที่ (No.) <span class="bold">${record.tranid!""}</span></span><br />
-          <span>วันที่ (Date) <span class="bold">${record.trandate!""}</span></span>
+          <span class="doc-copy">${(copy.label!"ต้นฉบับ (Original)")?xml}</span><br />
+          <span>เลขที่ (No.) <span class="bold">${(record.tranid!"")?xml}</span></span><br />
+          <span>วันที่ (Date) <span class="bold">${(record.trandate!"")?xml}</span></span>
         </td>
       </tr>
     </table>
@@ -57,7 +57,7 @@
   <macro id="nlfooter">
     <table style="width: 100%;">
       <tr>
-        <td class="footer-note">เอกสารเลขที่ ${record.tranid!""} จัดทำโดยระบบคอมพิวเตอร์ (Computer-generated document)</td>
+        <td class="footer-note">เอกสารเลขที่ ${(record.tranid!"")?xml} จัดทำโดยระบบคอมพิวเตอร์ (Computer-generated document)</td>
         <td class="footer-note" style="text-align: right;">หน้า (Page) <pagenumber/> / <totalpages/></td>
       </tr>
     </table>
@@ -97,16 +97,16 @@ td.r { text-align: right; }
     <td style="width: 62%;">
       <p class="cell">
       <span class="section-label">ลูกค้า (Customer)</span><br />
-      <span class="bold">${record.entity!""}</span><br />
+      <span class="bold">${(record.entity!"")?xml}</span><br />
       <span class="section-label">สถานที่ส่งมอบ (Ship To)</span><br />
-      <span>${record.shipaddress!""}</span>
+      <span>${(record.shipaddress!"")?xml}</span>
       </p>
     </td>
     <td style="width: 38%;">
       <p class="cell">
       <span class="section-label">อ้างอิง (Reference)</span><br />
-      <span>ใบสั่งขาย (SO No.): ${record.createdfrom!""}</span><br />
-      <span>ใบสั่งซื้อลูกค้า (PO No.): ${record.otherrefnum!""}</span>
+      <span>ใบสั่งขาย (SO No.): ${(record.createdfrom!"")?xml}</span><br />
+      <span>ใบสั่งซื้อลูกค้า (PO No.): ${(record.otherrefnum!"")?xml}</span>
       </p>
     </td>
   </tr>
@@ -128,9 +128,9 @@ td.r { text-align: right; }
     <#list (record.item)![] as line>
     <tr>
       <td class="c">${line_index + 1}</td>
-      <td><p class="cell">${line.item!""}<#if (line.description!"") != ""><br /><span class="desc">${line.description}</span></#if></p></td>
-      <td class="c">${line.quantityText!""}</td>
-      <td class="c">${line.units!""}</td>
+      <td><p class="cell">${(line.item!"")?xml}<#if (line.description!"") != ""><br /><span class="desc">${(line.description!"")?xml}</span></#if></p></td>
+      <td class="c">${(line.quantityText!"")?xml}</td>
+      <td class="c">${(line.units!"")?xml}</td>
     </tr>
     </#list>
   </tbody>
@@ -140,7 +140,7 @@ td.r { text-align: right; }
 <br />
 <p class="cell">
 <span class="section-label">หมายเหตุ (Remarks)</span><br />
-<span>${record.memo}</span>
+<span>${(record.memo!"")?xml}</span>
 </p>
 </#if>
 

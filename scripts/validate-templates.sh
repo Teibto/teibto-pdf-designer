@@ -38,6 +38,8 @@ checked = 0
 # ── regex ต่อกับดัก (อ้าง docs/TOOLSTACK.md) ──────────────────────────────
 INTERP = re.compile(r'\$\{.*?\}', re.DOTALL)                # ${ ... }
 FIELD_BINDING = re.compile(r'^\s*(record|line|company)\.[A-Za-z0-9_]+\s*$')
+DATA_BINDING = re.compile(r'(^|[^A-Za-z0-9_.])(record|line|company|copy)\.')  # ค่าที่มาจากข้อมูล (#184)
+XML_BUILTIN = re.compile(r'\?xml\s*$')                      # ?xml ต้องเป็น builtin ตัวสุดท้าย
 FONT_LINK = re.compile(r'<link\b[^>]*type\s*=\s*"font"[^>]*>', re.IGNORECASE | re.DOTALL)
 FORBIDDEN_CSS = {
     'object-fit': r'object-fit',                            # #5 BFO เมินเงียบ
@@ -46,6 +48,11 @@ FORBIDDEN_CSS = {
     '@page margin box': r'@page\b[^{]*\{[^}]*@(?:top|bottom|left|right)-',  # #3
     'counter(page)': r'counter\s*\(\s*page\s*\)',          # #3
 }
+
+def strip_comments(src: str) -> str:
+    """ตัด comment ทั้ง XML และ FreeMarker ทิ้ง — ตัวอย่างโค้ดใน comment ไม่ใช่ binding จริง"""
+    return re.sub(r'<!--.*?-->|<#--.*?-->', '', src, flags=re.DOTALL)
+
 
 def mask_freemarker(src: str) -> str:
     """ตัด FreeMarker ออกให้เหลือ XML ล้วน แล้วเช็ค well-formed (#well-formed)."""
@@ -167,6 +174,20 @@ def check_template(path: Path):
         m = FIELD_BINDING.match(interp[2:-1])
         if m and (m.group(0).strip() + '!') not in src:
             errors.append((name, f'binding ไม่ null-safe {interp.strip()} — ต้องมี ! เช่น {interp[:-1]}!""}} (#2)'))
+
+    # 3b) ทุก binding ของข้อมูลต้องผ่าน ?xml (#184)
+    #     BFO parse ผลลัพธ์ของ FreeMarker เป็น XML อีกที ค่าที่มี & หรือ < จาก
+    #     ข้อมูลจริง (คำอธิบายสินค้า "Laser & Inkjet", ชื่อบริษัท "A & B") จึงทำให้
+    #     **ทั้งเอกสาร** พิมพ์ไม่ออก ไม่ใช่แค่ช่องนั้น — engine escape ให้ไม่ได้
+    #     เพราะ rectype ที่ยังไม่ curate bind record ดิบตรง ๆ
+    for interp in INTERP.findall(strip_comments(src)):
+        body = interp[2:-1].strip()
+        if not DATA_BINDING.search(body):      # ${line_index + 1} ฯลฯ ไม่ใช่ข้อมูล
+            continue
+        if XML_BUILTIN.search(body):
+            continue
+        errors.append((name, f'binding ไม่ผ่าน ?xml {interp.strip()[:60]} — ข้อมูลที่มี & หรือ < '
+                             f'ทำให้พิมพ์ไม่ออกทั้งใบ ใช้ ${{({body})?xml}} (#184)'))
 
     # 4) ฟอนต์ต้องมาจาก config ${company.font*} ห้าม bake URL/placeholder (#4/#11/#32)
     for link in FONT_LINK.findall(src):

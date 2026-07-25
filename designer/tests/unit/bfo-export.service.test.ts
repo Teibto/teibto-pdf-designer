@@ -603,14 +603,14 @@ describe('null-safe bindings (#4)', () => {
     const state = createMockState([makeText({ binding: 'custbody_note' })]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain("${record.custbody_note!''}");
+    expect(xml).toContain("${(record.custbody_note!'')?xml}");
   });
 
   it('inline {{path}} content gets null-safe default', () => {
     const state = createMockState([makeText({ content: 'Ref: {{otherrefnum}}' })]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain("${record.otherrefnum!''}");
+    expect(xml).toContain("${(record.otherrefnum!'')?xml}");
   });
 
   it('table loop is null-safe: (record.list)![]', () => {
@@ -651,7 +651,7 @@ describe('null-safe bindings (#4)', () => {
     const state = createMockState([img]);
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
-    expect(xml).toContain("${record.custbody_logo_url!''}");
+    expect(xml).toContain("${(record.custbody_logo_url!'')?xml}");
     expect(xml).not.toContain('&quot;}');
   });
 
@@ -665,6 +665,25 @@ describe('null-safe bindings (#4)', () => {
     const all = xml.match(/\$\{(?:record|lines)\.[^}]*\}/g) ?? [];
     const unsafe = all.filter((m) => !m.includes("!''"));
     expect(unsafe).toEqual([]);
+  });
+
+  // #184: BFO parses FreeMarker's output as XML, so a value carrying `&` or `<`
+  // (item description "Laser & Inkjet") kills the WHOLE document, not just that
+  // field — proven on SB2 with a real invoice. Same rule the master pack and
+  // scripts/validate-templates.sh enforce, pinned here for generated XML too.
+  it('every data binding it emits goes through ?xml', () => {
+    const state = createMockState([
+      makeText({ binding: 'custbody_a' }),
+      makeText({ content: 'Ref: {{otherrefnum}}' }),
+      makeTable(),
+    ]);
+    const xml = exportBfoXml(state, { useFreeMarker: true });
+
+    const bindings = xml.match(/\$\{[^}]*\}/g) ?? [];
+    const dataBindings = bindings.filter((m) => /(^|[^A-Za-z0-9_.])(record|lines|company|copy)\./.test(m));
+    expect(dataBindings.length).toBeGreaterThan(0);
+    const unescaped = dataBindings.filter((m) => !m.includes('?xml'));
+    expect(unescaped).toEqual([]);
   });
 });
 
@@ -681,7 +700,7 @@ describe('barcode null-safety (#4)', () => {
     const xml = exportBfoXml(state, { useFreeMarker: true });
 
     expect(xml).toContain("<#if (record.tranid!'')?has_content>");
-    expect(xml).toContain("value=\"${record.tranid!''}\"");
+    expect(xml).toContain("value=\"${(record.tranid!'')?xml}\"");
     expect(xml).toContain('</#if>');
   });
 
