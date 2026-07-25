@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- **ตัวเลือก record type "Transaction (Invoice, SO, PO)" เป็นกับดัก** (#158) — engine หา default template ด้วย filter ตรงตัว (`[custrecord_pld_tpl_rectype, 'is', recType]`) จึงไม่มี template ตัวเดียวที่ครอบหลาย record type ได้: ผู้ใช้เลือกค่านี้ บันทึกสำเร็จ ตั้งเป็น default ได้ แล้วกด Print PDF บน invoice ขึ้น `No template found` ตลอดไปโดยไม่มีอะไรบอกว่าเลือกค่าที่ใช้พิมพ์ไม่ได้. ถอด `transaction` ออกจาก dropdown (default ของ modal เปลี่ยนเป็น `invoice` ผ่าน `DEFAULT_RECORD_TYPE`) — template เดิมที่บันทึกไว้ด้วยค่านี้ยังเห็นค่าตัวเองใน dropdown และแก้ให้ถูกได้ (`recordTypeOptions` prepend ค่าที่ไม่อยู่ในลิสต์อยู่แล้ว) พร้อม hint ในโมดัลบันทึกว่า record type ต้องตรงกับใบที่จะกดพิมพ์
+
+### Changed
+- **dropdown record type ตรงกับปุ่มที่โผล่บน transaction แล้ว** (#158) — เพิ่ม `creditmemo` (engine curate ให้อยู่แล้วแต่เลือกไม่ได้), `customerpayment` และ `returnauthorization` (ปุ่ม Print มีแต่ตั้ง template ไม่ได้) · label เป็น "English / ไทย" ทุกตัวให้ consultant เลือกจากชื่อเอกสารไทยได้ (ใบกำกับภาษี, ใบลดหนี้, ใบเสนอราคา, ใบส่งสินค้า …) · ข้อจำกัดของ rectype ที่ engine ยังไม่ curate data ให้ ติดตามที่ #159
+
 ## [0.3.0] — 2026-07-24
 
 ### Added

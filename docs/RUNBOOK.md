@@ -24,7 +24,7 @@
 | เช็ค | คำสั่ง | baseline |
 |---|---|---|
 | Type | `npx tsc --noEmit` | 0 error |
-| Unit + component | `npx vitest run` | 529 passed |
+| Unit + component | `npx vitest run` | 538 passed |
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
@@ -93,7 +93,7 @@ config record `customrecord_pld_config` คือจุดตั้งค่า 
 ### เพิ่ม document type ใหม่ end-to-end
 
 1. engine — เพิ่ม rectype ใน `DOC_TITLES` (`pld_lib_invoice_data.js`) เป็น `{th, en}` · ฝั่งซื้อเพิ่มใน `PURCHASE_SIDE` (คุมเครื่องหมายจำนวนเงิน) · รองรับตอนนี้: `invoice` `creditmemo` `estimate` `salesorder` `purchaseorder`
-2. designer — เพิ่มใน `RECORD_TYPES` (`designer/src/constants/record-types.ts`) โดย `value` = ค่าที่ลงใน `custrecord_pld_tpl_rectype`
+2. designer — เพิ่มใน `RECORD_TYPES` (`designer/src/constants/record-types.ts`) โดย `value` = **record type id จริงของ NetSuite** เท่านั้น (engine filter ตรงตัว — ค่า pseudo แบบ `transaction` ทำให้ Print ขึ้น `No template found` ตลอดไป #158); unit test คุมว่า rectype ที่ปุ่มโผล่ต้องมีในลิสต์ครบ
 3. template — `templates/master/<doc>.xml` (copy skeleton) + `templates/samples/<doc>.sample.json` สังเคราะห์
 4. ตั้ง default template ต่อ rectype บน account ผ่านปุ่ม `⚙ ตั้งค่าการบันทึก` ไม่งั้น Print คืน `No template found` (R4)
 
