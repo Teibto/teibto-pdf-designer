@@ -60,6 +60,10 @@ const BODY_VALUES = {
   subtotal: 10000,
   taxtotal: 700,
   createdfrom: '9911',
+  // receipt body fields (#170) — 10,700 + 1,000 = the two ticked apply lines
+  payment: 11700,
+  paymentmethod: '3',
+  checknum: 'CHQ-556677',
   custbody_thl_entvatregistrationno: '0994000000000',
   custbody_thl_entbranchno: '00000',
   custbody_thl_withholdingtaxtotal: 0,
@@ -68,7 +72,19 @@ const BODY_VALUES = {
 const BODY_TEXTS = {
   terms: 'Net 30', salesrep: 'สุดา ขายเก่ง', employee: 'อนงค์ จัดซื้อ',
   createdfrom: 'Sales Order #SO2026-0044',
+  paymentmethod: 'โอนเงินผ่านธนาคาร',
 };
+
+/**
+ * `apply` sublist of a customer payment (#170) — two invoices ticked, one open
+ * invoice of the same customer left unticked. The unticked row is the point: it must
+ * never reach the receipt, or the payer is told they settled a document they did not.
+ */
+const APPLY_LINES = [
+  { apply: true, refnum: 'INV2026-0007', applydate: new Date(2026, 6, 25), total: 10700, amount: 10700 },
+  { apply: false, refnum: 'INV2026-0009', applydate: new Date(2026, 6, 26), total: 5000, amount: 0 },
+  { apply: true, refnum: 'INV2026-0011', applydate: new Date(2026, 6, 27), total: 3210, amount: 1000 },
+];
 
 /** Returns the module plus the query stub, so a test can assert on the SQL issued. */
 function buildLibWith(overrides = {}) {
@@ -81,7 +97,12 @@ function buildLibWith(overrides = {}) {
   ]);
   const stubs = {
     'N/query': q,
-    'N/record': recordStub({ id: 42, values, texts: BODY_TEXTS }).module,
+    'N/record': recordStub({
+      id: 42,
+      values,
+      texts: BODY_TEXTS,
+      sublists: { apply: overrides.apply || APPLY_LINES },
+    }).module,
     'N/format': formatStub,
     './pld_lib_company_config': companyConfigStub,
   };
@@ -249,11 +270,15 @@ test('every curated type prints its own Thai document title', () => {
   }
 });
 
-test('an unknown record type never silently prints as an invoice', () => {
+test('a type the engine does not curate is reported as unsupported', () => {
+  // isSupportedType is the gate pld_sl_render_pdf uses to choose curated data over
+  // NetSuite's raw record binding — it must answer for the type asked about, not
+  // fall through to the invoice schema.
   const lib = buildLib();
   assert.equal(lib.isSupportedType('cashsale'), true);
-  assert.equal(lib.isSupportedType('customerpayment'), false,
-    'still raw-path — the render suitelet must keep binding the raw record for it (#170)');
+  assert.equal(lib.isSupportedType('customerpayment'), true);
+  assert.equal(lib.isSupportedType('journalentry'), false);
+  assert.equal(lib.isSupportedType(''), false);
 });
 
 test('purchase-side lines keep their record sign, sales-side lines are negated', () => {
@@ -357,6 +382,68 @@ test('no query asks the transaction table for createdfrom', () => {
     assert.ok(query.indexOf('createdfrom') === -1,
       `SuiteQL must not reference createdfrom — read it off the record instead (#174):\n${query}`);
   }
+});
+
+// ─── #170: a receipt, whose rows are documents rather than items ─────────────
+test('a receipt lists only the documents the payment actually settles', () => {
+  const data = buildLib().buildTransactionData('customerpayment', 42);
+
+  assert.equal(data.item.length, 2, 'the unticked open invoice must not appear');
+  assert.equal(data.apply, data.item, 'record.apply and record.item are the same rows');
+
+  const [first, second] = data.apply;
+  assert.equal(first.refnum, 'INV2026-0007');
+  assert.equal(first.applydate, '25/07/2026');
+  assert.equal(first.totalText, '10,700.00');
+  assert.equal(first.amountText, '10,700.00');
+  assert.equal(second.refnum, 'INV2026-0011');
+  assert.equal(second.totalText, '3,210.00', 'the document total, not the amount paid');
+  assert.equal(second.amountText, '1,000.00', 'a partial settlement prints what was paid');
+
+  for (const row of data.apply) {
+    assert.ok(row.refnum.indexOf('INV2026-0009') === -1,
+      'an open invoice that was NOT ticked would tell the payer they settled it');
+  }
+});
+
+test('a receipt prints the amount received and its Thai words', () => {
+  const data = buildLib().buildTransactionData('customerpayment', 42);
+
+  assert.equal(data.document.titleTH, 'ใบเสร็จรับเงิน (ต้นฉบับ)');
+  assert.equal(data.paymentText, '11,700.00');
+  assert.equal(data.payment, 11700, 'numeric alias stays numeric like the other amounts');
+  assert.equal(data.totals.customerPaid, '11,700.00');
+  assert.equal(data.checknum, 'CHQ-556677');
+  assert.equal(data.paymentmethod, 'โอนเงินผ่านธนาคาร');
+
+  // the words describe the amount RECEIVED, not an invoice grand total (#170)
+  assert.ok(data.bahtText.indexOf('บาท') !== -1, `expected Thai baht text, got "${data.bahtText}"`);
+  assert.ok(data.bahtText.indexOf('ศูนย์บาท') === -1);
+  assert.equal(data.bahtText, data.totals.bahtText);
+});
+
+test('a receipt prints no statutory VAT breakdown', () => {
+  const data = buildLib().buildTransactionData('customerpayment', 42);
+
+  for (const key of ['subtotalText', 'netAmountText', 'taxtotalText', 'totalText']) {
+    assert.equal(data[key], '', `${key} must be blank on a receipt, got "${data[key]}"`);
+  }
+  assert.equal(data.totals.summaryRows.length, 0);
+});
+
+test('a receipt with nothing applied prints an empty table, not a wrong one', () => {
+  const data = buildLib({ apply: [] }).buildTransactionData('customerpayment', 42);
+  assert.equal(data.apply.length, 0);
+  assert.equal(data.paymentText, '11,700.00', 'the amount received still stands on its own');
+});
+
+test('settlement keys exist and stay blank on an item row', () => {
+  // one row shape everywhere (#170): binding ${line.refnum} on an invoice prints
+  // nothing, it does not blow up or vanish from the contract
+  const row = buildLib().buildTransactionData('invoice', 42).item[0];
+  assert.equal(row.refnum, '');
+  assert.equal(row.applydate, '');
+  assert.equal(row.totalText, '');
 });
 
 test('buyer tax id / branch prefer the account field and fall back to Thai-Loc values', () => {
