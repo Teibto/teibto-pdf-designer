@@ -84,7 +84,7 @@ define([
     var params = context.request.parameters;
     var recType = params.rectype;
     var tplId = params.tplid || '';
-    var ids = parseIds(params.docid);
+    var ids = parseIds(params.docids);
 
     if (!recType) throw new Error('ไม่ได้ระบุประเภทเอกสาร');
     if (ids.length === 0) throw new Error('ยังไม่ได้เลือกเอกสารที่จะพิมพ์');
@@ -158,6 +158,7 @@ define([
 
       try {
         var out = pldRender.renderDocumentXml(tplXml, recType, ids[i], copies, tel);
+        assertParsable(out.docs);
         for (var d = 0; d < out.docs.length; d++) docs.push(out.docs[d]);
         printed.push({ id: ids[i], tranId: out.tranId || ids[i] });
       } catch (e) {
@@ -184,7 +185,41 @@ define([
     };
   }
 
-  /** `docid` มาเป็นค่าซ้ำชื่อจาก checkbox — NetSuite รวมให้เป็นสตริงคั่นจุลภาค */
+  /**
+   * เอกสารที่ resolve ออกมาเป็น XML ที่ parse ไม่ผ่าน ต้องถูกจับ **ตรงใบนั้น**
+   *
+   * ถ้าปล่อยผ่าน ตัวที่พังคือ `render.xmlToPdf` ตอนรวมไฟล์ ซึ่งอยู่นอก try ของแต่ละใบ
+   * → เอกสารเสียใบเดียวล้มทั้งชุด และผู้ใช้ไม่รู้ว่าใบไหนเป็นต้นเหตุ · เคสจริงที่เจอ
+   * บน SB2: คำอธิบายสินค้ามี `&` แล้ว master template bind โดยไม่ผ่าน `?xml` (#184)
+   */
+  function assertParsable(docs) {
+    for (var i = 0; i < docs.length; i++) {
+      try {
+        xml.Parser.fromString({ text: docs[i] });
+      } catch (e) {
+        throw new Error('เอกสารนี้สร้าง XML ที่ BFO อ่านไม่ได้ (' + ((e && e.message) || e) +
+          ') — มักเกิดจากข้อมูลที่มี & หรือ < ในช่องที่ template ยังไม่ผ่าน ?xml (#184)');
+      }
+    }
+  }
+
+  /** ยอดเงินในตารางเลือกเอกสาร — search คืนค่าดิบ (`53.261`) จึงจัดรูปให้อ่านออก */
+  function money(value) {
+    var n = Number(String(value == null ? '' : value).replace(/,/g, ''));
+    if (!isFinite(n) || String(value).trim() === '') return '';
+    var neg = n < 0;
+    var parts = Math.abs(n).toFixed(2).split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (neg ? '-' : '') + parts.join('.');
+  }
+
+  /**
+   * รายการ id ที่จะพิมพ์ มาเป็น **ฟิลด์เดียวคั่นจุลภาค** (`docids`) ไม่ใช่ checkbox
+   * ชื่อซ้ำหลายตัว — พิสูจน์บน SB2 (#181): `request.parameters.docid` ของ field ที่
+   * ซ้ำชื่อกันคืนมาแค่ **ค่าแรกค่าเดียว** สั่งพิมพ์ 25 ใบจึงได้ PDF ใบเดียวโดยที่
+   * สคริปต์เข้าใจว่าครบแล้ว (จึงไม่ขึ้นหน้าสรุปด้วย) · หน้าจอรวมค่าที่ติ๊กไว้ให้
+   * ตอน submit แล้วส่งมาเป็นสตริงเดียว
+   */
   function parseIds(raw) {
     return String(raw == null ? '' : raw)
       .split(',')
@@ -251,7 +286,9 @@ define([
 
     var body = rows.map(function (r) {
       return '<tr class="doc" data-search="' + esc((r.tranid + ' ' + r.entity).toLowerCase()) + '">' +
-        '<td class="pick"><input type="checkbox" name="docid" value="' + esc(r.id) + '" checked /></td>' +
+        // ไม่มี name= โดยตั้งใจ — ค่าที่ติ๊กถูกรวมเป็นฟิลด์เดียว (docids) ตอน submit
+        // เพราะ field ชื่อซ้ำกันหลายตัวส่งถึง Suitelet แค่ค่าแรก (ดู parseIds)
+        '<td class="pick"><input type="checkbox" class="pldpick" value="' + esc(r.id) + '" checked /></td>' +
         '<td>' + esc(r.tranid) + '</td>' +
         '<td>' + esc(r.trandate) + '</td>' +
         '<td>' + esc(r.entity) + '</td>' +
@@ -260,9 +297,10 @@ define([
     }).join('\n');
 
     return [
-      '<form method="POST" class="picker">',
+      '<form method="POST" class="picker" id="pld-form">',
       '<input type="hidden" name="action" value="print" />',
       '<input type="hidden" name="rectype" value="' + esc(recType) + '" />',
+      '<input type="hidden" name="docids" id="pld-docids" value="" />',
       templateSelect(recType, tplId),
       '<div class="toolbar">',
       '<input type="search" id="pld-filter" placeholder="กรองในรายการ (เลขที่ / คู่ค้า)" />',
@@ -278,23 +316,35 @@ define([
     ].join('\n');
   }
 
-  /** กรองรายการฝั่งเบราว์เซอร์ + ติ๊ก/เอาออกทั้งหมด (ไม่ยิง server ซ้ำ) */
+  /**
+   * กรองรายการฝั่งเบราว์เซอร์ + ติ๊ก/เอาออกทั้งหมด (ไม่ยิง server ซ้ำ) และ
+   * **รวม id ที่ติ๊กไว้เป็นฟิลด์เดียวตอน submit** — field ชื่อซ้ำกันส่งถึง Suitelet
+   * แค่ค่าแรก (พิสูจน์บน SB2, ดู parseIds)
+   */
   function listScript() {
     return '<script>\n' +
       '(function(){\n' +
       '  var all=document.getElementById("pld-all");\n' +
       '  var q=document.getElementById("pld-filter");\n' +
+      '  var form=document.getElementById("pld-form");\n' +
+      '  var hidden=document.getElementById("pld-docids");\n' +
       '  var rows=[].slice.call(document.querySelectorAll("tr.doc"));\n' +
+      '  var box=function(r){ return r.querySelector("input.pldpick"); };\n' +
       '  if(all){all.addEventListener("change",function(){\n' +
-      '    rows.forEach(function(r){ if(r.style.display!=="none"){ r.querySelector("input").checked=all.checked; } });\n' +
+      '    rows.forEach(function(r){ if(r.style.display!=="none"){ box(r).checked=all.checked; } });\n' +
       '  });}\n' +
       '  if(q){q.addEventListener("input",function(){\n' +
       '    var v=q.value.toLowerCase();\n' +
       '    rows.forEach(function(r){\n' +
       '      var hit=r.getAttribute("data-search").indexOf(v)!==-1;\n' +
       '      r.style.display=hit?"":"none";\n' +
-      '      if(!hit){ r.querySelector("input").checked=false; }\n' +
+      '      if(!hit){ box(r).checked=false; }\n' +
       '    });\n' +
+      '  });}\n' +
+      '  if(form){form.addEventListener("submit",function(e){\n' +
+      '    var ids=rows.filter(function(r){ return box(r).checked; }).map(function(r){ return box(r).value; });\n' +
+      '    if(ids.length===0){ e.preventDefault(); alert("ยังไม่ได้เลือกเอกสารที่จะพิมพ์"); return; }\n' +
+      '    hidden.value=ids.join(",");\n' +
       '  });}\n' +
       '})();\n' +
       '</script>';
@@ -362,9 +412,7 @@ define([
       '<input type="hidden" name="action" value="print" />' +
       '<input type="hidden" name="rectype" value="' + esc(recType) + '" />' +
       (tplId ? '<input type="hidden" name="tplid" value="' + esc(tplId) + '" />' : '') +
-      ids.map(function (id) {
-        return '<input type="hidden" name="docid" value="' + esc(id) + '" />';
-      }).join('') +
+      '<input type="hidden" name="docids" value="' + esc(ids.join(',')) + '" />' +
       '<button class="primary" type="submit">' + esc(label) + '</button></form>';
   }
 
@@ -455,7 +503,7 @@ define([
           tranid: r.getValue('tranid') || ('#' + r.id),
           trandate: r.getValue('trandate') || '',
           entity: r.getText('entity') || r.getValue('entity') || '',
-          total: MONEY_TYPES[recType] === true ? (r.getValue('total') || '') : ''
+          total: MONEY_TYPES[recType] === true ? money(r.getValue('total')) : ''
         });
       });
     return rows;

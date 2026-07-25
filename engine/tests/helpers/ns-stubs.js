@@ -126,8 +126,19 @@ const companyConfigStub = {
   }),
 };
 
-/** N/xml stub — only escape() is used by the engine. */
+/**
+ * N/xml stub — escape() plus a crude Parser.fromString: it rejects a bare `&`
+ * the way BFO's parser does, which is exactly the failure batch print has to
+ * survive per document (#184).
+ */
 const xmlStub = {
+  Parser: {
+    fromString({ text }) {
+      const bare = /&(?![a-zA-Z]+;|#\d+;)/.test(String(text));
+      if (bare) throw new Error("The entity name must immediately follow the '&' in the entity reference.");
+      return { text: String(text) };
+    },
+  },
   escape({ xmlText }) {
     return String(xmlText)
       .replace(/&/g, '&amp;')
@@ -197,7 +208,7 @@ function searchStub(rows = []) {
 
 /** N/render stub — records what was rendered so tests can assert on it. */
 function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf>' } = {}) {
-  const calls = { created: 0, dataSources: [], records: [], renderedAsPdf: 0, xmlToPdf: [] };
+  const calls = { created: 0, dataSources: [], records: [], renderedAsPdf: 0, renderedAsString: 0, xmlToPdf: [] };
   return {
     calls,
     module: {
@@ -209,7 +220,13 @@ function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf
           addCustomDataSource(ds) { calls.dataSources.push(ds); },
           addRecord(r) { calls.records.push(r); },
           renderAsPdf() { calls.renderedAsPdf += 1; return { name: pdfName }; },
-          renderAsString() { return asString; },
+          // asString may be a function of the pass index, so a test can make ONE
+          // document in a batch resolve to broken XML (#181/#184)
+          renderAsString() {
+            const i = calls.renderedAsString;
+            calls.renderedAsString += 1;
+            return typeof asString === 'function' ? asString(i) : asString;
+          },
         };
       },
       xmlToPdf(opts) { calls.xmlToPdf.push(opts); return { name: pdfName }; },

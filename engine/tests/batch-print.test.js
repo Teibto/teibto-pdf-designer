@@ -70,9 +70,9 @@ function typedSearchStub(byType) {
  * @param {Array}  opts.failIds    record ids whose record.load blows up
  * @param {Function} opts.usage    getRemainingUsage() sequence
  */
-function buildBatch({ documents = [], templates = [], failIds = [], usage } = {}) {
+function buildBatch({ documents = [], templates = [], failIds = [], usage, asString } = {}) {
   const log = logStub();
-  const render = renderStub();
+  const render = renderStub(asString === undefined ? {} : { asString });
   const search = typedSearchStub({
     itemfulfillment: documents,
     invoice: documents,
@@ -136,7 +136,7 @@ function printRequest(ids, extra = {}) {
   return contextStub({
     method: 'POST',
     parameters: Object.assign(
-      { action: 'print', rectype: 'itemfulfillment', docid: ids.join(',') },
+      { action: 'print', rectype: 'itemfulfillment', docids: ids.join(',') },
       extra,
     ),
   });
@@ -167,7 +167,7 @@ test('เลือกประเภทแล้วได้รายการ�
 
   assert.match(body, /IF-0011/);
   assert.match(body, /ลูกค้า ก/);
-  assert.equal((body.match(/name="docid"/g) || []).length, 3, 'หนึ่ง checkbox ต่อหนึ่งใบ');
+  assert.equal((body.match(/class="pldpick"/g) || []).length, 3, 'หนึ่ง checkbox ต่อหนึ่งใบ');
   assert.match(body, /ใบส่งสินค้ามาตรฐาน ★/, 'เลือก template ได้ และเห็นว่าตัวไหนเป็นค่าเริ่มต้น');
   assert.match(body, /พบ 3 รายการ/);
 });
@@ -325,4 +325,59 @@ test('ไม่มี template ของประเภทนี้ = error ท�
   const error = log.entries.find((e) => e.level === 'error');
   assert.equal(error.details.errorId, shown, 'รหัสบนหน้าจอกับใน log เป็นตัวเดียวกัน');
   assert.equal(error.details.stage, 'load-template');
+});
+
+// ─── บั๊กที่ QA บน SB2 จับได้ (2026-07-25) ─────────────────────────────────────
+
+test('id ที่ติ๊กไว้ส่งเป็นฟิลด์เดียว — checkbox ชื่อซ้ำถึง Suitelet แค่ค่าแรก', () => {
+  // อาการจริงบน SB2: สั่งพิมพ์ 25 ใบแล้วได้ PDF ใบเดียว โดยสคริปต์เข้าใจว่าครบแล้ว
+  // (จึงไม่ขึ้นหน้าสรุปด้วย) เพราะ request.parameters.docid ของ field ที่ซ้ำชื่อกัน
+  // คืนมาแค่ค่าแรก
+  const { suitelet } = buildBatch({ documents: DOCS, templates: TEMPLATES });
+  const { context, response } = contextStub({ parameters: { rectype: 'itemfulfillment' } });
+
+  suitelet.onRequest(context);
+  const body = response.state.body;
+
+  assert.match(body, /name="docids"/, 'ส่งเป็นฟิลด์เดียวคั่นจุลภาค');
+  assert.ok(body.indexOf('name="docid"') === -1, 'ห้ามมี field ชื่อซ้ำกันหลายตัวอีก');
+  assert.match(body, /hidden\.value\s*=\s*ids\.join\(","\)/, 'หน้าจอรวมค่าที่ติ๊กตอน submit');
+});
+
+test('เอกสารที่ resolve เป็น XML เสีย ถูกรายงานเป็นใบที่ล้ม ไม่ล้มทั้งชุด (#184)', () => {
+  // เคสจริงบน SB2: คำอธิบายสินค้ามี & แล้ว template bind โดยไม่ผ่าน ?xml → เอกสาร
+  // ใบนั้น resolve เป็น XML ที่ parse ไม่ผ่าน ถ้าไม่จับตรงนี้ ตัวที่พังคือขั้นตอน
+  // รวมไฟล์ ซึ่งอยู่นอก try ของแต่ละใบ = ทั้งชุดล่มโดยไม่รู้ว่าใบไหนเป็นต้นเหตุ
+  const { suitelet, log } = buildBatch({
+    documents: DOCS,
+    templates: TEMPLATES,
+    // 2 สำเนาต่อใบ → pass 2,3 คือใบที่สอง
+    asString: (i) => (i === 2 || i === 3
+      ? '<pdf><body>Laser & Inkjet</body></pdf>'
+      : '<pdf><body>ok</body></pdf>'),
+  });
+  const { context, response } = printRequest(['11', '12', '13']);
+
+  suitelet.onRequest(context);
+  const body = response.state.body;
+
+  assert.equal(response.state.files.length, 0);
+  assert.match(body, /สร้างสำเร็จ 2 ใบ/);
+  assert.match(body, /ล้มเหลว 1 ใบ/);
+  assert.match(body, /BFO อ่านไม่ได้/);
+  assert.match(body, /#184/, 'บอกสาเหตุที่พบบ่อยให้ผู้ดูแลระบบตามต่อได้');
+  assert.equal(log.entries.filter((e) => e.level === 'error')[0].details.recid, '12');
+});
+
+test('ยอดเงินในตารางจัดรูปให้อ่านออก — search คืนค่าดิบ', () => {
+  const { suitelet } = buildBatch({
+    documents: [{ id: '11', values: { tranid: 'INV-1', trandate: '25/7/2026', total: '53.261' } }],
+    templates: TEMPLATES,
+  });
+  const { context, response } = contextStub({ parameters: { rectype: 'invoice' } });
+
+  suitelet.onRequest(context);
+
+  assert.match(response.state.body, /53\.26/);
+  assert.ok(response.state.body.indexOf('53.261') === -1, 'ไม่โชว์ค่าดิบจาก search');
 });
