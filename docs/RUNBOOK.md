@@ -52,6 +52,7 @@ CI `quality-gate` รัน lint + vitest + e2e + template validator + engine un
 - อ่าน Script Execution Log บน account — เปิด `script.nl?id=<scriptid>` (ไม่ใช่ `scriptrecord.nl` ที่จะขึ้น "Record does not exist") แล้วคลิก subtab `#executionlogtxt` log จะขึ้น inline
 - data classification (Internal) — account ลูกค้าห้ามแตะแม้ dryrun · deploy เฉพาะ Teibto sandbox เท่านั้น
 - verify engine change — `node --check` + `node --test "engine/tests/**/*.test.js"` + review + QA สดบน SB2 (skill `netsuite-qa-browser`)
+- **ทุกค่าที่ข้าม `render.DataSource.OBJECT` ถึง FreeMarker เป็น string เสมอ (#165)** — พิสูจน์บน SB2: ส่ง `5350` (number) จาก JS แล้ว `${record.total?is_number}` = `NO`, `?string("#,##0.00")` คืน **ค่าว่างโดยไม่ error** ดังนั้น engine ต้อง format money/qty ให้เสร็จก่อนส่ง (`money()` / `pld_lib_baht_text`) แล้ว template พิมพ์ตรง ๆ · ฝั่ง designer ไม่โดนเพราะ `bfo-export.service.ts` coerce `?trim?number` ใน `<#attempt>` ก่อน format อยู่แล้ว (นั่นคือเหตุที่เทมเพลตจาก designer โชว์เลข แต่ master pack ว่าง) · validator ban `?string(`/`?string[`/`pldBahtText(` ใน master ทุกไฟล์แล้ว
 - **binding contract (#155)**: rectype ที่อยู่ใน `DOC_TITLES` bind object จาก `pld_lib_invoice_data.js` แทน record ดิบ ดังนั้น key ที่ template อ้างต้องอยู่ใน `CURATED_KEYS` / `RAW_ALIAS_KEYS` / `ITEM_BINDING_KEYS` — เพิ่ม/ลบ key ต้องแก้ทั้ง list กับ object ที่ return (unit test บังคับให้ตรงกัน) · key ที่หลุด contract ไม่ error แต่พิมพ์ว่าง เพราะ binding null-safe (#2) กลืนไว้
 - เขียน unit test ของ engine — `engine/tests/` ใช้ AMD shim (`helpers/amd.js`) mount โมดูลจริงโดย stub เฉพาะ `N/*` (`helpers/ns-stubs.js`); sibling lib (`./pld_lib_*`) โหลดของจริง จะ override ก็ใส่ key ชื่อเดียวกันใน stubs
 
@@ -79,6 +80,8 @@ Skeleton บังคับ copy จาก `templates/master/tax-invoice.xml` �
 | สตริงไทยยาวตัดกลางคำ | แทรก ZWSP `\x200B` ระหว่างหน่วย (BFO ไม่มี Thai word-break) | 35 |
 | ไม่มี marker `pld:rectype <recordtype>` ใน comment หัวไฟล์ | ใส่เสมอ — บอกว่า template ผูกกับ record type ไหน (validator ใช้เลือกว่าจะเทียบ binding contract แบบ curated หรือข้าม) | 155 |
 | bind key ที่ engine ไม่ได้จ่ายสำหรับ rectype นั้น | ใช้ key ใน contract หรือเพิ่ม alias ที่ `pld_lib_invoice_data.js` — ไม่งั้นพิมพ์ว่างเงียบ | 155 |
+| **format ตัวเลขใน template** — `?string("#,##0.00")` / `?string["#,##0.00"]` | พิมพ์ค่าที่ engine format มาแล้ว (`${record.totalText}` `${line.amountText}` `${record.bahtText}`) | 165 |
+| เลขคณิตกับ binding (`a + b`, `?abs`, `pldBahtText(x)`) | ให้ engine คำนวณแล้วส่งเป็น text · เงื่อนไขให้เทียบ string (`<#if (record.discounttotalText!"") != "">`) ไม่เทียบตัวเลข | 165 |
 
 Validate แล้ว smoke-test:
 

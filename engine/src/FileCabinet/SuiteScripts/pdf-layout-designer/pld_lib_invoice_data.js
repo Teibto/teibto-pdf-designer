@@ -135,10 +135,22 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     'tranid', 'trandate', 'duedate', 'entity', 'billaddress', 'shipaddress',
     'memo', 'otherrefnum', 'terms', 'salesrep', 'employee',
     'custbody_buyer_taxid', 'custbody_buyer_branch', 'custbody_doc_copy_label',
-    'item', 'subtotal', 'discounttotal', 'taxtotal', 'total'
+    'item', 'subtotal', 'discounttotal', 'taxtotal', 'total',
+    // Money/quantity as ALREADY-FORMATTED text (#165). A template cannot format a
+    // number itself: render.DataSource.OBJECT hands every value to FreeMarker as a
+    // string, and `?string("#,##0.00")` on a string returns EMPTY without an error
+    // (proven on SB2 — every money cell in the master pack printed blank). So the
+    // engine formats, the template prints. discounttotalText is EMPTY when there is
+    // no discount, so a template branches on a string compare, never on a number.
+    'subtotalText', 'discounttotalText', 'netAmountText', 'taxtotalText',
+    'totalText', 'bahtText'
   ];
   var BINDING_KEYS = CURATED_KEYS.concat(RAW_ALIAS_KEYS);
-  var ITEM_BINDING_KEYS = ['item', 'description', 'quantity', 'units', 'rate', 'amount'];
+  var ITEM_BINDING_KEYS = [
+    'item', 'description', 'quantity', 'units', 'rate', 'amount',
+    // formatted counterparts (#165) — what the item table actually prints
+    'quantityText', 'rateText', 'amountText'
+  ];
 
   /**
    * @param {string} recType  NetSuite record type (invoice/estimate/salesorder/purchaseorder/creditmemo)
@@ -298,7 +310,12 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         quantity: isItem && l.quantity != null ? num(l.quantity) / conv : null,
         units: row.unit,
         rate: isItem && l.unit_price != null ? num(l.unit_price) : null,
-        amount: l.amount != null ? num(l.amount) : null
+        amount: l.amount != null ? num(l.amount) : null,
+        // What the table prints (#165) — same formatting as the curated row, so a
+        // master and a designer-built template show identical figures.
+        quantityText: row.quantity,
+        rateText: row.unit_price,
+        amountText: row.amount
       });
       prevMemo = memo;
     });
@@ -424,7 +441,16 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       subtotal: rawSubtotal,
       discounttotal: rawDiscount,
       taxtotal: vat,
-      total: grandTotal
+      total: grandTotal,
+      // Formatted money (#165): the numeric keys above survive the trip to
+      // FreeMarker only as strings, so anything a template PRINTS must be
+      // formatted here. Empty discount text = "no discount row" for the template.
+      subtotalText: money(rawSubtotal),
+      discounttotalText: rawDiscount ? money(Math.abs(rawDiscount)) : '',
+      netAmountText: money(baseAmount),
+      taxtotalText: money(vat),
+      totalText: money(grandTotal),
+      bahtText: bahtText.bahtText(grandTotal)
     };
   }
 
