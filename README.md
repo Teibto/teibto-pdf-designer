@@ -1,4 +1,4 @@
-**[🔄 Contributing](CONTRIBUTING.md)** · **[🏗️ Architecture](docs/architecture/OVERVIEW.md)** · **[🧰 Tech Stack & Tools](docs/TOOLSTACK.md)** · **[🔁 Playbook](https://github.com/Teibto/teibto-dev-standards/blob/main/REPO-SETUP-PLAYBOOK.md)**
+**[📘 คู่มือผู้ใช้](docs/USER-GUIDE.md)** · **[🩺 แผนที่แก้ปัญหา](docs/TROUBLESHOOTING.md)** · **[🔄 Contributing](CONTRIBUTING.md)** · **[🏗️ Architecture](docs/architecture/OVERVIEW.md)** · **[🧰 Tech Stack & Tools](docs/TOOLSTACK.md)** · **[🔁 Playbook](https://github.com/Teibto/teibto-dev-standards/blob/main/REPO-SETUP-PLAYBOOK.md)**
 
 # teibto-pdf-designer
 

@@ -1,5 +1,7 @@
 # NetSuite Deployment Guide — PDF Layout Designer
 
+เอกสารนี้สำหรับคนที่ติดตั้ง engine เข้า account. ผู้ใช้งานประจำวันและผู้ดูแล account อ่าน [`docs/USER-GUIDE.md`](../docs/USER-GUIDE.md) · อาการเสียกับทางแก้อยู่ที่ [`docs/TROUBLESHOOTING.md`](../docs/TROUBLESHOOTING.md).
+
 ## สถาปัตยกรรม
 
 **ไม่ใช้ Advanced PDF/HTML Templates** — ระบบทำ PDF เองทั้งหมด

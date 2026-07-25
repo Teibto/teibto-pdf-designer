@@ -2,6 +2,8 @@
 
 เอกสารนี้สำหรับคนที่จะแก้โค้ด repo นี้ (engine / designer / templates) อ่านแล้วส่ง PR ได้ถูกลูป ผ่าน CI รอบเดียว และไม่พลาดกับดักที่เคยจ่ายบทเรียนมาแล้ว. กติกากลาง (branch / commit / PR / label) อยู่ที่ [`CONTRIBUTING.md`](../CONTRIBUTING.md) และ [teibto-dev-standards](https://github.com/Teibto/teibto-dev-standards) — ที่นี่เก็บเฉพาะลูปการทำงานจริงกับกับดักเฉพาะ repo นี้ ไม่ทำซ้ำกติกากลาง (R10).
 
+ไม่ได้มาแก้โค้ดแต่มาใช้งาน product ให้ไปที่ [`USER-GUIDE.md`](USER-GUIDE.md) · เจออาการเสียแล้วอยากรู้สาเหตุก่อนเปิด issue ให้ดู [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) ซึ่งเป็น canonical ของ อาการ → สาเหตุ → ทางแก้ ฝั่งผู้ใช้.
+
 ---
 
 ## 🔁 ลูปลงมือแก้ (ทำตามนี้ทุกครั้ง)
@@ -24,7 +26,7 @@
 | เช็ค | คำสั่ง | baseline |
 |---|---|---|
 | Type | `npx tsc --noEmit` | 0 error |
-| Unit + component | `npx vitest run` | 591 passed |
+| Unit + component | `npx vitest run` | 592 passed |
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
