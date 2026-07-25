@@ -7,16 +7,18 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# override ได้ผ่าน arg เพื่อทดสอบ (bash scripts/validate-templates.sh <master_dir> <sample_dir>)
+# override ได้ผ่าน arg เพื่อทดสอบ (bash scripts/validate-templates.sh <master_dir> <sample_dir> <engine_lib>)
 MASTER_DIR="${1:-$ROOT/templates/master}"
 SAMPLE_DIR="${2:-$ROOT/templates/samples}"
+# lib ที่ประกาศ binding contract ของ engine (#155) — validator อ่านรายชื่อ key จากไฟล์นี้
+ENGINE_LIB="${3:-$ROOT/engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/pld_lib_invoice_data.js}"
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "ERROR: python3 required for template validation" >&2
   exit 1
 fi
 
-python3 - "$MASTER_DIR" "$SAMPLE_DIR" <<'PYEOF'
+python3 - "$MASTER_DIR" "$SAMPLE_DIR" "$ENGINE_LIB" <<'PYEOF'
 import json
 import re
 import sys
@@ -29,6 +31,7 @@ except AttributeError:
     pass
 
 master_dir, sample_dir = Path(sys.argv[1]), Path(sys.argv[2])
+engine_lib = Path(sys.argv[3]) if len(sys.argv) > 3 else None
 errors = []   # (file, message) — block PR
 checked = 0
 
@@ -63,6 +66,71 @@ def is_c_ternary(interp: str) -> bool:
         if ':' in body[m.end():]:      # ? <non-letter> ... : ...  = C-ternary
             return True
     return False
+
+# ── binding contract ของ engine (#155) ────────────────────────────────────────
+# rectype ที่ engine curate จะถูก bind ด้วย object จาก pld_lib_invoice_data (แทน record
+# ดิบของ NetSuite) — master ที่อ้าง key นอก contract จึงพิมพ์ออกมา "ว่าง" ไม่ error
+# เพราะ binding null-safe (#2) กลืนให้หมด กับดักนี้ต้องตายที่ PR ไม่ใช่ที่หน้างานลูกค้า
+RECTYPE_MARKER = re.compile(r'pld:rectype\s+([A-Za-z_][A-Za-z0-9_]*)')
+RECORD_KEY = re.compile(r'record\.([A-Za-z_][A-Za-z0-9_]*)')
+LINE_KEY = re.compile(r'line\.([A-Za-z_][A-Za-z0-9_]*)')
+
+def js_string_list(src: str, var_name: str):
+    """ดึงรายชื่อ string จาก `var NAME = [ 'a', 'b' ];` ใน source ของ engine lib."""
+    m = re.search(r'var\s+' + var_name + r'\s*=\s*\[(.*?)\]\s*;', src, re.DOTALL)
+    if not m:
+        return None
+    return re.findall(r"'([^']+)'", m.group(1))
+
+def js_object_keys(src: str, var_name: str):
+    """ดึง key ระดับบนสุดจาก `var NAME = { key: {...}, ... };` (ใช้กับ DOC_TITLES)."""
+    m = re.search(r'var\s+' + var_name + r'\s*=\s*\{(.*?)\n\s*\}\s*;', src, re.DOTALL)
+    if not m:
+        return None
+    return re.findall(r'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:', m.group(1), re.M)
+
+engine_contract = None
+if engine_lib and engine_lib.is_file():
+    eng = engine_lib.read_text(encoding='utf-8')
+    curated = js_string_list(eng, 'CURATED_KEYS')
+    aliases = js_string_list(eng, 'RAW_ALIAS_KEYS')
+    item_keys = js_string_list(eng, 'ITEM_BINDING_KEYS')
+    curated_types = js_object_keys(eng, 'DOC_TITLES')
+    if None in (curated, aliases, item_keys, curated_types):
+        errors.append((engine_lib.name,
+                       'อ่าน binding contract ไม่ได้ (CURATED_KEYS / RAW_ALIAS_KEYS / '
+                       'ITEM_BINDING_KEYS / DOC_TITLES) — validator กับ engine หลุด sync (#155)'))
+    else:
+        engine_contract = {
+            'record': set(curated) | set(aliases),
+            'line': set(item_keys),
+            'types': set(curated_types),
+        }
+
+def check_binding_contract(path: Path, src: str, name: str):
+    marker = RECTYPE_MARKER.search(src)
+    if not marker:
+        errors.append((name, 'ไม่มี marker `pld:rectype <recordtype>` ใน comment หัวไฟล์ — '
+                             'validator ต้องรู้ว่า template นี้เรนเดอร์ผ่าน curated หรือ raw binding (#155)'))
+        return
+    if engine_contract is None:
+        return
+
+    rectype = marker.group(1)
+    # rectype ที่ engine ไม่ curate ใช้ record ดิบของ NetSuite — ${record.tranid} /
+    # <#list record.item> resolve ได้เองตาม schema ของ record นั้น (ดู #159)
+    if rectype not in engine_contract['types']:
+        return
+
+    for key in sorted(set(RECORD_KEY.findall(src))):
+        if key not in engine_contract['record']:
+            errors.append((name, f'${{record.{key}}} ไม่มีใน binding contract ของ engine '
+                                 f'(rectype {rectype} bind curated schema) — จะพิมพ์ว่างเงียบ ๆ '
+                                 f'เพิ่ม alias ใน pld_lib_invoice_data.js หรือเปลี่ยน binding (#155)'))
+    for key in sorted(set(LINE_KEY.findall(src))):
+        if key not in engine_contract['line']:
+            errors.append((name, f'${{line.{key}}} ไม่มีใน ITEM_BINDING_KEYS ของ engine — '
+                                 f'แถวในตารางจะพิมพ์ว่างเงียบ ๆ (#155)'))
 
 def check_template(path: Path):
     src = path.read_text(encoding='utf-8')
@@ -105,6 +173,9 @@ def check_template(path: Path):
     if re.search(r'<div\b', src, re.IGNORECASE):
         errors.append((name, '<div> — BFO ทิ้งทั้ง element เงียบ ใช้ <p>/<table> เท่านั้น (#10)'))
 
+    # 7) binding ต้องอยู่ใน contract ที่ engine bind จริง (#155)
+    check_binding_contract(path, src, name)
+
 def check_sample(path: Path):
     try:
         json.loads(path.read_text(encoding='utf-8'))
@@ -123,7 +194,9 @@ for p in samples:
     check_sample(p)
     checked += 1
 
-print(f'validate-templates: ตรวจ {len(masters)} template + {len(samples)} sample')
+contract_note = ('binding contract จาก engine' if engine_contract
+                 else 'ข้าม binding contract (ไม่พบ engine lib)')
+print(f'validate-templates: ตรวจ {len(masters)} template + {len(samples)} sample · {contract_note}')
 if errors:
     print(f'\n❌ พบ {len(errors)} ปัญหา:')
     for f, msg in errors:

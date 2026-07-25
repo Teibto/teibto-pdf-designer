@@ -4,6 +4,7 @@
   ใบเสนอราคา — master template · Issue #8
   @author Wichit Wongta
   @since 2026-07-17
+  pld:rectype estimate   — record type ที่ template นี้ผูกกับ (scripts/validate-templates.sh + engine test อ่านบรรทัดนี้)
   โครง/CSS/macro/font pattern เดียวกับ tax-invoice.xml (reference ของ Standard Template Pack)
   กติกา: docs/TOOLSTACK.md + templates/README.md (binding null-safe ทุกตัว,
   header/footer ผ่าน macrolist, ฟอนต์ไทย embed เท่านั้น)
