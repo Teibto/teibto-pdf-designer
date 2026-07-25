@@ -35,14 +35,6 @@ export interface BfoExportOptions {
   /** Include page header/footer CSS */
   includePageHeaders?: boolean;
   /**
-   * File Cabinet URLs of THSarabunNew TTFs to embed via <link type="font">.
-   * REQUIRED for Thai documents: server-side BFO silently drops Thai glyphs
-   * with any non-embedded font-family (verified on SB2 — NotoSansThai in CSS
-   * does NOT render Thai). Files must be "Available Without Login" and the
-   * URL must be the full form with the h= token and _xt=.ttf suffix.
-   */
-  thaiFontUrls?: { regular: string; bold?: string };
-  /**
    * Render from the stored band structure (`state.bands`) instead of re-deriving
    * bands from element x/y (#47 cutover slice 3a). When true, each role section is
    * emitted via `renderBand(storedBand)` so the consultant's band edits (column
@@ -64,7 +56,6 @@ export function exportBfoXml(
   const {
     useFreeMarker = true,
     includePageHeaders = true,
-    thaiFontUrls,
     useBands = false,
   } = options;
 
@@ -96,10 +87,10 @@ export function exportBfoXml(
     ? buildMacrolist(headerElements, footerElements, recordType, useFreeMarker, state.pagination, bands, byId, watermarkText)
     : '';
 
-  const fontLink = buildFontLink(thaiFontUrls);
+  const fontLink = buildFontLink();
 
   // Build CSS
-  const css = buildBfoCss(!!thaiFontUrls);
+  const css = buildBfoCss();
 
   // Build body HTML (header/footer live in macros when useMacros)
   const bodyHtml = buildBfoBody(elements, recordType, useFreeMarker, state.pagination, useMacros, bands, byId);
@@ -121,36 +112,38 @@ ${bodyHtml}
 </pdf>`;
 }
 
-/** Embed THSarabunNew from the File Cabinet (server-side BFO has no system Thai fonts) */
-function buildFontLink(thaiFontUrls?: BfoExportOptions['thaiFontUrls']): string {
-  if (!thaiFontUrls?.regular) return '';
-
-  const attrs = [
-    'name="THSarabunNew"',
-    'type="font"',
-    'subtype="truetype"',
-    `src="${escapeXml(thaiFontUrls.regular)}"`,
-  ];
-  if (thaiFontUrls.bold) {
-    attrs.push(`src-bold="${escapeXml(thaiFontUrls.bold)}"`);
-  }
-  // bytes="2" — 2-byte glyph encoding, required for non-Latin scripts
-  attrs.push('bytes="2"');
-
-  return `<link ${attrs.join(' ')} />`;
+/**
+ * Embed the Thai font from the File Cabinet — server-side BFO has no system Thai
+ * fonts, and any non-embedded font-family (Tahoma, NotoSansThai, …) makes it drop
+ * Thai glyphs silently.
+ *
+ * The URL is bound to the per-account config record and resolved at render time,
+ * never baked into the XML (#156, rule #32): a File Cabinet media URL carries an
+ * `h=` token that changes when the font file is re-saved, so a baked URL turns a
+ * working template into one whose Thai text vanishes later — with no error, because
+ * BFO ignores an unreachable font. This is the same `<link>` the hand-written master
+ * pack uses, so both paths break or work together.
+ *
+ * `name` is only an identifier for the CSS font-family; the file the config points
+ * at must be THSarabunPSK — THSarabunNew leaves Thai tone marks floating because
+ * BFO does not apply GPOS mark positioning (#32).
+ */
+function buildFontLink(): string {
+  return '<link name="THSarabunNew" type="font" subtype="truetype"'
+    + " src=\"${(company.fontRegular!'')?xml}\""
+    + " src-bold=\"${(company.fontBold!'')?xml}\""
+    // bytes="2" — 2-byte glyph encoding, required for non-Latin scripts
+    + ' bytes="2" />';
 }
 
 /** Build BFO-compatible CSS */
-function buildBfoCss(hasEmbeddedThaiFont: boolean): string {
+function buildBfoCss(): string {
   const lines: string[] = [];
 
-  // WARNING (verified on SB2): non-embedded font-family names — including
-  // NotoSansThai — silently DROP Thai glyphs in BFO. Thai documents require
-  // thaiFontUrls (embedded <link type="font">); the fallback below only keeps
-  // Latin text readable.
-  const fontFamily = hasEmbeddedThaiFont
-    ? 'THSarabunNew, sans-serif'
-    : 'NotoSansThai, sans-serif';
+  // Always the embedded family (#156): buildFontLink() emits the <link> on every
+  // export, so there is no path left where a non-embedded fallback would apply —
+  // and a fallback family only ever produced Thai-less PDFs anyway.
+  const fontFamily = 'THSarabunNew, sans-serif';
 
   // Base styles (page size/margins are <body> attributes in BFO, not @page CSS)
   lines.push(`body { font-family: ${fontFamily}; font-size: 10pt; color: #333; }`);

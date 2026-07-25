@@ -362,10 +362,9 @@ export class PldPreviewModal extends LitElement {
     this.serverLoading = true;
     this.serverError = '';
     try {
+      // Font comes from the config record via ${company.fontRegular} (#156) — the
+      // preview therefore fails/succeeds on fonts exactly like Print does.
       const options: BfoExportOptions = { useBands: true }; // band layout is authoritative (#47 cutover)
-      if (ctx.fontRegularUrl) {
-        options.thaiFontUrls = { regular: ctx.fontRegularUrl, bold: ctx.fontBoldUrl || undefined };
-      }
       const xml = exportBfoXml(this.store.state, options);
       const blob = await renderLivePreview({ xml, rectype: ctx.recordType, recid: ctx.recordId, copies: this.store.state.copies });
       this.serverPdfUrl = URL.createObjectURL(blob);

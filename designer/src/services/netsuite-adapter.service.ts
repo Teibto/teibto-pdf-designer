@@ -37,7 +37,13 @@ export interface NsContext {
   environment: string;
   recordType: string | null;
   recordId: string | null;
-  /** File Cabinet URLs of THSarabunNew TTFs (script params — see engine/DEPLOYMENT.md) */
+  /**
+   * File Cabinet URLs of the Thai TTFs, resolved server-side as
+   * `script parameter → company config record` (see engine/DEPLOYMENT.md).
+   * NOT used to build the XML any more (#156 — the export binds
+   * `${company.fontRegular}` so no per-account URL is baked in); kept as the
+   * signal for whether this account can render Thai at all.
+   */
   fontRegularUrl?: string | null;
   fontBoldUrl?: string | null;
 }
@@ -62,6 +68,20 @@ export function isNetSuiteEnv(): boolean {
 
 export function getNsContext(): NsContext | null {
   return (window as any).__NS_CONTEXT__ || null;
+}
+
+/**
+ * Whether this account can render Thai text at all (#156).
+ *
+ * The designer Suitelet fills `fontRegularUrl` from its script parameter and falls
+ * back to the company-config record, so an empty value means NEITHER is set. Every
+ * template printed on that account then comes out with the Thai glyphs dropped and
+ * BFO reports nothing — worth warning about at save/export time instead of letting
+ * the user discover it from a PDF with missing text.
+ */
+export function hasThaiFontConfigured(): boolean {
+  const ctx = getNsContext();
+  return !!(ctx && ctx.fontRegularUrl);
 }
 
 function getDesignerUrl(): string {

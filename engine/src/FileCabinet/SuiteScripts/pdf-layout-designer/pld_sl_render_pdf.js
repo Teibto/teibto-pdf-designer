@@ -69,15 +69,91 @@ define([
       // so a customer-reported "print ไม่ออก" is diagnosable straight from the
       // Script Execution Log. errorId ties the user's on-screen ref to this line.
       logRenderError(tel, e);
-      response.setHeader({ name: 'Content-Type', value: 'application/json; charset=utf-8' });
-      response.write(JSON.stringify({
-        error: true,
-        errorId: tel.errorId,
-        message: e.message || String(e),
-        stack: e.stack || '',
-        ref: 'เกิดข้อผิดพลาดในการสร้าง PDF — แจ้งทีม Teibto พร้อมรหัสอ้างอิง ' + tel.errorId
-      }));
+      // Who is reading this response decides its shape (#157): the Print/Download
+      // buttons open this Suitelet in a browser tab, so a failure there must be a
+      // readable page — not raw JSON with a stack trace. The designer calls the
+      // other actions over fetch and keeps the JSON contract.
+      if (isBrowserAction(tel.action)) {
+        writeErrorPage(response, tel, e);
+      } else {
+        writeErrorJson(response, tel, e);
+      }
     }
+  }
+
+  // ═══════════════════════════════════════════════════
+  // USER-FACING ERRORS (#157)
+  // ═══════════════════════════════════════════════════
+
+  /** Actions a browser opens directly (transaction buttons + preview links). */
+  var BROWSER_ACTIONS = { render: true, preview: true };
+
+  function isBrowserAction(action) {
+    // newTelemetry defaults a missing action to 'render' — same as the switch's
+    // default branch — so an unknown/empty action lands on the page, not on JSON.
+    return BROWSER_ACTIONS[String(action)] === true;
+  }
+
+  /**
+   * Error page for the Print/Download/Preview buttons. Carries the errorId the
+   * user reports to us and the short message, never the stack — the stack is
+   * already in the Script Execution Log with full context (#149), and it is not
+   * something an accounting user should be reading off the screen.
+   */
+  function writeErrorPage(response, tel, e) {
+    var safeMessage = escapeHtml(e && e.message ? e.message : String(e));
+    response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    response.write(
+      '<!DOCTYPE html>\n<html lang="th">\n<head>\n' +
+      '<meta charset="utf-8" />\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1" />\n' +
+      '<title>สร้าง PDF ไม่สำเร็จ</title>\n' +
+      '<style>\n' +
+      'body{margin:0;padding:32px 16px;background:#f4f5f7;color:#1f2330;' +
+      "font-family:'Segoe UI',Tahoma,'Sarabun',sans-serif;font-size:15px;line-height:1.7}\n" +
+      '.card{max-width:620px;margin:0 auto;background:#fff;border:1px solid #dfe1e6;' +
+      'border-radius:10px;padding:24px 28px}\n' +
+      'h1{margin:0 0 4px;font-size:20px}\n' +
+      '.sub{margin:0 0 18px;color:#5e6c84}\n' +
+      '.ref{background:#f4f5f7;border:1px solid #dfe1e6;border-radius:6px;padding:12px 14px;margin:0 0 18px}\n' +
+      'code{font-family:Consolas,monospace;font-size:14px;font-weight:600}\n' +
+      'details{margin:0 0 20px;color:#42526e}\n' +
+      'summary{cursor:pointer;color:#5e6c84}\n' +
+      '.msg{margin:8px 0 0;padding:10px 12px;background:#f4f5f7;border-radius:6px;' +
+      'font-family:Consolas,monospace;font-size:13px;word-break:break-word}\n' +
+      'button{font:inherit;padding:8px 18px;margin-right:8px;border-radius:6px;cursor:pointer;' +
+      'border:1px solid #dfe1e6;background:#fff}\n' +
+      'button.primary{background:#0052cc;border-color:#0052cc;color:#fff}\n' +
+      '</style>\n</head>\n<body>\n<div class="card">\n' +
+      '<h1>สร้าง PDF ไม่สำเร็จ</h1>\n' +
+      '<p class="sub">ระบบสร้างไฟล์ PDF ของเอกสารนี้ไม่ได้ — ข้อมูลบนเอกสารไม่ถูกแก้ไขใด ๆ</p>\n' +
+      '<p class="ref">แจ้งทีม Teibto พร้อมรหัสอ้างอิง <code>' + escapeHtml(tel.errorId) + '</code><br />' +
+      'ทีมใช้รหัสนี้เปิดดู log ของการพิมพ์ครั้งนี้ได้ตรง ๆ</p>\n' +
+      '<details><summary>รายละเอียดทางเทคนิค (สำหรับผู้ดูแลระบบ)</summary>' +
+      '<p class="msg">' + safeMessage + '</p></details>\n' +
+      '<p><button class="primary" onclick="location.reload()">ลองพิมพ์อีกครั้ง</button>' +
+      '<button onclick="window.close()">ปิดหน้านี้</button></p>\n' +
+      '</div>\n</body>\n</html>'
+    );
+  }
+
+  /**
+   * Error body for the designer's fetch calls. `stack` is deliberately NOT sent
+   * (#157) — it lives in the log; the SPA only ever reads `message`.
+   */
+  function writeErrorJson(response, tel, e) {
+    response.setHeader({ name: 'Content-Type', value: 'application/json; charset=utf-8' });
+    response.write(JSON.stringify({
+      error: true,
+      errorId: tel.errorId,
+      message: e && e.message ? e.message : String(e),
+      ref: 'เกิดข้อผิดพลาดในการสร้าง PDF — แจ้งทีม Teibto พร้อมรหัสอ้างอิง ' + tel.errorId
+    }));
+  }
+
+  /** Escape for HTML text content — an error message can carry XML/< from BFO. */
+  function escapeHtml(text) {
+    return xml.escape({ xmlText: String(text == null ? '' : text) });
   }
 
   // ═══════════════════════════════════════════════════

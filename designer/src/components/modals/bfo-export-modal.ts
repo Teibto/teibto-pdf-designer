@@ -11,7 +11,7 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { showToast } from '../shared/toast-notification';
-import { getNsContext } from '../../services/netsuite-adapter.service';
+import { getNsContext, isNetSuiteEnv, hasThaiFontConfigured } from '../../services/netsuite-adapter.service';
 import { recordTypeOptions, DEFAULT_RECORD_TYPE } from '../../constants/record-types';
 import '../shared/modal';
 
@@ -37,9 +37,33 @@ export class PldBfoExportModal extends LitElement {
     if (ctxRectype) this.recordType = ctxRectype;
   }
 
+  /**
+   * Warn only inside NetSuite (#156): outside it there is no config record to read,
+   * and the exported XML is meant to be saved into an account that has one.
+   */
+  private get _showFontWarning(): boolean {
+    return isNetSuiteEnv() && !hasThaiFontConfigured();
+  }
+
   static styles = css`
     .config-section {
       margin-bottom: 16px;
+    }
+
+    /* ฟอนต์ไทยไม่ได้ตั้งใน config (#156) — เตือนก่อนที่ผู้ใช้จะไปเจอ PDF ที่ไทยหาย */
+    .font-warn {
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      border: 1px solid var(--color-accent3, #f59e42);
+      border-radius: 6px;
+      background: rgba(245, 158, 66, 0.08);
+      color: var(--color-accent3, #f59e42);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .font-warn code {
+      font-family: var(--font-mono, monospace);
     }
 
     .section-label {
@@ -277,6 +301,16 @@ export class PldBfoExportModal extends LitElement {
             </div>
           </div>
 
+          <!-- ฟอนต์ไทยยังไม่ได้ตั้งใน config (#156): binding company.fontRegular
+               จะว่าง → BFO เมินฟอนต์เงียบ ๆ แล้วตัวอักษรไทยหายทั้งใบ -->
+          ${this._showFontWarning
+            ? html`<p class="font-warn">
+                ⚠ ยังไม่ได้ตั้งฟอนต์ไทยใน company config ของ account นี้ —
+                XML อ้าง <code>\${company.fontRegular}</code> ที่ยังว่าง PDF จะพิมพ์ออกมาโดยไม่มีตัวอักษรไทย
+                (ตั้งที่ <code>customrecord_pld_config</code> ให้ชี้ไฟล์ THSarabunPSK)
+              </p>`
+            : nothing}
+
           <!-- XML Preview -->
           <div class="xml-preview-area">
             <div class="xml-toolbar">
@@ -319,15 +353,8 @@ export class PldBfoExportModal extends LitElement {
       useBands: true, // band layout is authoritative (#47 cutover)
     };
 
-    // Embed Thai font when the hosting Suitelet provides File Cabinet URLs
-    const nsCtx = getNsContext();
-    if (nsCtx?.fontRegularUrl) {
-      options.thaiFontUrls = {
-        regular: nsCtx.fontRegularUrl,
-        bold: nsCtx.fontBoldUrl || undefined,
-      };
-    }
-
+    // The Thai <link type="font"> is bound to the config record (#156) — nothing
+    // account-specific is baked into the XML, so this output is safe to commit.
     this.xmlPreview = exportBfoXml(this.store.state, options);
   }
 
