@@ -205,21 +205,23 @@ SuiteScripts/
 | Email | `${company.email}` | |
 | Tax ID | `${company.taxId}` | เลขประจำตัวผู้เสียภาษี 13 หลัก |
 | Branch | `${company.branch}` | เช่น สำนักงานใหญ่ (Head Office) |
-| Logo URL | `${company.logo}` | URL เต็มจาก File Cabinet (Available Without Login) |
+| Logo URL | `${company.logo}` | **file id** ของไฟล์ใน File Cabinet (แนะนำ) หรือ URL เต็ม (Available Without Login) |
 | Theme Color | `${company.themeColor}` | hex เช่น `#1a3c6e` |
-| Thai Font Regular URL | `${company.fontRegular}` | ดูขั้นตอนฟอนต์ด้านล่าง |
-| Thai Font Bold URL | `${company.fontBold}` | |
+| Thai Font Regular URL | `${company.fontRegular}` | **file id** (แนะนำ) หรือ URL เต็ม — ดูขั้นตอนฟอนต์ด้านล่าง |
+| Thai Font Bold URL | `${company.fontBold}` | เช่นเดียวกัน |
 | Feature Flags | `${company.flags}` | comma-separated — template ใช้ `company.flags?contains("x")` |
 
 > URL ทุกตัว (font/logo) ใน template ต้องผ่าน `?xml` เสมอ: `${(company.fontRegular!'')?xml}` —
 > ค่า config มี `&` ดิบ ไม่ escape = BFO parse พังหลัง FreeMarker แทนค่า
 
 **ฟอนต์ไทย (บังคับสำหรับเอกสารภาษาไทย — ไม่ embed = ตัวอักษรไทยหายเงียบ):**
-1. ไฟล์ font อยู่ที่ `engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/fonts/` (SDF deploy ให้อัตโนมัติ) — **`THSarabunPSK-Regular.ttf` / `THSarabunPSK-Bold.ttf`**
+1. ไฟล์ font อยู่ที่ `engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/fonts/` — **`THSarabunPSK-Regular.ttf` / `THSarabunPSK-Bold.ttf`** · ครั้งแรกต้อง deploy พร้อมฟอนต์: `scripts/deploy.sh --with-fonts` (deploy ปกติข้ามไฟล์ฟอนต์ ดู #167)
 2. เปิดไฟล์ทั้งสองใน File Cabinet → ติ๊ก **Available Without Login** → Save
-3. copy **URL เต็ม** จากหน้าไฟล์ (ต้องมี `h=` token และลงท้าย `_xt=.ttf` — token ออกใหม่ทุกครั้งที่ save ไฟล์)
-   มาใส่ Thai Font Regular/Bold URL บน config record (และ script params ของ Designer ข้างบน)
+3. **ใส่ file id ของไฟล์** (เลขใน URL `id=<n>` ของหน้าไฟล์) ลงช่อง Thai Font Regular/Bold บน config record — engine จะ resolve URL สดตอน render เอง (#167)
+   · ใส่ URL เต็มก็ยังใช้ได้ (ของเดิมไม่ต้องแก้) — engine ดึง `id=` จาก URL นั้นมา resolve ใหม่ให้ ไม่ต้องกลัว token หมดอายุ
 4. Template pack อ้าง `${company.fontRegular}` อยู่แล้ว — ไม่ต้องแก้ template
+
+> ⚠️ **ห้ามเก็บ URL ที่มี token ไว้เป็นค่าถาวรถ้าเลี่ยงได้ (#167)** — token `h=` เปลี่ยนทุกครั้งที่ไฟล์ถูก re-save (การ deploy ทับก็นับ) พิสูจน์สดบน SB2: ใส่ token ผิด → **บรรทัดภาษาไทยหายทั้งบรรทัด ไม่มี error** (PDF เล็กลงจาก 18,691 → 5,442 bytes = ฟอนต์ไม่ถูก embed) ใส่ file id แล้วปัญหานี้หายไปทั้งคลาส
 
 > ⚠️ **ต้องใช้ THSarabunPSK เท่านั้น — ห้าม THSarabunNew (#32).** BFO ของ NetSuite **ไม่ apply GPOS mark positioning**; THSarabunNew ออกแบบให้วรรณยุกต์/สระ (่ ้ ั ิ ี ึ ื ุ ู) พึ่ง GPOS ดึงลง → บน BFO mark ลอยหลุดจากฐาน (เห็นชัดบนฐานเตี้ย เช่น น้ำ ค่า). THSarabunPSK วาง mark ถูกใน glyph outline เอง จึง render ถูกโดยไม่พึ่ง GPOS (พิสูจน์ด้วย render จริงบน SB2 2026-07-17 + ตรงกับ Suitelet PFTS ที่ใช้อยู่). หมายเหตุ: template ยังใช้ label `font-family: THSarabunNew` เป็น BFO font-family identifier เฉย ๆ — ตัวฟอนต์ที่ embed จริงมาจาก URL ใน config (ต้องชี้ไป THSarabunPSK)
 >

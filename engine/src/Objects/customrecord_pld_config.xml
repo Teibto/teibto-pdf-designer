@@ -162,7 +162,7 @@
       <accesslevel>2</accesslevel>
       <applyformatting>F</applyformatting>
       <defaultchecked>F</defaultchecked>
-      <description>URL โลโก้จาก File Cabinet (Available Without Login) — company.logo</description>
+      <description>โลโก้บริษัท — ใส่ file id ของไฟล์ใน File Cabinet (แนะนำ) หรือ URL เต็ม; engine resolve URL สดตอน render (#167) — company.logo</description>
       <displaytype>NORMAL</displaytype>
       <encryptatrest>F</encryptatrest>
       <fieldtype>TEXTAREA</fieldtype>
@@ -194,7 +194,7 @@
       <accesslevel>2</accesslevel>
       <applyformatting>F</applyformatting>
       <defaultchecked>F</defaultchecked>
-      <description>URL เต็มของ THSarabunNew Regular TTF (มี h= token, _xt=.ttf) — company.fontRegular</description>
+      <description>ฟอนต์ไทย Regular — ใส่ **file id ของไฟล์ใน File Cabinet** (แนะนำ) หรือ URL เต็มก็ได้; engine resolve URL สดตอน render จึงไม่พังเมื่อ token h= เปลี่ยน (#167) — company.fontRegular</description>
       <displaytype>NORMAL</displaytype>
       <encryptatrest>F</encryptatrest>
       <fieldtype>TEXTAREA</fieldtype>
@@ -210,7 +210,7 @@
       <accesslevel>2</accesslevel>
       <applyformatting>F</applyformatting>
       <defaultchecked>F</defaultchecked>
-      <description>URL เต็มของ THSarabunNew Bold TTF — company.fontBold</description>
+      <description>ฟอนต์ไทย Bold — ใส่ file id (แนะนำ) หรือ URL เต็ม (#167) — company.fontBold</description>
       <displaytype>NORMAL</displaytype>
       <encryptatrest>F</encryptatrest>
       <fieldtype>TEXTAREA</fieldtype>
