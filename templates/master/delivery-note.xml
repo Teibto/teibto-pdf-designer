@@ -14,6 +14,9 @@
 
   Field mapping ฝั่ง itemfulfillment: entity = ลูกค้า, shipaddress = สถานที่ส่งมอบ,
   createdfrom = ใบสั่งขายต้นทาง — เอกสารส่งของไม่แสดงราคา จึงไม่มีส่วนสรุปยอด/ตัวอักษร
+
+  itemfulfillment วิ่งผ่าน curated schema แล้วตั้งแต่ #170 (เดิมเป็น raw record binding)
+  จำนวนจึงพิมพ์จาก ${line.quantityText} ที่ engine format มาแล้ว ไม่ใช่ค่า number ดิบ (#165)
 -->
 
 <pdf>
@@ -118,7 +121,7 @@ td.r { text-align: right; }
     <tr>
       <td class="c">${line_index + 1}</td>
       <td><p class="cell">${line.item!""}<#if (line.description!"") != ""><br /><span class="desc">${line.description}</span></#if></p></td>
-      <td class="c">${line.quantity!""}</td>
+      <td class="c">${line.quantityText!""}</td>
       <td class="c">${line.units!""}</td>
     </tr>
     </#list>
