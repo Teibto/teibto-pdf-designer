@@ -128,9 +128,9 @@ export async function saveTemplateToNetSuite(
     useFreeMarker: true,
     includePageHeaders: true,
   };
-  if (ctx?.fontRegularUrl) {
-    options.thaiFontUrls = { regular: ctx.fontRegularUrl, bold: ctx.fontBoldUrl || undefined };
-  }
+  // The Thai font is bound to the config record inside exportBfoXml (#156) — no
+  // per-account URL is baked in here, so a saved template keeps working after the
+  // font file is re-saved in the File Cabinet (its h= token changes).
   const xml = exportBfoXml(state, options);
 
   const designerJson = JSON.stringify({

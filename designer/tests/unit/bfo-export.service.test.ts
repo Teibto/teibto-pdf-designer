@@ -96,42 +96,50 @@ describe('exportBfoXml', () => {
 // ═══════════════════════════════════════
 
 describe('thai font embedding', () => {
-  it('emits <link type="font"> with bytes="2" when thaiFontUrls provided', () => {
+  it('always emits <link type="font"> bound to the company config, never a baked URL', () => {
     const state = createMockState([makeText()]);
-    const xml = exportBfoXml(state, {
-      thaiFontUrls: { regular: '/core/media/media.nl?id=101', bold: '/core/media/media.nl?id=102' },
-    });
+    const xml = exportBfoXml(state);
 
     expect(xml).toContain('<link name="THSarabunNew" type="font" subtype="truetype"');
-    expect(xml).toContain('src="/core/media/media.nl?id=101"');
-    expect(xml).toContain('src-bold="/core/media/media.nl?id=102"');
+    expect(xml).toContain('src="${(company.fontRegular!\'\')?xml}"');
+    expect(xml).toContain('src-bold="${(company.fontBold!\'\')?xml}"');
     expect(xml).toContain('bytes="2"');
     expect(xml).toContain('font-family: THSarabunNew, sans-serif');
   });
 
-  it('regular-only: no src-bold attribute', () => {
+  it('never bakes a File Cabinet URL into the XML (#156 — the h= token expires)', () => {
     const state = createMockState([makeText()]);
-    const xml = exportBfoXml(state, { thaiFontUrls: { regular: '/core/media/media.nl?id=101' } });
-
-    expect(xml).toContain('src="/core/media/media.nl?id=101"');
-    expect(xml).not.toContain('src-bold');
-  });
-
-  it('without thaiFontUrls: no link, falls back to built-in NotoSansThai', () => {
-    const state = createMockState([makeText()]);
-    const xml = exportBfoXml(state);
-
-    expect(xml).not.toContain('type="font"');
-    expect(xml).toContain('font-family: NotoSansThai, sans-serif');
-  });
-
-  it('escapes XML-sensitive characters in font URLs', () => {
-    const state = createMockState([makeText()]);
+    // a caller passing the retired option must not change the output
     const xml = exportBfoXml(state, {
-      thaiFontUrls: { regular: '/core/media/media.nl?id=101&e=T' },
-    });
+      thaiFontUrls: { regular: '/core/media/media.nl?id=101&h=abc', bold: '/core/media/media.nl?id=102&h=def' },
+    } as unknown as Parameters<typeof exportBfoXml>[1]);
 
-    expect(xml).toContain('id=101&amp;e=T');
+    expect(xml).not.toContain('media.nl');
+    expect(xml).not.toContain('h=abc');
+    expect(xml).toContain('src="${(company.fontRegular!\'\')?xml}"');
+  });
+
+  it('has no export path left without a font link (Thai would drop silently)', () => {
+    const variants = [
+      exportBfoXml(createMockState([makeText()])),
+      exportBfoXml(createMockState([makeText()]), { useFreeMarker: false }),
+      exportBfoXml(createMockState([makeText()]), { includePageHeaders: false }),
+      exportBfoXml(createMockState([makeText()]), { useBands: true }),
+      exportBfoXml(createMockState([])),
+    ];
+    for (const xml of variants) {
+      expect(xml).toContain('type="font"');
+      expect(xml).toContain('company.fontRegular');
+      expect(xml).not.toContain('NotoSansThai');
+    }
+  });
+
+  it('font URLs pass through ?xml so config values with & do not break BFO parsing', () => {
+    const xml = exportBfoXml(createMockState([makeText()]));
+
+    // ?xml escapes at render time — the raw config value carries & in the media URL
+    expect(xml).toMatch(/src="\$\{\(company\.fontRegular!''\)\?xml\}"/);
+    expect(xml).toMatch(/src-bold="\$\{\(company\.fontBold!''\)\?xml\}"/);
   });
 });
 

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- **designer bake URL ฟอนต์ลง BFO XML → ภาษาไทยหายเงียบ** (#156) — `buildFontLink()` เอา URL File Cabinet จาก script param มาใส่ `src` ตรง ๆ ซึ่งผิดกฎ #32 ของ repo เอง (master pack ใช้ config layer): URL มี token `h=` ที่เปลี่ยนเมื่อ re-save ไฟล์ฟอนต์ → template ที่เคยพิมพ์ได้จะพัง**เองในอนาคต** โดย BFO ไม่ error (ฟอนต์ถูกเมินเงียบ แล้ว glyph ไทยหายทั้งใบ) และถ้า script param ไม่ได้ตั้ง จะไม่มี `<link type="font">` ในไฟล์เลย → ไทยหายตั้งแต่ใบแรก. ตอนนี้ XML ที่ designer สร้าง (save เข้า NetSuite / live preview / export ไฟล์) bind `${(company.fontRegular!'')?xml}` + `${(company.fontBold!'')?xml}` ทุกครั้ง ไม่มี path ที่ออกมาโดยไม่มี font link และไม่มี URL ของ account ปนในไฟล์ที่ export ได้อีก — ฟอนต์มาจาก `customrecord_pld_config` ที่เดียวเหมือน master pack (ถอด option `thaiFontUrls` ออกทั้งเส้น: `template.service`, `preview-modal`, `bfo-export-modal`)
+
+### Added
+- **เตือนเมื่อ account ยังไม่ได้ตั้งฟอนต์ไทย** (#156) — เดิม account ที่ config ไม่มีฟอนต์จะพิมพ์ PDF ออกมาโดยไม่มีตัวอักษรไทยแบบไม่มีสัญญาณเตือนใด ๆ (BFO เมินฟอนต์เงียบ). เพิ่ม `hasThaiFontConfigured()` (อ่านจาก context ที่ Suitelet resolve เป็น script param → config record) แล้วใช้ 2 จุด: toast เตือนหลังบันทึกเข้า NetSuite สำเร็จ และแบนเนอร์ในโมดัล 🔶 BFO บอกให้ไปตั้งที่ `customrecord_pld_config` ให้ชี้ THSarabunPSK — เตือนเฉพาะในโหมด NetSuite (นอก NetSuite ไม่มี config ให้อ่าน)
+
 ## [0.3.0] — 2026-07-24
 
 ### Added
