@@ -24,7 +24,7 @@
 | เช็ค | คำสั่ง | baseline |
 |---|---|---|
 | Type | `npx tsc --noEmit` | 0 error |
-| Unit + component | `npx vitest run` | 529 passed |
+| Unit + component | `npx vitest run` | 535 passed |
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
@@ -40,6 +40,7 @@ CI `quality-gate` รัน lint + vitest + e2e + template validator + engine un
 - `<option>` ใน test เลือกด้วย `value` ไม่ใช่ข้อความ · ข้อความที่แสดงจึงเปลี่ยนเป็นไทยล้วนได้ไม่กระทบ test
 - ชื่อ custom element ไม่ตรงชื่อไฟล์ — header คือ `pld-header` (ไม่ใช่ `pld-app-header`) · editor เดียวคือ `pld-band-view` (canvas เก่าถอดแล้ว) · band ที่ element อยู่คือ role ของมัน ดังนั้นเปลี่ยน role = ย้าย chip ข้าม band (#127)
 - flag ชั่วคราวห้ามอยู่ใน undoable state — `dragType` เคยเขียนแบบ untagged ทำให้ history middleware เก็บ snapshot เกิน แล้ว Ctrl+Z แรกเป็น no-op (#129) แก้โดยเขียนผ่าน action ที่ `tagAction(..., { undoable: false })`
+- **ฟอนต์ไทยใน XML ที่ designer สร้าง ห้าม bake URL (#156)** — `buildFontLink()` ปล่อย `<link>` ที่ bind `${(company.fontRegular!'')?xml}` ทุกครั้ง (เหมือน master pack, กฎ #32) ไม่มี path ที่ export ออกมาโดยไม่มี font link · URL File Cabinet มี token `h=` ที่หมดอายุเมื่อ re-save ไฟล์ฟอนต์ → bake ไว้แล้วภาษาไทยหายเงียบทีหลัง · account ที่ config ยังไม่มีฟอนต์ designer เตือนเองตอน save + ในโมดัล BFO (`hasThaiFontConfigured()`)
 - ไฟล์ source ใหม่หรือ rewrite ใส่ `@author <ชื่อจริง>` + `@since YYYY-MM-DD` (R1) ห้ามเดาชื่อ
 
 ## ⚙️ กับดัก engine (SuiteScript / SDF)

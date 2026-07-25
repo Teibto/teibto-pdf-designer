@@ -23,7 +23,7 @@ import {
 } from '../services/template.service';
 import { showToast } from './shared/toast-notification';
 import { getSampleTemplates } from '../constants/sample-templates';
-import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext } from '../services/netsuite-adapter.service';
+import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext, hasThaiFontConfigured } from '../services/netsuite-adapter.service';
 import { loadJsonData, extractJsonKeys } from '../state/actions';
 import { confirmDiscardUnsaved } from '../utils/unsaved-guard';
 import { applyMiddleware } from '../state/middleware';
@@ -376,6 +376,15 @@ export class PldAppShell extends LitElement {
       try {
         const { id } = await saveTemplateToNetSuite(this.store);
         showToast(`บันทึกเข้า NetSuite แล้ว (ID: ${id})`, 'success');
+        // #156: the XML binds ${company.fontRegular}, so an account with no Thai
+        // font in its config prints every template with the Thai glyphs dropped —
+        // and BFO stays silent about it. Say so right after the save.
+        if (!hasThaiFontConfigured()) {
+          showToast(
+            'ยังไม่ได้ตั้งฟอนต์ไทยใน company config — PDF จะพิมพ์ออกมาโดยไม่มีตัวอักษรไทย (ตั้งที่ customrecord_pld_config)',
+            'warning',
+          );
+        }
         // A real save landed — the autosave draft is now stale (#140).
         clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
       } catch (err) {
