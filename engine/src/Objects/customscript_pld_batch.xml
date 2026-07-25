@@ -1,0 +1,17 @@
+<suitelet scriptid="customscript_pld_batch">
+  <name>PLD - Batch Print</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/pdf-layout-designer/pld_sl_batch_print.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_pld_batch">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>DEBUG</loglevel>
+      <runasrole>ADMINISTRATOR</runasrole>
+      <status>RELEASED</status>
+      <title>PLD Batch Print</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</suitelet>

@@ -83,7 +83,10 @@ function recordStub({ id = 1, values = {}, texts = {}, sublists = {} } = {}) {
 const formatStub = {
   Type: { DATE: 'date', DATETIME: 'datetime' },
   format({ value, type }) {
-    if (!(value instanceof Date)) return String(value == null ? '' : value);
+    // cross-realm: a Date built inside the AMD sandbox is not `instanceof Date` here
+    if (Object.prototype.toString.call(value) !== '[object Date]') {
+      return String(value == null ? '' : value);
+    }
     const dd = String(value.getDate()).padStart(2, '0');
     const mm = String(value.getMonth() + 1).padStart(2, '0');
     const yyyy = value.getFullYear();
@@ -123,8 +126,19 @@ const companyConfigStub = {
   }),
 };
 
-/** N/xml stub — only escape() is used by the engine. */
+/**
+ * N/xml stub — escape() plus a crude Parser.fromString: it rejects a bare `&`
+ * the way BFO's parser does, which is exactly the failure batch print has to
+ * survive per document (#184).
+ */
 const xmlStub = {
+  Parser: {
+    fromString({ text }) {
+      const bare = /&(?![a-zA-Z]+;|#\d+;)/.test(String(text));
+      if (bare) throw new Error("The entity name must immediately follow the '&' in the entity reference.");
+      return { text: String(text) };
+    },
+  },
   escape({ xmlText }) {
     return String(xmlText)
       .replace(/&/g, '&amp;')
@@ -135,11 +149,23 @@ const xmlStub = {
   },
 };
 
-/** N/runtime stub. */
-function runtimeStub({ user = { id: 9, name: 'QA Tester', email: 'qa@example.test' }, script = { id: 'customscript_pld_render', deploymentId: 'customdeploy_pld_render' } } = {}) {
+/**
+ * N/runtime stub.
+ *
+ * `usage` models the governance budget the batch print screen steers by (#181):
+ * pass a function to return a falling sequence, or a number for a fixed budget.
+ */
+function runtimeStub({
+  user = { id: 9, name: 'QA Tester', email: 'qa@example.test' },
+  script = { id: 'customscript_pld_render', deploymentId: 'customdeploy_pld_render' },
+  usage,
+} = {}) {
+  const currentScript = Object.assign({
+    getRemainingUsage: () => (typeof usage === 'function' ? usage() : (usage == null ? 1000 : usage)),
+  }, script);
   return {
     getCurrentUser: () => user,
-    getCurrentScript: () => script,
+    getCurrentScript: () => currentScript,
     EnvType: { SANDBOX: 'SANDBOX', PRODUCTION: 'PRODUCTION' },
     envType: 'SANDBOX',
   };
@@ -150,17 +176,23 @@ function runtimeStub({ user = { id: 9, name: 'QA Tester', email: 'qa@example.tes
  * positional getValue(fieldId) like the real search.Result.
  */
 function searchStub(rows = []) {
+  const pick = (bag, field) => {
+    const key = typeof field === 'object' && field ? field.name : field;
+    return Object.prototype.hasOwnProperty.call(bag || {}, key) ? bag[key] : '';
+  };
   const results = rows.map((r) => ({
     id: r.id,
-    getValue: (field) => {
-      const key = typeof field === 'object' && field ? field.name : field;
-      return Object.prototype.hasOwnProperty.call(r.values || {}, key) ? r.values[key] : '';
-    },
+    getValue: (field) => pick(r.values, field),
+    getText: (field) => pick(r.texts, field),
   }));
   const created = [];
+  const columns = [];
   return {
     created,
+    columns,
     module: {
+      Sort: { ASC: 'ASC', DESC: 'DESC', NONE: 'NONE' },
+      createColumn(opts) { columns.push(opts); return opts; },
       create(opts) {
         created.push(opts);
         return {
@@ -176,7 +208,7 @@ function searchStub(rows = []) {
 
 /** N/render stub — records what was rendered so tests can assert on it. */
 function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf>' } = {}) {
-  const calls = { created: 0, dataSources: [], records: [], renderedAsPdf: 0, xmlToPdf: [] };
+  const calls = { created: 0, dataSources: [], records: [], renderedAsPdf: 0, renderedAsString: 0, xmlToPdf: [] };
   return {
     calls,
     module: {
@@ -188,7 +220,13 @@ function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf
           addCustomDataSource(ds) { calls.dataSources.push(ds); },
           addRecord(r) { calls.records.push(r); },
           renderAsPdf() { calls.renderedAsPdf += 1; return { name: pdfName }; },
-          renderAsString() { return asString; },
+          // asString may be a function of the pass index, so a test can make ONE
+          // document in a batch resolve to broken XML (#181/#184)
+          renderAsString() {
+            const i = calls.renderedAsString;
+            calls.renderedAsString += 1;
+            return typeof asString === 'function' ? asString(i) : asString;
+          },
         };
       },
       xmlToPdf(opts) { calls.xmlToPdf.push(opts); return { name: pdfName }; },

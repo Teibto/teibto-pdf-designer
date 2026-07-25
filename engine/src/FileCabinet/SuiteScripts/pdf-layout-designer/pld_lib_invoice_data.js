@@ -692,6 +692,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     bindingKeys: BINDING_KEYS,
     itemBindingKeys: ITEM_BINDING_KEYS,
     copyBindingKeys: COPY_BINDING_KEYS,
-    supportedTypes: Object.keys(DOC_TITLES)
+    supportedTypes: Object.keys(DOC_TITLES),
+    // Thai/English document titles per record type — the batch print screen (#181)
+    // labels its record-type dropdown from here so document names live in ONE place.
+    docTitles: DOC_TITLES
   };
 });
