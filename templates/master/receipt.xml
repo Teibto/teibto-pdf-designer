@@ -40,7 +40,7 @@
         <td style="width: 42%; text-align: right;">
           <span class="doc-title">ใบเสร็จรับเงิน</span><br />
           <span class="doc-title-en">RECEIPT</span><br />
-          <span class="doc-copy">${record.custbody_doc_copy_label!"ต้นฉบับ (Original)"}</span><br />
+          <span class="doc-copy">${copy.label!"ต้นฉบับ (Original)"}</span><br />
           <span>เลขที่ (No.) <span class="bold">${record.tranid!""}</span></span><br />
           <span>วันที่ (Date) <span class="bold">${record.trandate!""}</span></span>
         </td>

@@ -263,17 +263,11 @@ define([
     // Invoices also print the statutory copy set (ต้นฉบับ + สำเนา, #15).
     // #91: every supported type binds curated data. #92: copy set comes from
     // the template record (data JSON), falling back to the invoice default.
-    var out, copiesCount = 1;
-    if (invoiceData.isSupportedType(recType)) {
-      var copies = resolveCopies(tplCopies, recType);
-      copiesCount = copies.length;
-      out = copies.length > 1
-        ? renderCopiesPdf(tplXml, recType, recId, copies, tel)
-        : renderXmlWithRecord(tplXml, recType, recId,
-            invoiceData.buildTransactionData(recType, recId, copies[0].th, copies[0].en), tel);
-    } else {
-      out = renderXmlWithRecord(tplXml, recType, recId, null, tel);
-    }
+    // #159: copy set ใช้กับ **ทุก** record type แล้ว — เดิมสาขา else (rectype ที่ยังไม่ curated)
+    // เรียก render ตรงโดยไม่แตะ resolveCopies เลย ทำให้ชุดสำเนาที่ผู้ใช้ตั้งไว้ถูกทิ้งเงียบ ๆ
+    var copies = resolveCopies(tplCopies, recType);
+    var copiesCount = copies.length;
+    var out = renderWithCopies(tplXml, recType, recId, copies, tel);
 
     // ─── 3. Set filename from tranid ───
     var tranId = recId;
@@ -311,7 +305,7 @@ define([
    * <#list record.items ...> resolve; otherwise bind the raw NetSuite record
    * (`rec`) so hand-written master templates (${record.tranid}) render unchanged.
    */
-  function makeRenderer(tplXml, curatedData, rec, tel) {
+  function makeRenderer(tplXml, curatedData, rec, tel, copy) {
     var renderer = render.create();
     renderer.templateContent = tplXml;
 
@@ -320,6 +314,16 @@ define([
     } else {
       renderer.addRecord({ templateName: 'record', record: rec });
     }
+
+    // Copy label of the pass being rendered (#159) — its own data source so it works
+    // on BOTH binding paths: curated types get it from the copy set, and a raw-record
+    // type (no curated data at all) finally gets a real label instead of every copy
+    // printing "ต้นฉบับ". Templates bind ${copy.label} / ${copy.th} / ${copy.en}.
+    renderer.addCustomDataSource({
+      format: render.DataSource.OBJECT,
+      alias: 'copy',
+      data: copyBinding(copy)
+    });
 
     // Company info (custom data source) — subsidiary-scoped (OneWorld, #144).
     // Capture the resolved subsidiary into telemetry (#149) so a failed render is
@@ -349,14 +353,21 @@ define([
   }
 
   /**
-   * Bind BFO XML to a real record and render a single-copy PDF (non-invoice
-   * record types). Returns { pdfFile, rec } (caller names the file).
+   * Bind BFO XML to a real record and render a single-copy PDF.
+   * Returns { pdfFile, rec } (caller names the file).
    */
-  function renderXmlWithRecord(tplXml, recType, recId, curatedData, tel) {
+  function renderXmlWithRecord(tplXml, recType, recId, curatedData, tel, copy) {
     if (tel) tel.stage = 'load-record';
     var rec = record.load({ type: recType, id: recId });
     if (tel) tel.stage = 'render';
-    return { pdfFile: makeRenderer(tplXml, curatedData, rec, tel).renderAsPdf(), rec: rec };
+    return { pdfFile: makeRenderer(tplXml, curatedData, rec, tel, copy).renderAsPdf(), rec: rec };
+  }
+
+  /** Copy data source shape (#159) — keys a template may bind under ${copy.*}. */
+  function copyBinding(copy) {
+    var th = (copy && copy.th) || 'ต้นฉบับ';
+    var en = (copy && copy.en) || 'Original';
+    return { th: th, en: en, label: th + ' (' + en + ')' };
   }
 
   // Thai statutory copy set (#15) — default for invoices when the template
@@ -389,19 +400,41 @@ define([
   }
 
   /**
-   * Render the invoice once per copy label and combine into ONE PDF via BFO
-   * <pdfset> (#15). FreeMarker must resolve per copy (each copy binds its own
-   * curated data → different title), so each pass uses renderAsString, then the
-   * resolved <pdf> documents render together with render.xmlToPdf.
-   * Returns { pdfFile, tranId }.
+   * Render one document for the copy set, whatever the record type (#159).
+   * Single copy → straight renderAsPdf; more than one → one pass per copy label
+   * combined into ONE PDF via BFO <pdfset> (#15).
+   *
+   * Curated types bind the schema built per copy (the doc title carries the copy
+   * label); a raw-record type loads the record ONCE and reuses it for every pass —
+   * only the ${copy.*} data source differs. Returns { pdfFile, rec?, tranId? }.
    */
-  function renderCopiesPdf(tplXml, recType, recId, copies, tel) {
+  function renderWithCopies(tplXml, recType, recId, copies, tel) {
+    var curatedType = invoiceData.isSupportedType(recType);
+
+    if (copies.length === 1) {
+      var only = copies[0];
+      var singleData = curatedType
+        ? invoiceData.buildTransactionData(recType, recId, only.th, only.en)
+        : null;
+      return renderXmlWithRecord(tplXml, recType, recId, singleData, tel, only);
+    }
+
+    // FreeMarker must resolve per copy, so each pass renders to a string first and
+    // the resolved <pdf> documents are combined with render.xmlToPdf.
+    var rec = null;
+    if (!curatedType) {
+      if (tel) tel.stage = 'load-record';
+      rec = record.load({ type: recType, id: recId });
+    }
     if (tel) tel.stage = 'render';
+
     var tranId = '';
     var docs = copies.map(function (c) {
-      var curated = invoiceData.buildTransactionData(recType, recId, c.th, c.en);
-      tranId = tranId || (curated.document && curated.document.number) || '';
-      var resolved = makeRenderer(tplXml, curated, null, tel).renderAsString();
+      var curated = curatedType
+        ? invoiceData.buildTransactionData(recType, recId, c.th, c.en)
+        : null;
+      if (curated) tranId = tranId || (curated.document && curated.document.number) || '';
+      var resolved = makeRenderer(tplXml, curated, rec, tel, c).renderAsString();
       var start = resolved.indexOf('<pdf>');
       var end = resolved.lastIndexOf('</pdf>');
       if (start < 0 || end < 0) {
@@ -410,13 +443,17 @@ define([
       return resolved.substring(start, end + '</pdf>'.length);
     });
 
+    if (!tranId && rec) {
+      try { tranId = rec.getValue({ fieldId: 'tranid' }) || ''; } catch (e) { tranId = ''; }
+    }
+
     if (tel) tel.stage = 'copyset';
     var pdfFile = render.xmlToPdf({
       xmlString: '<?xml version="1.0"?>\n' +
         '<!DOCTYPE pdfset PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n' +
         '<pdfset>\n' + docs.join('\n') + '\n</pdfset>'
     });
-    return { pdfFile: pdfFile, tranId: tranId };
+    return { pdfFile: pdfFile, tranId: tranId, rec: rec };
   }
 
   // ═══════════════════════════════════════════════════
@@ -451,19 +488,17 @@ define([
     // items). For invoices, build that from SuiteQL so preview shows REAL data —
     // including the statutory copy set (ต้นฉบับ + สำเนา), same as Print (#15).
     tel.stage = 'render';
-    var out, copiesCount = 1;
+    // #92: unsaved designer state sends its copy set in the body · #159: honored for
+    // every record type, same path as Print, so preview == print on copies too.
+    var pvCopies = resolveCopies(parseCopies(body.copies), body.rectype);
+    var copiesCount = pvCopies.length;
+    var out;
     if (body.data) {
-      out = { pdfFile: makeRenderer(body.xml, body.data, null, tel).renderAsPdf() };
-    } else if (invoiceData.isSupportedType(body.rectype)) {
-      // #92: unsaved designer state sends its copy set in the body
-      var pvCopies = resolveCopies(parseCopies(body.copies), body.rectype);
-      copiesCount = pvCopies.length;
-      out = pvCopies.length > 1
-        ? renderCopiesPdf(body.xml, body.rectype, body.recid, pvCopies, tel)
-        : renderXmlWithRecord(body.xml, body.rectype, body.recid,
-            invoiceData.buildTransactionData(body.rectype, body.recid, pvCopies[0].th, pvCopies[0].en), tel);
+      // synthetic-data preview (#75): caller supplies the bound object itself
+      out = { pdfFile: makeRenderer(body.xml, body.data, null, tel, pvCopies[0]).renderAsPdf() };
+      copiesCount = 1;
     } else {
-      out = renderXmlWithRecord(body.xml, body.rectype, body.recid, null, tel);
+      out = renderWithCopies(body.xml, body.rectype, body.recid, pvCopies, tel);
     }
     out.pdfFile.name = 'preview.pdf';
 

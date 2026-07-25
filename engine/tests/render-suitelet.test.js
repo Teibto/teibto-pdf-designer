@@ -144,6 +144,89 @@ test('a successful render still returns the pdf inline, unchanged', () => {
   assert.equal(log.entries.filter((e) => e.level === 'audit').length, 1);
 });
 
+// ─── #159: the copy set applies to EVERY record type ─────────────────────────
+// Before this, a rectype the engine does not curate skipped resolveCopies entirely:
+// a template configured for ต้นฉบับ + สำเนา silently printed a single copy, and the
+// label came from a record field that does not exist → every copy said "ต้นฉบับ".
+const TWO_COPIES = JSON.stringify({ copies: [{ th: 'ต้นฉบับ', en: 'Original' }, { th: 'สำเนา', en: 'Copy' }] });
+
+function templateWithCopies(dataJson) {
+  return [{ id: '7', values: { custrecord_pld_tpl_xml: TPL_XML, custrecord_pld_tpl_data: dataJson } }];
+}
+
+test('a raw-record type honors the template copy set instead of dropping it', () => {
+  const { suitelet, render, log } = buildSuitelet({ templates: templateWithCopies(TWO_COPIES) });
+  const { context } = contextStub({
+    parameters: { action: 'render', rectype: 'itemfulfillment', recid: '42' },
+  });
+
+  suitelet.onRequest(context);
+
+  assert.equal(render.calls.xmlToPdf.length, 1, 'the copies are combined into one <pdfset>');
+  const set = render.calls.xmlToPdf[0].xmlString;
+  assert.equal((set.match(/<pdf>/g) || []).length, 2, 'two copies rendered');
+  assert.equal(log.entries.find((e) => e.level === 'audit').details.copies, 2);
+});
+
+test('each copy gets its own label, on the raw-record path too', () => {
+  const { suitelet, render } = buildSuitelet({ templates: templateWithCopies(TWO_COPIES) });
+  const { context } = contextStub({
+    parameters: { action: 'render', rectype: 'itemfulfillment', recid: '42' },
+  });
+
+  suitelet.onRequest(context);
+
+  const copySources = render.calls.dataSources.filter((d) => d.alias === 'copy');
+  assert.equal(copySources.length, 2);
+  assert.deepEqual(copySources.map((d) => d.data.label), ['ต้นฉบับ (Original)', 'สำเนา (Copy)']);
+  assert.deepEqual(copySources.map((d) => d.data.th), ['ต้นฉบับ', 'สำเนา']);
+  assert.deepEqual(copySources.map((d) => d.data.en), ['Original', 'Copy']);
+});
+
+test('the raw record is loaded once for the whole copy set, and still binds', () => {
+  const { suitelet, render } = buildSuitelet({ templates: templateWithCopies(TWO_COPIES) });
+  const { context } = contextStub({
+    parameters: { action: 'render', rectype: 'itemfulfillment', recid: '42' },
+  });
+
+  suitelet.onRequest(context);
+
+  assert.equal(render.calls.records.length, 2, 'each pass binds the record it needs');
+  assert.equal(render.calls.records[0].record, render.calls.records[1].record, 'same loaded record reused');
+});
+
+test('a single-copy render still gets a copy data source (default ต้นฉบับ)', () => {
+  const { suitelet, render } = buildSuitelet({ templates: templateWithCopies('') });
+  const { context } = contextStub({
+    parameters: { action: 'render', rectype: 'itemfulfillment', recid: '42' },
+  });
+
+  suitelet.onRequest(context);
+
+  assert.equal(render.calls.xmlToPdf.length, 0, 'no pdfset needed for one copy');
+  const copySources = render.calls.dataSources.filter((d) => d.alias === 'copy');
+  assert.equal(copySources.length, 1);
+  assert.equal(copySources[0].data.label, 'ต้นฉบับ (Original)');
+});
+
+test('the copy data source exposes exactly the keys the binding contract declares', () => {
+  const contract = loadAmd('./pld_lib_invoice_data', {
+    'N/query': {}, 'N/record': {}, 'N/format': formatStub,
+    './pld_lib_company_config': companyConfigStub,
+  }).copyBindingKeys;
+
+  const { suitelet, render } = buildSuitelet({ templates: templateWithCopies('') });
+  suitelet.onRequest(contextStub({
+    parameters: { action: 'render', rectype: 'itemfulfillment', recid: '42' },
+  }).context);
+
+  const data = render.calls.dataSources.find((d) => d.alias === 'copy').data;
+  // Array.from: values coming out of the AMD sandbox are cross-realm, so a bare
+  // deepEqual on two arrays fails on prototypes alone.
+  assert.deepEqual(Object.keys(data).sort(), Array.from(contract).sort(),
+    'engine and contract must not drift — the validator checks templates against the contract');
+});
+
 test('download=T still forces an attachment', () => {
   const { suitelet } = buildSuitelet({
     templates: [{ id: '7', values: { custrecord_pld_tpl_xml: TPL_XML } }],

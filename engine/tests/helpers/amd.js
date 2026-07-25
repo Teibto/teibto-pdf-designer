@@ -10,6 +10,9 @@
  *  - sibling modules (`./pld_lib_*`) load from the REAL source by default, so a
  *    test exercises the real dependency chain (e.g. baht text + Thai wordbreak);
  *    pass an entry in `stubs` under the same id to override one.
+ *  - values returned by a module are CROSS-REALM (they come from the vm context):
+ *    `assert.deepEqual` on two arrays fails on prototypes alone — wrap the module's
+ *    value with `Array.from(...)` / `{...obj}` before comparing structurally.
  *
  * @author Wichit Wongta
  * @since 2026-07-25

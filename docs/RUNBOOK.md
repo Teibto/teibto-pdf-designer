@@ -53,6 +53,7 @@ CI `quality-gate` รัน lint + vitest + e2e + template validator + engine un
 - data classification (Internal) — account ลูกค้าห้ามแตะแม้ dryrun · deploy เฉพาะ Teibto sandbox เท่านั้น
 - verify engine change — `node --check` + `node --test "engine/tests/**/*.test.js"` + review + QA สดบน SB2 (skill `netsuite-qa-browser`)
 - **ทุกค่าที่ข้าม `render.DataSource.OBJECT` ถึง FreeMarker เป็น string เสมอ (#165)** — พิสูจน์บน SB2: ส่ง `5350` (number) จาก JS แล้ว `${record.total?is_number}` = `NO`, `?string("#,##0.00")` คืน **ค่าว่างโดยไม่ error** ดังนั้น engine ต้อง format money/qty ให้เสร็จก่อนส่ง (`money()` / `pld_lib_baht_text`) แล้ว template พิมพ์ตรง ๆ · ฝั่ง designer ไม่โดนเพราะ `bfo-export.service.ts` coerce `?trim?number` ใน `<#attempt>` ก่อน format อยู่แล้ว (นั่นคือเหตุที่เทมเพลตจาก designer โชว์เลข แต่ master pack ว่าง) · validator ban `?string(`/`?string[`/`pldBahtText(` ใน master ทุกไฟล์แล้ว
+- **ป้ายชุดเอกสาร (#159)**: `${copy.th}` / `${copy.en}` / `${copy.label}` มาจาก data source ที่ `pld_sl_render_pdf` ใส่ให้ทุก render pass — ใช้ได้ทั้ง curated และ raw record · ชุดสำเนามาจาก `copies` ใน designer JSON ของ template record (invoice default = ต้นฉบับ+สำเนา) และใช้กับ **ทุก** rectype แล้ว
 - **binding contract (#155)**: rectype ที่อยู่ใน `DOC_TITLES` bind object จาก `pld_lib_invoice_data.js` แทน record ดิบ ดังนั้น key ที่ template อ้างต้องอยู่ใน `CURATED_KEYS` / `RAW_ALIAS_KEYS` / `ITEM_BINDING_KEYS` — เพิ่ม/ลบ key ต้องแก้ทั้ง list กับ object ที่ return (unit test บังคับให้ตรงกัน) · key ที่หลุด contract ไม่ error แต่พิมพ์ว่าง เพราะ binding null-safe (#2) กลืนไว้
 - เขียน unit test ของ engine — `engine/tests/` ใช้ AMD shim (`helpers/amd.js`) mount โมดูลจริงโดย stub เฉพาะ `N/*` (`helpers/ns-stubs.js`); sibling lib (`./pld_lib_*`) โหลดของจริง จะ override ก็ใส่ key ชื่อเดียวกันใน stubs
 
@@ -104,7 +105,8 @@ config record `customrecord_pld_config` คือจุดตั้งค่า 
 
 ### เพิ่ม document type ใหม่ end-to-end
 
-1. engine — เพิ่ม rectype ใน `DOC_TITLES` (`pld_lib_invoice_data.js`) เป็น `{th, en}` · ฝั่งซื้อเพิ่มใน `PURCHASE_SIDE` (คุมเครื่องหมายจำนวนเงิน) · รองรับตอนนี้: `invoice` `creditmemo` `estimate` `salesorder` `purchaseorder`
+1. engine — เพิ่ม rectype ใน `DOC_TITLES` (`pld_lib_invoice_data.js`) เป็น `{th, en}` · ฝั่งซื้อเพิ่มใน `PURCHASE_SIDE` (คุมเครื่องหมายจำนวนเงิน) · curated ตอนนี้: `invoice` `creditmemo` `estimate` `salesorder` `purchaseorder` — rectype ที่ไม่อยู่ในลิสต์นี้ยังพิมพ์ได้ผ่าน raw record binding (ชุดสำเนาทำงานครบตั้งแต่ #159) แต่ไม่มีชื่อเอกสารไทย/VAT breakdown/ตัวอักษรไทย
+   · แก้ลิสต์แล้วต้องอัปเดต `RAW_PATH_TYPES` ใน `engine/tests/rectype-coverage.test.js` ให้ตรง (test บังคับว่า ปุ่ม/curated/dropdown ต้องสอดคล้องกัน — #159)
 2. designer — เพิ่มใน `RECORD_TYPES` (`designer/src/constants/record-types.ts`) โดย `value` = **record type id จริงของ NetSuite** เท่านั้น (engine filter ตรงตัว — ค่า pseudo แบบ `transaction` ทำให้ Print ขึ้น `No template found` ตลอดไป #158); unit test คุมว่า rectype ที่ปุ่มโผล่ต้องมีในลิสต์ครบ
 3. template — `templates/master/<doc>.xml` (copy skeleton) + `templates/samples/<doc>.sample.json` สังเคราะห์
 4. ตั้ง default template ต่อ rectype บน account ผ่านปุ่ม `⚙ ตั้งค่าการบันทึก` ไม่งั้น Print คืน `No template found` (R4)
