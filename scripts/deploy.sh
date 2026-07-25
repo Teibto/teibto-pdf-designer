@@ -6,8 +6,14 @@
 # ก่อน loop จะ stamp engine/VERSION + git sha + UTC ลงไฟล์ใน File Cabinet เพื่อให้ตรวจ version
 # ที่ deploy ไปได้จากตัว account เอง (?action=version หรือเปิดไฟล์ใน File Cabinet).
 #
+# ไฟล์ฟอนต์ (fonts/*.ttf) ถูก "ข้าม" โดยค่าเริ่มต้น (#167): การอัปโหลดทับทำให้ token h= ใน URL
+# ของไฟล์เปลี่ยน — config ที่เก็บ URL ดิบจะกลายเป็นของเก่าเงียบ ๆ แล้วตัวอักษรไทยหายทั้งใบ
+# (engine resolve URL สดจาก file id ให้แล้ว แต่การไม่อัปโหลดซ้ำก็เร็วกว่าและปลอดภัยกว่า)
+# ติดตั้งฟอนต์ครั้งแรกหรือเปลี่ยนไฟล์ฟอนต์ → ใส่ --with-fonts
+#
 # ใช้:
-#   scripts/deploy.sh                    # deploy ทุก authid ใน engine/deploy-targets.txt
+#   scripts/deploy.sh                    # deploy ทุก authid ใน engine/deploy-targets.txt (ไม่แตะฟอนต์)
+#   scripts/deploy.sh --with-fonts       # รวมไฟล์ฟอนต์ด้วย (ครั้งแรก / เปลี่ยนไฟล์ฟอนต์)
 #   scripts/deploy.sh --dryrun           # preview อย่างเดียว ไม่ deploy จริง
 #   scripts/deploy.sh teibto-sb2 acc2    # deploy เฉพาะ authid ที่ระบุ (แทน targets file)
 #   scripts/deploy.sh --dryrun teibto-sb2 teibto-sb2
@@ -24,6 +30,9 @@ VERSION_FILE="${ENGINE_DIR}/VERSION"
 TARGETS_FILE="${ENGINE_DIR}/deploy-targets.txt"
 APP_DIR="${ENGINE_DIR}/src/FileCabinet/SuiteScripts/pdf-layout-designer"
 STAMP_FILE="${APP_DIR}/pld_version.txt"
+DEPLOY_XML="${ENGINE_DIR}/src/deploy.xml"
+# shellcheck disable=SC2088  # `~/` เป็น syntax ของ SDF deploy.xml (project-relative) ไม่ใช่ path ของ shell — ต้องไม่ expand
+FC_PREFIX="~/FileCabinet/SuiteScripts/pdf-layout-designer"
 DESIGNER_DIR="${REPO_ROOT}/designer"
 DIST_SRC="${DESIGNER_DIR}/dist-netsuite"      # vite --mode netsuite output
 DIST_DEST="${APP_DIR}/dist"                   # File Cabinet path served by pld_sl_designer.js
@@ -31,10 +40,12 @@ DIST_DEST="${APP_DIR}/dist"                   # File Cabinet path served by pld_
 # --- 0) parse args -----------------------------------------------------------
 DRYRUN=0
 NO_BUILD=0
+WITH_FONTS=0
 AUTHIDS=()
 for arg in "$@"; do
   case "$arg" in
     --dryrun) DRYRUN=1 ;;
+    --with-fonts) WITH_FONTS=1 ;;   # อัปโหลด fonts/*.ttf ด้วย (ครั้งแรก/เปลี่ยนฟอนต์) — #167
     --no-build) NO_BUILD=1 ;;   # reuse existing designer/dist-netsuite (เร็ว ตอน iterate)
     -*) echo "ERROR: unknown option '$arg'" >&2; exit 2 ;;
     *) AUTHIDS+=("$arg") ;;
@@ -97,22 +108,51 @@ echo " mode: $([ "${DRYRUN}" -eq 1 ] && echo 'DRYRUN (ไม่ deploy จริ
 echo " targets (${#AUTHIDS[@]}): ${AUTHIDS[*]}"
 echo "════════════════════════════════════════════════════════════"
 
-# --- 2) backup project.json + คืนค่าเสมอตอนจบ (trap) -------------------------
-ORIG_PROJECT_JSON=""
+# --- 2) backup project.json + deploy.xml แล้วคืนค่าเสมอตอนจบ (trap) ----------
+# backup เป็นไฟล์จริงแล้ว cp กลับ — คืนค่าแบบ byte-exact (เดิมใช้ printf '%s' ทำให้ newline
+# ท้ายไฟล์หาย แล้ว deploy.xml ที่ version control ไว้ขึ้น modified ทุกครั้งที่รัน)
+BACKUP_DIR="$(mktemp -d)"
 HAD_PROJECT_JSON=0
 if [ -f "${PROJECT_JSON}" ]; then
   HAD_PROJECT_JSON=1
-  ORIG_PROJECT_JSON="$(cat "${PROJECT_JSON}")"
+  cp "${PROJECT_JSON}" "${BACKUP_DIR}/project.json"
 fi
+cp "${DEPLOY_XML}" "${BACKUP_DIR}/deploy.xml"
 # shellcheck disable=SC2317,SC2329  # เรียกผ่าน trap ... EXIT — body ไม่ได้ unreachable (shellcheck มองไม่เห็น indirect call)
-restore_project_json() {
+restore_repo_files() {
   if [ "${HAD_PROJECT_JSON}" -eq 1 ]; then
-    printf '%s' "${ORIG_PROJECT_JSON}" > "${PROJECT_JSON}"
+    cp "${BACKUP_DIR}/project.json" "${PROJECT_JSON}"
   else
     rm -f "${PROJECT_JSON}"
   fi
+  cp "${BACKUP_DIR}/deploy.xml" "${DEPLOY_XML}"
+  rm -rf "${BACKUP_DIR}"
 }
-trap restore_project_json EXIT
+trap restore_repo_files EXIT
+
+# --- 2b) deploy scope: ข้ามไฟล์ฟอนต์เว้นแต่สั่ง --with-fonts (#167) -----------
+# deploy.xml ใน repo กวาดโฟลเดอร์ทั้งก้อน (`pdf-layout-designer/*`) ซึ่งรวม fonts/ ด้วย —
+# อัปโหลดทับทำให้ token h= ใน URL เปลี่ยน (config ที่เก็บ URL ดิบจะชี้ของเก่า → ไทยหายเงียบ)
+# ปกติจึงเขียน deploy.xml ชั่วคราวที่ระบุไฟล์เอง แล้ว trap ข้างบนคืนไฟล์เดิมให้เสมอ
+if [ "${WITH_FONTS}" -eq 1 ]; then
+  echo "▶ scope: ทั้งโฟลเดอร์ รวมไฟล์ฟอนต์ (--with-fonts) — หลัง deploy ตรวจว่า URL/​file id ฟอนต์ใน config ยังใช้ได้"
+else
+  {
+    echo '<deploy>'
+    echo '  <files>'
+    for f in "${APP_DIR}"/*.js; do
+      [ -f "$f" ] && echo "    <path>${FC_PREFIX}/$(basename "$f")</path>"
+    done
+    [ -f "${STAMP_FILE}" ] && echo "    <path>${FC_PREFIX}/$(basename "${STAMP_FILE}")</path>"
+    [ -d "${DIST_DEST}" ] && echo "    <path>${FC_PREFIX}/dist/*</path>"
+    echo '  </files>'
+    echo '  <objects>'
+    echo '    <path>~/Objects/*</path>'
+    echo '  </objects>'
+    echo '</deploy>'
+  } > "${DEPLOY_XML}"
+  echo "▶ scope: script + SPA + objects · ข้ามไฟล์ฟอนต์ (#167 — ใช้ --with-fonts ถ้าต้องอัปโหลดฟอนต์)"
+fi
 
 # --- 3) deploy loop ----------------------------------------------------------
 LOG_DIR="$(mktemp -d)"

@@ -98,8 +98,8 @@ facts เต็มเรื่อง BFO/FreeMarker (font embedding · `?then` v
 config record `customrecord_pld_config` คือจุดตั้งค่า per-account จุดเดียว จ่าย `${company.*}` ให้ทุก template.
 
 1. สร้าง 1 record ต่อ subsidiary หรือ 1 record global (เว้น `custrecord_pld_cfg_subsidiary` ว่าง = fallback) · field: `_name` `_name_en` `_taxid` `_branch` `_address` `_address_en` `_phone` `_email` `_logo_url` `_theme_color` `_font_regular` `_font_bold` `_subsidiary`
-2. ฟอนต์ไทยต้องชี้ URL ไป **THSarabunPSK เท่านั้น ห้าม THSarabunNew (#32)** — BFO ไม่ apply GPOS จึงทำวรรณยุกต์/สระของ THSarabunNew ลอยหลุดฐาน · ฟอนต์ที่ไม่ embed (Noto/Tahoma) glyph ไทย drop เงียบใน PDF
-3. font URL มี token `h=...` ที่หมดอายุเมื่อ re-save ไฟล์ฟอนต์ใน File Cabinet → refresh แล้วอัปเดต config
+2. ฟอนต์ไทยต้องชี้ไป **THSarabunPSK เท่านั้น ห้าม THSarabunNew (#32)** — BFO ไม่ apply GPOS จึงทำวรรณยุกต์/สระของ THSarabunNew ลอยหลุดฐาน · ฟอนต์ที่ไม่ embed (Noto/Tahoma) glyph ไทย drop เงียบใน PDF
+3. **ใส่ `file id` ไม่ใช่ URL (#167)** — ช่อง font/logo รับ file id ได้แล้ว แล้ว engine resolve URL สดตอน render (`N/file.load(id).url`) · URL เก่าที่ตั้งไว้ยังใช้ได้ engine ดึง `id=` จาก URL มา resolve ใหม่ให้เอง · token `h=` ในค่าที่เก็บไว้จึงหมดอายุได้ไม่กระทบใคร (อาการเดิม: token เพี้ยน = ไทยหายทั้งบรรทัดแบบไม่มี error)
 4. `load()` เลือก config 3-tier: subsidiary ตรง → global (subsidiary ว่าง) → record แรก · เต็ม: `engine/DEPLOYMENT.md §Company Config`
 
 ### เพิ่ม document type ใหม่ end-to-end
@@ -112,7 +112,7 @@ config record `customrecord_pld_config` คือจุดตั้งค่า 
 ### deploy ไฟล์เดียวเข้า account (hotfix File Cabinet)
 
 - SuiteScript หรือ HTML ไฟล์เดียว: skill `netsuite-qa-browser` → `references/deploy.md` (`ns-deploy-lib.sh` upload + hash-verify)
-- engine เต็มชุด (script + object + version stamp): `scripts/deploy.sh`
+- engine เต็มชุด (script + object + version stamp): `scripts/deploy.sh` — **ข้ามไฟล์ฟอนต์โดยค่าเริ่มต้น (#167)**; ติดตั้งครั้งแรกหรือเปลี่ยนไฟล์ฟอนต์ใช้ `scripts/deploy.sh --with-fonts` (script เขียน `deploy.xml` ชั่วคราวแล้วคืนไฟล์เดิมให้เสมอผ่าน trap)
 - ห้าม hotfix ตรงบน account โดยไม่ sync กลับ repo — repo คือ source of truth
 
 ### onboarding วิศวกรใหม่
