@@ -30,11 +30,19 @@
 <link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />
 <macrolist>
   <macro id="nlheader">
+    <#-- โลโก้: กำหนด width และ height "คู่กัน" เสมอ แล้ววางในแถวของตัวเอง (#178)
+         BFO ย่อภาพก็ต่อเมื่อได้กล่องครบทั้งสองแกน — ให้ค่าด้านเดียว (หรือ max-width)
+         มันเมินแล้ววาดภาพขนาดจริง ซึ่งโดนตัดตามขอบ cell/หน้ากระดาษเงียบ ๆ
+         เดิมใช้ style="width: 64pt" อย่างเดียวในคอลัมน์ 58% โลโก้แบนเนอร์ของ account
+         จึงวาดเต็มขนาดจริง ล้นออกนอกหน้า ดันบล็อกหัวเอกสารตกหน้า และทับกล่องคู่ค้า
+         กล่อง 150x40pt รับได้ทั้งโลโก้แนวนอนยาวและโลโก้จัตุรัส โดยไม่กินงบ header -->
+    <#if (company.logo!"") != "">
+    <p class="cell"><img src="${(company.logo)?xml}" style="width: 150pt; height: 40pt;" /></p>
+    </#if>
     <table style="width: 100%;">
       <tr>
         <td style="width: 58%;">
           <p class="cell">
-          <#if (company.logo!"") != ""><img src="${(company.logo)?xml}" style="width: 64pt;" /><br /></#if>
           <span class="company-name">${company.name!""}</span><br />
           <span>${company.address!""}</span><br />
           <span>โทร. ${company.phone!""}<#if (company.email!"") != ""> อีเมล ${company.email}</#if></span><br />
@@ -89,7 +97,7 @@ td.r { text-align: right; }
 .footer-note { font-size: 9pt; color: #555555; }
 </style>
 </head>
-<body header="nlheader" header-height="120pt" footer="nlfooter" footer-height="26pt" size="A4" padding="0.35in">
+<body header="nlheader" header-height="140pt" footer="nlfooter" footer-height="26pt" size="A4" padding="0.35in">
 
 <#-- ═══ ผู้ชำระเงิน + รายละเอียดการชำระ ═══ -->
 <table class="party-box" style="width: 100%;">
