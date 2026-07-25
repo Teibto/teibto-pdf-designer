@@ -59,7 +59,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   // dates become DD/MM/YYYY; numbers stay numeric so col.format (#77) applies.
   var STANDARD_FIELDS = [
     'memo', 'salesrep', 'terms', 'currency', 'location',
-    'department', 'class', 'subsidiary', 'shipmethod', 'trackingnumbers'
+    'department', 'class', 'subsidiary', 'shipmethod', 'trackingnumbers',
+    'employee'   // requestor on purchase orders (master pack binds ${record.employee}, #155)
   ];
   function fieldDisplay(rec, fld) {
     var v;
@@ -109,6 +110,35 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   function isSupportedType(recType) {
     return Object.prototype.hasOwnProperty.call(DOC_TITLES, String(recType));
   }
+
+  // ── Binding contract (#155) ────────────────────────────────────────────────
+  // Every supported record type binds THIS object as `record` (the render
+  // Suitelet replaces NetSuite's raw record binding with it), so these lists are
+  // the complete set of keys a template may bind — anything else resolves to
+  // nothing, and null-safe bindings (`!""` / `![]`) turn that into a silently
+  // BLANK pdf instead of an error.
+  //
+  // CURATED_KEYS  = the designer-facing schema (designer picker = data = print)
+  // RAW_ALIAS_KEYS = raw-record aliases kept for the hand-written master pack in
+  //   templates/master/*.xml, which was authored against NetSuite's raw binding
+  //   (${record.tranid}, <#list record.item>). Without them every master printed
+  //   an empty header, an empty item table and 0.00 totals.
+  // ITEM_BINDING_KEYS = per-row keys inside <#list (record.item)![] as line>.
+  //
+  // scripts/validate-templates.sh reads these three lists and fails a PR whose
+  // master template binds a key the engine never provides.
+  var CURATED_KEYS = [
+    'subsidiaryId', 'company', 'document', 'customer', 'shipTo', 'totals',
+    'issuer', 'items', 'fields'
+  ];
+  var RAW_ALIAS_KEYS = [
+    'tranid', 'trandate', 'duedate', 'entity', 'billaddress', 'shipaddress',
+    'memo', 'otherrefnum', 'terms', 'salesrep', 'employee',
+    'custbody_buyer_taxid', 'custbody_buyer_branch', 'custbody_doc_copy_label',
+    'item', 'subtotal', 'discounttotal', 'taxtotal', 'total'
+  ];
+  var BINDING_KEYS = CURATED_KEYS.concat(RAW_ALIAS_KEYS);
+  var ITEM_BINDING_KEYS = ['item', 'description', 'quantity', 'units', 'rate', 'amount'];
 
   /**
    * @param {string} recType  NetSuite record type (invoice/estimate/salesorder/purchaseorder/creditmemo)
@@ -223,6 +253,11 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     }
 
     var items = [];
+    // Raw-record alias of the printed rows (#155): same rows, NUMERIC values.
+    // The master pack formats them with ?string["#,##0.00"], which is a hard
+    // FreeMarker error on a string — so these must never carry the curated
+    // display strings (money() output has thousands separators).
+    var rawItems = [];
     var prevMemo = '';
     lines.forEach(function (l) {
       if (l.itemtype === 'Discount') {
@@ -257,6 +292,14 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       var cc = custcolBySeq[l.seq];
       if (cc) Object.keys(cc).forEach(function (k) { row[k] = cc[k]; });
       items.push(row);
+      rawItems.push({
+        item: row.name,
+        description: row.memo,
+        quantity: isItem && l.quantity != null ? num(l.quantity) / conv : null,
+        units: row.unit,
+        rate: isItem && l.unit_price != null ? num(l.unit_price) : null,
+        amount: l.amount != null ? num(l.amount) : null
+      });
       prevMemo = memo;
     });
 
@@ -287,6 +330,16 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       { label: 'Customer Paid / ยอดชำระ (บาท)', value: money(customerPaid) }
     ];
 
+    // ── Raw-record aliases for the master pack (#155) ──
+    var bodyFields = buildBodyFields(rec);
+    var customerName = wordbreak.breakThai(cleanName(hdr.customer_name));
+    // subtotal + discounttotal == baseAmount by construction, so the master's
+    // "มูลค่าหลังหักส่วนลด (Net Amount)" row always matches the statutory Base Total.
+    // No summary rows on the transaction → subtotal falls back to Base Total and
+    // the discount row disappears (0), same as the reference layout.
+    var rawSubtotal = grossTotal || baseAmount;
+    var rawDiscount = baseAmount - rawSubtotal;
+
     return {
       // Exposed so callers that render from this curated object without their own
       // record handle (e.g. renderCopiesPdf, #144) can still subsidiary-scope the
@@ -313,7 +366,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         docInfoRows: docInfoRows
       },
       customer: {
-        name: wordbreak.breakThai(cleanName(hdr.customer_name)),
+        name: customerName,
         address: wordbreak.breakThai(billAddr),
         taxId: custTaxId || '',
         branch: branchText(custBranch)
@@ -341,7 +394,37 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       issuer: { createdBy: cleanName(hdr.created_by) },
       items: items,
       // Generic body fields (#79): fields.custbody_xxx + standard shortlist
-      fields: buildBodyFields(rec)
+      fields: bodyFields,
+
+      // ── Raw-record aliases (#155) — see RAW_ALIAS_KEYS ──────────────────────
+      // Keep in sync with RAW_ALIAS_KEYS; validate-templates.sh fails a master
+      // that binds a key missing from that list, and the engine unit test fails
+      // a key listed there but missing here.
+      tranid: hdr.tranid || '',
+      trandate: hdr.trandate || '',
+      duedate: hdr.duedate || '',
+      entity: customerName,
+      billaddress: wordbreak.breakThai(billAddr),
+      shipaddress: wordbreak.breakThai(shipAddr),
+      memo: bodyFields.memo || '',
+      otherrefnum: hdr.otherrefnum || '',
+      terms: bodyFields.terms || '',
+      salesrep: bodyFields.salesrep || '',
+      employee: bodyFields.employee || '',
+      // Buyer tax id/branch: the account's own field wins, else the Thai-Loc
+      // custbody_thl_* values the curated schema already resolved.
+      custbody_buyer_taxid: bodyValue(rec, 'custbody_buyer_taxid') || custTaxId || '',
+      custbody_buyer_branch: bodyValue(rec, 'custbody_buyer_branch') || branchText(custBranch),
+      // Copy label of the copy BEING rendered right now (#155). Must win over any
+      // stored body field of the same name: the copy set is resolved per render
+      // pass (renderCopiesPdf), so without this every copy of a Thai tax invoice
+      // printed "ต้นฉบับ" — including the สำเนา.
+      custbody_doc_copy_label: (copyLabelTH || 'ต้นฉบับ') + ' (' + (copyLabelEN || 'Original') + ')',
+      item: rawItems,
+      subtotal: rawSubtotal,
+      discounttotal: rawDiscount,
+      taxtotal: vat,
+      total: grandTotal
     };
   }
 
@@ -353,6 +436,11 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   return {
     buildInvoiceData: buildInvoiceData,
     buildTransactionData: buildTransactionData,
-    isSupportedType: isSupportedType
+    isSupportedType: isSupportedType,
+    // Binding contract (#155) — consumed by the engine unit tests; the template
+    // validator reads the same lists straight from this source file.
+    bindingKeys: BINDING_KEYS,
+    itemBindingKeys: ITEM_BINDING_KEYS,
+    supportedTypes: Object.keys(DOC_TITLES)
   };
 });
