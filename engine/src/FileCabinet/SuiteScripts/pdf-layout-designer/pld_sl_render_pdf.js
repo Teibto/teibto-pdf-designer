@@ -24,18 +24,16 @@ define([
   'N/runtime',
   'N/log',
   'N/xml',
-  'N/format',
-  './pld_lib_company_config',
-  './pld_lib_invoice_data'
-], function (render, record, search, file, runtime, log, xml, format, companyConfig, invoiceData) {
+  './pld_lib_render'
+], function (render, record, search, file, runtime, log, xml, pldRender) {
 
-  // ─── Custom Record Config ───
-  const TPL_RECORD_TYPE   = 'customrecord_pld_template';
-  const TPL_FLD_NAME      = 'custrecord_pld_tpl_name';
-  const TPL_FLD_DATA      = 'custrecord_pld_tpl_data';     // JSON string (designer state)
-  const TPL_FLD_XML       = 'custrecord_pld_tpl_xml';      // BFO XML string
-  const TPL_FLD_REC_TYPE  = 'custrecord_pld_tpl_rectype';  // Target record type
-  const TPL_FLD_IS_DEFAULT = 'custrecord_pld_tpl_default'; // Checkbox: default for this rectype
+  // ─── Custom Record Config (owned by the render core, #181) ───
+  const TPL_RECORD_TYPE   = pldRender.TPL.TYPE;
+  const TPL_FLD_NAME      = pldRender.TPL.NAME;
+  const TPL_FLD_DATA      = pldRender.TPL.DATA;     // JSON string (designer state)
+  const TPL_FLD_XML       = pldRender.TPL.XML;      // BFO XML string
+  const TPL_FLD_REC_TYPE  = pldRender.TPL.RECTYPE;  // Target record type
+  const TPL_FLD_IS_DEFAULT = pldRender.TPL.IS_DEFAULT; // Checkbox: default for this rectype
 
   function onRequest(context) {
     var response = context.response;
@@ -246,13 +244,7 @@ define([
 
     // ─── 1. Load Template (XML + copy set from the record data, #92) ───
     tel.stage = 'load-template';
-    var tpl = tplId ? loadTemplateXml(tplId) : findDefaultTemplateXml(recType);
-    var tplXml = tpl && tpl.xml;
-    var tplCopies = tpl && tpl.copies;
-
-    if (!tplXml) {
-      throw new Error('No template found. Please specify tplid or set a default template for ' + recType);
-    }
+    var tpl = pldRender.resolveTemplate(tplId, recType);
 
     // ─── 2. Render (record + company + context) ───
     tel.stage = 'render';
@@ -265,9 +257,9 @@ define([
     // the template record (data JSON), falling back to the invoice default.
     // #159: copy set ใช้กับ **ทุก** record type แล้ว — เดิมสาขา else (rectype ที่ยังไม่ curated)
     // เรียก render ตรงโดยไม่แตะ resolveCopies เลย ทำให้ชุดสำเนาที่ผู้ใช้ตั้งไว้ถูกทิ้งเงียบ ๆ
-    var copies = resolveCopies(tplCopies, recType);
+    var copies = pldRender.resolveCopies(tpl.copies, recType);
     var copiesCount = copies.length;
-    var out = renderWithCopies(tplXml, recType, recId, copies, tel);
+    var out = pldRender.renderDocument(tpl.xml, recType, recId, copies, tel);
 
     // ─── 3. Set filename from tranid ───
     var tranId = recId;
@@ -293,167 +285,6 @@ define([
       value: (download ? 'attachment' : 'inline') + '; filename="' + fileName + '"'
     });
     context.response.writeFile({ file: out.pdfFile, isInline: !download });
-  }
-
-  /**
-   * Build a configured N/render renderer for one template + one data binding —
-   * the single binding path shared by Print (render) and live Preview
-   * (preview-live), so a preview of unsaved designer XML is byte-for-byte the
-   * same engine + data sources as Print (#12). When the caller supplies a
-   * curated data object (designer schema built via SuiteQL — see
-   * pld_lib_invoice_data), bind THAT as `record` so ${record.customer.name},
-   * <#list record.items ...> resolve; otherwise bind the raw NetSuite record
-   * (`rec`) so hand-written master templates (${record.tranid}) render unchanged.
-   */
-  function makeRenderer(tplXml, curatedData, rec, tel, copy) {
-    var renderer = render.create();
-    renderer.templateContent = tplXml;
-
-    if (curatedData) {
-      renderer.addCustomDataSource({ format: render.DataSource.OBJECT, alias: 'record', data: curatedData });
-    } else {
-      renderer.addRecord({ templateName: 'record', record: rec });
-    }
-
-    // Copy label of the pass being rendered (#159) — its own data source so it works
-    // on BOTH binding paths: curated types get it from the copy set, and a raw-record
-    // type (no curated data at all) finally gets a real label instead of every copy
-    // printing "ต้นฉบับ". Templates bind ${copy.label} / ${copy.th} / ${copy.en}.
-    renderer.addCustomDataSource({
-      format: render.DataSource.OBJECT,
-      alias: 'copy',
-      data: copyBinding(copy)
-    });
-
-    // Company info (custom data source) — subsidiary-scoped (OneWorld, #144).
-    // Capture the resolved subsidiary into telemetry (#149) so a failed render is
-    // traceable to the config record that fed ${company.*}.
-    var subsidiaryId = subsidiaryIdOf(curatedData, rec);
-    if (tel && subsidiaryId != null && subsidiaryId !== '') tel.subsidiaryId = String(subsidiaryId);
-    renderer.addCustomDataSource({
-      format: render.DataSource.OBJECT,
-      alias: 'company',
-      data: loadCompanyInfo(subsidiaryId)
-    });
-
-    // Current date/user info
-    var currentUser = runtime.getCurrentUser();
-    renderer.addCustomDataSource({
-      format: render.DataSource.OBJECT,
-      alias: 'context',
-      data: {
-        today: format.format({ value: new Date(), type: format.Type.DATE }),
-        now: format.format({ value: new Date(), type: format.Type.DATETIME }),
-        userName: currentUser.name,
-        userEmail: currentUser.email
-      }
-    });
-
-    return renderer;
-  }
-
-  /**
-   * Bind BFO XML to a real record and render a single-copy PDF.
-   * Returns { pdfFile, rec } (caller names the file).
-   */
-  function renderXmlWithRecord(tplXml, recType, recId, curatedData, tel, copy) {
-    if (tel) tel.stage = 'load-record';
-    var rec = record.load({ type: recType, id: recId });
-    if (tel) tel.stage = 'render';
-    return { pdfFile: makeRenderer(tplXml, curatedData, rec, tel, copy).renderAsPdf(), rec: rec };
-  }
-
-  /** Copy data source shape (#159) — keys a template may bind under ${copy.*}. */
-  function copyBinding(copy) {
-    var th = (copy && copy.th) || 'ต้นฉบับ';
-    var en = (copy && copy.en) || 'Original';
-    return { th: th, en: en, label: th + ' (' + en + ')' };
-  }
-
-  // Thai statutory copy set (#15) — default for invoices when the template
-  // doesn't define its own copy set (#92).
-  var INVOICE_COPIES = [
-    { th: 'ต้นฉบับ', en: 'Original' },
-    { th: 'สำเนา', en: 'Copy' }
-  ];
-
-  /** Validate a template-defined copy set (#92): array of {th|en} → sanitized
-   *  array, or null when absent/invalid (caller falls back to defaults). */
-  function parseCopies(raw) {
-    if (!Array.isArray(raw) || raw.length === 0) return null;
-    var out = [];
-    for (var i = 0; i < raw.length; i++) {
-      var c = raw[i];
-      if (!c || typeof c !== 'object') return null;
-      var th = typeof c.th === 'string' ? c.th : '';
-      var en = typeof c.en === 'string' ? c.en : '';
-      if (!th && !en) return null;
-      out.push({ th: th || en, en: en || th });
-    }
-    return out;
-  }
-
-  /** Copies for a render (#92): template-defined set, else invoice default,
-   *  else single original. */
-  function resolveCopies(tplCopies, recType) {
-    return tplCopies || (recType === 'invoice' ? INVOICE_COPIES : [{ th: 'ต้นฉบับ', en: 'Original' }]);
-  }
-
-  /**
-   * Render one document for the copy set, whatever the record type (#159).
-   * Single copy → straight renderAsPdf; more than one → one pass per copy label
-   * combined into ONE PDF via BFO <pdfset> (#15).
-   *
-   * Curated types bind the schema built per copy (the doc title carries the copy
-   * label); a raw-record type loads the record ONCE and reuses it for every pass —
-   * only the ${copy.*} data source differs. Returns { pdfFile, rec?, tranId? }.
-   */
-  function renderWithCopies(tplXml, recType, recId, copies, tel) {
-    var curatedType = invoiceData.isSupportedType(recType);
-
-    if (copies.length === 1) {
-      var only = copies[0];
-      var singleData = curatedType
-        ? invoiceData.buildTransactionData(recType, recId, only.th, only.en)
-        : null;
-      return renderXmlWithRecord(tplXml, recType, recId, singleData, tel, only);
-    }
-
-    // FreeMarker must resolve per copy, so each pass renders to a string first and
-    // the resolved <pdf> documents are combined with render.xmlToPdf.
-    var rec = null;
-    if (!curatedType) {
-      if (tel) tel.stage = 'load-record';
-      rec = record.load({ type: recType, id: recId });
-    }
-    if (tel) tel.stage = 'render';
-
-    var tranId = '';
-    var docs = copies.map(function (c) {
-      var curated = curatedType
-        ? invoiceData.buildTransactionData(recType, recId, c.th, c.en)
-        : null;
-      if (curated) tranId = tranId || (curated.document && curated.document.number) || '';
-      var resolved = makeRenderer(tplXml, curated, rec, tel, c).renderAsString();
-      var start = resolved.indexOf('<pdf>');
-      var end = resolved.lastIndexOf('</pdf>');
-      if (start < 0 || end < 0) {
-        throw new Error('renderAsString produced no <pdf> document — cannot build the copy set');
-      }
-      return resolved.substring(start, end + '</pdf>'.length);
-    });
-
-    if (!tranId && rec) {
-      try { tranId = rec.getValue({ fieldId: 'tranid' }) || ''; } catch (e) { tranId = ''; }
-    }
-
-    if (tel) tel.stage = 'copyset';
-    var pdfFile = render.xmlToPdf({
-      xmlString: '<?xml version="1.0"?>\n' +
-        '<!DOCTYPE pdfset PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n' +
-        '<pdfset>\n' + docs.join('\n') + '\n</pdfset>'
-    });
-    return { pdfFile: pdfFile, tranId: tranId, rec: rec };
   }
 
   // ═══════════════════════════════════════════════════
@@ -490,15 +321,15 @@ define([
     tel.stage = 'render';
     // #92: unsaved designer state sends its copy set in the body · #159: honored for
     // every record type, same path as Print, so preview == print on copies too.
-    var pvCopies = resolveCopies(parseCopies(body.copies), body.rectype);
+    var pvCopies = pldRender.resolveCopies(pldRender.parseCopies(body.copies), body.rectype);
     var copiesCount = pvCopies.length;
     var out;
     if (body.data) {
       // synthetic-data preview (#75): caller supplies the bound object itself
-      out = { pdfFile: makeRenderer(body.xml, body.data, null, tel, pvCopies[0]).renderAsPdf() };
+      out = { pdfFile: pldRender.makeRenderer(body.xml, body.data, null, tel, pvCopies[0]).renderAsPdf() };
       copiesCount = 1;
     } else {
-      out = renderWithCopies(body.xml, body.rectype, body.recid, pvCopies, tel);
+      out = pldRender.renderDocument(body.xml, body.rectype, body.recid, pvCopies, tel);
     }
     out.pdfFile.name = 'preview.pdf';
 
@@ -518,7 +349,10 @@ define([
     if (!tplId) throw new Error('Missing tplid for preview');
 
     tel.stage = 'load-template';
-    var tplXml = loadTemplateXml(tplId);
+    // .xml — loadTemplate returns { xml, copies } (#92). Reading the object itself
+    // used to land here and blow up on .replace() below, so ?action=preview has
+    // been dead since the copy set was added; the split made it visible (#181).
+    var tplXml = pldRender.loadTemplate(tplId).xml;
 
     // Replace FreeMarker expressions with placeholder text for preview.
     // The preview renderer has no data sources bound, so ANY ${...} left in
@@ -686,7 +520,7 @@ define([
    * may deliberately be removing a broken default), but the response flags
    * wasDefault:true so the caller can warn that the record type is now left
    * without a default template (Print falls back to "no template found",
-   * see renderPdf/findDefaultTemplateXml — no silent fallback, R4).
+   * see renderPdf / pld_lib_render.findDefaultTemplate — no silent fallback, R4).
    */
   function deleteTemplate(context) {
     if (context.request.method !== 'POST') {
@@ -719,57 +553,6 @@ define([
   // ═══════════════════════════════════════════════════
 
   /**
-   * Load BFO XML from template custom record.
-   * No fallback generation: the only BFO generator is the designer's
-   * bfo-export.service.ts — a template without XML is a hard error (#6, R4).
-   */
-  function loadTemplateXml(tplId) {
-    var rec = record.load({ type: TPL_RECORD_TYPE, id: tplId });
-    var xmlContent = rec.getValue({ fieldId: TPL_FLD_XML });
-
-    if (!xmlContent) {
-      throw new Error('Template ' + tplId + ' has no BFO XML. ' +
-        'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
-    }
-
-    return { xml: xmlContent, copies: copiesFromDataJson(rec.getValue({ fieldId: TPL_FLD_DATA })) };
-  }
-
-  /** Copy set stored in the designer JSON of a template record (#92) */
-  function copiesFromDataJson(dataJson) {
-    if (!dataJson) return null;
-    try { return parseCopies(JSON.parse(dataJson).copies); } catch (e) { return null; }
-  }
-
-  /**
-   * Find default template for a record type.
-   * Same no-fallback rule as loadTemplateXml (#6, R4).
-   */
-  function findDefaultTemplateXml(recType) {
-    var results = search.create({
-      type: TPL_RECORD_TYPE,
-      filters: [
-        ['isinactive', 'is', 'F'],
-        'AND',
-        [TPL_FLD_REC_TYPE, 'is', recType],
-        'AND',
-        [TPL_FLD_IS_DEFAULT, 'is', 'T']
-      ],
-      columns: [TPL_FLD_XML, TPL_FLD_DATA]
-    }).run().getRange({ start: 0, end: 1 });
-
-    if (results.length === 0) return null;
-
-    var xmlContent = results[0].getValue(TPL_FLD_XML);
-    if (!xmlContent) {
-      throw new Error('Default template for ' + recType + ' (id ' + results[0].id + ') has no BFO XML. ' +
-        'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
-    }
-
-    return { xml: xmlContent, copies: copiesFromDataJson(results[0].getValue(TPL_FLD_DATA)) };
-  }
-
-  /**
    * Clear the "default" flag for other templates of the same record type.
    */
   function clearDefaultForRecType(recType, excludeId) {
@@ -797,32 +580,6 @@ define([
       }
       return true;
     });
-  }
-
-  /**
-   * Load company info from the PLD config custom record (#9).
-   * Single source of ${company.*}: shared loader pld_lib_company_config.js —
-   * per-account setup is one config record, no template edits, no script params.
-   *
-   * @param {string|number} [subsidiaryId] - transaction's subsidiary (OneWorld,
-   *   #144); undefined when there's no record context (synthetic preview data).
-   */
-  function loadCompanyInfo(subsidiaryId) {
-    return companyConfig.load(subsidiaryId);
-  }
-
-  /**
-   * Resolve the subsidiary id to scope ${company.*} by (#144), preferring the
-   * curated data's own subsidiaryId (set by pld_lib_invoice_data from the
-   * transaction it already loaded) and falling back to the raw record `rec`
-   * when curatedData wasn't built by that library (non-invoice record types).
-   * Returns undefined when neither is available (no record context) — load()
-   * then falls back to the global/first-active config, unchanged behavior.
-   */
-  function subsidiaryIdOf(curatedData, rec) {
-    if (curatedData && curatedData.subsidiaryId) return curatedData.subsidiaryId;
-    if (!rec) return undefined;
-    try { return rec.getValue({ fieldId: 'subsidiary' }); } catch (e) { return undefined; }
   }
 
   function sendJson(context, data) {

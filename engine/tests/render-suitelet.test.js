@@ -26,13 +26,16 @@ const TPL_XML = '<pdf><body>ok</body></pdf>';
  * @param {Object} opts
  * @param {Array}  opts.templates  search rows for customrecord_pld_template
  */
-function buildSuitelet({ templates = [] } = {}) {
+function buildSuitelet({ templates = [], recordValues = {} } = {}) {
   const log = logStub();
   const render = renderStub();
   const search = searchStub(templates);
   const stubs = {
     'N/render': render.module,
-    'N/record': recordStub({ id: 42, values: { tranid: 'IF-0001', subsidiary: '2' } }).module,
+    'N/record': recordStub({
+      id: 42,
+      values: Object.assign({ tranid: 'IF-0001', subsidiary: '2' }, recordValues),
+    }).module,
     'N/search': search.module,
     'N/file': fileStub(),
     'N/runtime': runtimeStub(),
@@ -239,4 +242,23 @@ test('download=T still forces an attachment', () => {
 
   assert.match(response.state.headers['Content-Disposition'], /^attachment; /);
   assert.equal(response.state.files[0].isInline, false);
+});
+
+// ─── #181: ?action=preview was dead code ─────────────────────────────────────
+// The sample-data preview read the template loader's return value ({xml, copies}
+// since #92) as if it were the XML string, so the very next .replace() threw
+// "tplXml.replace is not a function" — every call landed on the error page. The
+// split of the render core surfaced it; this pins the fix.
+test('?action=preview renders the saved template with placeholder data', () => {
+  const { suitelet, render } = buildSuitelet({
+    recordValues: { custrecord_pld_tpl_xml: '<pdf><body>${record.tranid!""}</body></pdf>' },
+  });
+  const { context, response } = contextStub({ parameters: { action: 'preview', tplid: '7' } });
+
+  suitelet.onRequest(context);
+
+  assert.equal(response.state.headers['Content-Type'], 'application/pdf');
+  assert.equal(response.state.files.length, 1, 'a PDF must come back, not the error page');
+  assert.equal(response.state.body, '', 'no error page');
+  assert.equal(render.calls.renderedAsPdf, 1);
 });

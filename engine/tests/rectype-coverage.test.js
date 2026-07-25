@@ -87,11 +87,12 @@ test('the curated/raw split is exactly as declared — a new button forces a dec
 
 test('raw-path types still print a real copy label (no curated data needed)', () => {
   // the ${copy.*} data source is added on every render pass, so the label no longer
-  // depends on the curated schema — see pld_sl_render_pdf.js copyBinding() (#159)
-  const suitelet = read(path.join(SRC_DIR, 'pld_sl_render_pdf.js'));
-  assert.match(suitelet, /alias: 'copy'/, 'copy data source must be registered');
-  assert.match(suitelet, /function copyBinding/);
-  assert.ok(suitelet.indexOf('renderWithCopies') !== -1, 'one copy path for all record types');
+  // depends on the curated schema — see pld_lib_render.js copyBinding() (#159).
+  // The core moved out of the Suitelet at #181 so batch print shares it.
+  const core = read(path.join(SRC_DIR, 'pld_lib_render.js'));
+  assert.match(core, /alias: 'copy'/, 'copy data source must be registered');
+  assert.match(core, /function copyBinding/);
+  assert.ok(core.indexOf('renderDocument') !== -1, 'one copy path for all record types');
 });
 
 test('master templates bind the copy label through ${copy.*}', () => {
