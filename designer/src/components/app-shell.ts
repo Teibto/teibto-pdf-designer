@@ -23,7 +23,7 @@ import {
 } from '../services/template.service';
 import { showToast } from './shared/toast-notification';
 import { getSampleTemplates } from '../constants/sample-templates';
-import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext, hasThaiFontConfigured } from '../services/netsuite-adapter.service';
+import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext, hasThaiFontConfigured, fetchNsSampleData } from '../services/netsuite-adapter.service';
 import { loadJsonData, extractJsonKeys } from '../state/actions';
 import { confirmDiscardUnsaved } from '../utils/unsaved-guard';
 import { applyMiddleware } from '../state/middleware';
@@ -249,6 +249,7 @@ export class PldAppShell extends LitElement {
     this.addEventListener('pld-show-templates', () => { this.showTemplateManager = true; });
     this.addEventListener('pld-show-export-json', () => this._exportJson());
     this.addEventListener('pld-load-sample', () => this._loadSample());
+    this.addEventListener('pld-load-sample-data', () => this._loadSampleData());
     this.addEventListener('pld-show-bfo-export', () => { this.showBfoExport = true; });
     this.addEventListener('pld-show-save-ns', () => { this.showSaveNs = true; });
     this.addEventListener('pld-show-preview', () => { this.showPreview = true; });
@@ -448,6 +449,22 @@ export class PldAppShell extends LitElement {
     const json = JSON.stringify({ name: template.name, page, pagination, elements, jsonData }, null, 2);
     navigator.clipboard?.writeText(json);
     showToast('Template JSON copied to clipboard!', 'success');
+  }
+
+  /**
+   * โหลดข้อมูลตัวอย่างจาก engine เข้า data panel (#191) — ให้ผูก binding ได้โดยไม่ต้อง
+   * เปิดดีไซเนอร์จาก transaction · ตัวอย่างมาจาก engine ไม่ใช่จาก SPA เพราะเจ้าของ
+   * binding contract คือ engine (SPA ถือลิสต์เองเมื่อไหร่ มันจะหลุด sync เมื่อนั้น)
+   */
+  private async _loadSampleData() {
+    const ctx = getNsContext();
+    try {
+      const sample = await fetchNsSampleData(ctx?.recordType || 'invoice');
+      loadJsonData(this.store, sample.data);
+      showToast('โหลดข้อมูลตัวอย่างแล้ว — ตัวเลขและชื่อทั้งหมดเป็นของสมมติ', 'success');
+    } catch (err) {
+      showToast(`โหลดข้อมูลตัวอย่างไม่สำเร็จ: ${(err as Error).message}`, 'error');
+    }
   }
 
   private _loadSample() {

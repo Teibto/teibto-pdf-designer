@@ -28,8 +28,9 @@ define([
   'N/xml',
   './pld_lib_render',
   './pld_lib_auth',
-  './pld_lib_tpl_audit'
-], function (render, record, search, file, runtime, log, xml, pldRender, auth, tplAudit) {
+  './pld_lib_tpl_audit',
+  './pld_lib_invoice_data'
+], function (render, record, search, file, runtime, log, xml, pldRender, auth, tplAudit, invoiceData) {
 
   // ─── Custom Record Config (owned by the render core, #181) ───
   const TPL_RECORD_TYPE   = pldRender.TPL.TYPE;
@@ -69,6 +70,8 @@ define([
           return rollbackTemplate(context);
         case 'preview-live':
           return previewLivePdf(context, tel);
+        case 'sample-data':
+          return getSampleData(context);
         case 'version':
           return getVersion(context);
         default:
@@ -348,7 +351,9 @@ define([
     var body = JSON.parse(context.request.body || '{}');
     if (!body.xml)     throw new Error('preview-live requires xml (export BFO from the designer)');
     if (!body.rectype) throw new Error('preview-live requires rectype');
-    if (!body.recid && !body.data) throw new Error('preview-live requires recid — open the designer from a record');
+    if (!body.recid && !body.data && body.sample !== true) {
+      throw new Error('preview-live requires recid — open the designer from a record, or pass sample:true for a synthetic-data preview (#191)');
+    }
 
     // Body carries the render context for a preview — reflect it into telemetry
     // (#149) so a failed preview is as traceable as a failed print.
@@ -364,7 +369,11 @@ define([
     var pvCopies = pldRender.resolveCopies(pldRender.parseCopies(body.copies), body.rectype);
     var copiesCount = pvCopies.length;
     var out;
-    if (body.data) {
+    if (body.sample === true) {
+      // พรีวิวด้วยข้อมูลตัวอย่างของ engine เอง (#191) — ไม่ต้องมี record และ
+      // **เคารพชุดสำเนาเหมือน Print** เพื่อให้เห็นทั้งต้นฉบับและสำเนาตั้งแต่ตอนออกแบบ
+      out = pldRender.renderSampleDocument(body.xml, body.rectype, pvCopies, tel);
+    } else if (body.data) {
       // synthetic-data preview (#75): caller supplies the bound object itself
       out = { pdfFile: pldRender.makeRenderer(body.xml, body.data, null, tel, pvCopies[0]).renderAsPdf() };
       copiesCount = 1;
@@ -415,6 +424,33 @@ define([
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
     context.response.setHeader({ name: 'Content-Disposition', value: 'inline; filename="preview.pdf"' });
     context.response.writeFile({ file: pdfFile, isInline: true });
+  }
+
+  // ═══════════════════════════════════════════════════
+  // SAMPLE DATA (#191) — ออกแบบและผูก binding ได้โดยไม่ต้องมี record
+  // ═══════════════════════════════════════════════════
+
+  /**
+   * ข้อมูลตัวอย่าง + binding contract ของ record type หนึ่ง (GET).
+   * Params: rectype
+   *
+   * ส่ง contract กลับไปด้วยเพราะ **ดีไซเนอร์เดาเองไม่ได้ว่า key ไหน engine จ่ายจริง** —
+   * key ที่หลุด contract ไม่ error แต่พิมพ์ว่างเงียบ ๆ (#155) การให้ SPA ถือลิสต์เอง
+   * คือการทำสำเนาที่สองของ contract ซึ่งจะหลุด sync ในอีกไม่กี่รอบ
+   */
+  function getSampleData(context) {
+    var recType = context.request.parameters.rectype || 'invoice';
+
+    sendJson(context, {
+      rectype: recType,
+      curated: invoiceData.isSupportedType(recType),
+      data: invoiceData.buildSampleData(recType),
+      contract: {
+        record: invoiceData.bindingKeys,
+        line: invoiceData.itemBindingKeys,
+        copy: invoiceData.copyBindingKeys
+      }
+    });
   }
 
   // ═══════════════════════════════════════════════════
