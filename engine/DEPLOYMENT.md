@@ -275,7 +275,31 @@ SuiteScripts/
 
 ---
 
-### Script 4 — Transaction Buttons (User Event)
+### Script 4 — Batch Print ชุดใหญ่ (Map/Reduce, #181)
+
+| Field | Value |
+|-------|-------|
+| Type | Map/Reduce |
+| Name | PLD - Batch Print (Map/Reduce) |
+| ID | `customscript_pld_batch_mr` |
+| Script File | `pld_mr_batch_print.js` |
+| Parameter | `custscript_pld_mr_job` — File Cabinet id ของ job spec (หน้าจอเขียนให้เอง) |
+
+**Deploy:**
+
+| Field | Value |
+|-------|-------|
+| Title | PLD Batch Print MR |
+| ID | `customdeploy_pld_batch_mr` |
+| Status | Not Scheduled (สั่งงานผ่าน `N/task` จากหน้าจอเท่านั้น) |
+
+ไม่ต้องตั้งค่าอะไรต่อ account: หน้าจอสร้างโฟลเดอร์ `pld-batch` ใต้โฟลเดอร์ของ engine เองในครั้งแรกที่ใช้
+(หาจากไฟล์ `pld_version.txt` ที่ `deploy.sh` stamp ไว้) · ไฟล์รวมเก็บที่โฟลเดอร์นั้น และดูย้อนหลังได้จาก
+หน้าจอ batch print → `?action=files`
+
+---
+
+### Script 5 — Transaction Buttons (User Event)
 
 | Field | Value |
 |-------|-------|

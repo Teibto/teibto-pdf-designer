@@ -28,9 +28,12 @@ define([
   'N/log',
   'N/xml',
   'N/format',
+  'N/file',
+  'N/record',
+  'N/task',
   './pld_lib_render',
   './pld_lib_invoice_data'
-], function (search, runtime, log, xml, format, pldRender, invoiceData) {
+], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData) {
 
   /** หน่วย governance ที่กันไว้ให้ขั้นตอนรวมไฟล์ + ส่ง response ตอนท้าย */
   var RESERVE_UNITS = 100;
@@ -60,6 +63,12 @@ define([
     try {
       if (request.method === 'POST' && request.parameters.action === 'print') {
         return batchPrint(context, tel);
+      }
+      if (request.method === 'POST' && request.parameters.action === 'queue') {
+        return queueBatch(context, tel);
+      }
+      if (request.parameters.action === 'files') {
+        return writeFilesPage(context, tel);
       }
       return writeFormPage(context, tel);
     } catch (e) {
@@ -185,6 +194,171 @@ define([
     };
   }
 
+  // ═══════════════════════════════════════════════════
+  // ส่งเข้าคิว (Map/Reduce) สำหรับชุดใหญ่ (#181)
+  // ═══════════════════════════════════════════════════
+
+  /** เพดานต่อหนึ่ง job — ใหญ่กว่านี้ให้แบ่งส่ง ไม่ใช่ปล่อยให้ไฟล์รวมใหญ่จนเปิดไม่ไหว */
+  var MAX_QUEUE_DOCS = 500;
+
+  /** โฟลเดอร์ปลายทางของไฟล์รวม + ไฟล์ชั่วคราวของ job */
+  var OUTPUT_FOLDER_NAME = 'pld-batch';
+
+  /** ไฟล์ stamp ที่ deploy.sh เขียนไว้ทุกครั้ง — ใช้หาโฟลเดอร์ของ engine บน account */
+  var VERSION_FILE_PATH = '/SuiteScripts/pdf-layout-designer/pld_version.txt';
+
+  /**
+   * ส่งชุดใหญ่ให้ Map/Reduce ทำแทน
+   *
+   * Suitelet มี 1,000 units ต่อครั้ง (ราว 6 ใบตามที่วัดได้จริงบน SB2) ส่วน map
+   * ได้ 1,000 units **ต่อหนึ่งเอกสาร** ชุดใหญ่จึงไม่ชนโควตาเลย · หน้าจอไม่รอผล
+   * แต่บอกเลข task ไว้ตามงานได้ แล้ว engine อีเมลลิงก์ไฟล์ให้เมื่อเสร็จ
+   *
+   * รายการเอกสารไปทาง **ไฟล์ job spec** ไม่ใช่ script parameter — ชุด 300 ใบยาว
+   * เกินกว่าจะยัดลง parameter เดียว
+   */
+  function queueBatch(context, tel) {
+    var params = context.request.parameters;
+    var recType = params.rectype;
+    var tplId = params.tplid || '';
+    var ids = parseIds(params.docids);
+
+    if (!recType) throw new Error('ไม่ได้ระบุประเภทเอกสาร');
+    if (ids.length === 0) throw new Error('ยังไม่ได้เลือกเอกสารที่จะพิมพ์');
+    if (ids.length > MAX_QUEUE_DOCS) {
+      throw new Error('ส่งเข้าคิวได้ครั้งละไม่เกิน ' + MAX_QUEUE_DOCS + ' ใบ (เลือกไว้ ' +
+        ids.length + ' ใบ) — แบ่งเป็นหลายชุดแล้วส่งทีละชุด');
+    }
+
+    tel.rectype = recType;
+    tel.tplid = tplId;
+    tel.count = ids.length;
+
+    // ล้มตั้งแต่ตอนนี้ถ้า template ใช้ไม่ได้ — ดีกว่าปล่อยให้ทุก map พังทีละใบ
+    tel.stage = 'load-template';
+    pldRender.resolveTemplate(tplId, recType);
+
+    tel.stage = 'queue';
+    var user = runtime.getCurrentUser();
+    var jobId = tel.errorId.replace(/^PLD-/, '');
+    var folder = outputFolderId();
+    var jobFileId = file.create({
+      name: 'pld_job_' + jobId + '.json',
+      fileType: file.Type.JSON,
+      contents: JSON.stringify({
+        jobId: jobId,
+        rectype: recType,
+        tplid: tplId,
+        ids: ids,
+        folder: folder,
+        requester: { id: user.id, name: user.name, email: user.email }
+      }),
+      encoding: file.Encoding.UTF8,
+      folder: folder,
+      isOnline: false
+    }).save();
+
+    var taskId = task.create({
+      taskType: task.TaskType.MAP_REDUCE,
+      scriptId: 'customscript_pld_batch_mr',
+      deploymentId: 'customdeploy_pld_batch_mr',
+      params: { custscript_pld_mr_job: jobFileId }
+    }).submit();
+
+    logBatchOk(tel, { queued: ids.length, taskId: taskId, jobFileId: jobFileId });
+    writeQueuedPage(context, tel, recType, ids.length, taskId);
+  }
+
+  /**
+   * โฟลเดอร์ `pld-batch` ใต้โฟลเดอร์ของ engine — หาให้เจอจากไฟล์ stamp ที่ deploy
+   * เขียนไว้เสมอ จึงไม่ต้องตั้งค่า folder id ต่อ account · ไม่มี stamp = ยังไม่ได้
+   * deploy ครบ ต้องดังให้เห็น ไม่ใช่ไปโยนไฟล์ไว้ที่ root เงียบ ๆ (R4)
+   */
+  function outputFolderId() {
+    var parent;
+    try {
+      parent = file.load({ id: VERSION_FILE_PATH }).folder;
+    } catch (e) {
+      throw new Error('หาโฟลเดอร์ของ engine ไม่เจอ (' + VERSION_FILE_PATH + ') — ' +
+        'deploy engine ให้ครบก่อนใช้การส่งเข้าคิว');
+    }
+
+    var found = '';
+    search.create({
+      type: 'folder',
+      filters: [['name', 'is', OUTPUT_FOLDER_NAME], 'AND', ['parent', 'anyof', parent]],
+      columns: ['internalid']
+    }).run().each(function (row) { found = row.id; return false; });
+    if (found) return found;
+
+    var rec = record.create({ type: 'folder' });
+    rec.setValue({ fieldId: 'name', value: OUTPUT_FOLDER_NAME });
+    rec.setValue({ fieldId: 'parent', value: parent });
+    return rec.save();
+  }
+
+  /**
+   * ไฟล์ชุดที่สร้างไว้แล้ว — ผู้ใช้ที่ปิดอีเมลทิ้งหรือลบเมลไปแล้วยังหาไฟล์เจอ
+   * และเป็นวิธีตรวจว่างานที่ส่งเข้าคิวไปได้ผลจริงโดยไม่ต้องขุด File Cabinet
+   */
+  function writeFilesPage(context, tel) {
+    tel.stage = 'files';
+    var folder = outputFolderId();
+    var rows = [];
+    search.create({
+      type: 'file',
+      filters: [['folder', 'anyof', folder]],
+      columns: [
+        search.createColumn({ name: 'name' }),
+        search.createColumn({ name: 'created', sort: search.Sort.DESC }),
+        search.createColumn({ name: 'documentsize' }),
+        search.createColumn({ name: 'url' })
+      ]
+    }).run().getRange({ start: 0, end: 40 }).forEach(function (r) {
+      rows.push({
+        name: r.getValue('name'),
+        created: r.getValue('created'),
+        kb: r.getValue('documentsize'),
+        url: r.getValue('url')
+      });
+    });
+
+    var body = rows.length === 0
+      ? '<p class="warn">ยังไม่มีไฟล์ในโฟลเดอร์ <code>' + esc(OUTPUT_FOLDER_NAME) + '</code></p>'
+      : '<table class="docs"><thead><tr><th>ไฟล์</th><th>สร้างเมื่อ</th><th class="num">ขนาด (KB)</th></tr></thead><tbody>' +
+        rows.map(function (f) {
+          return '<tr><td><a href="' + esc(f.url) + '" target="_blank">' + esc(f.name) + '</a></td>' +
+            '<td>' + esc(f.created) + '</td><td class="num">' + esc(f.kb) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ไฟล์ชุดที่สร้างไว้', [
+      '<h1>ไฟล์ชุดที่สร้างไว้</h1>',
+      '<p class="sub">ไฟล์รวมจากการส่งเข้าคิว เก็บไว้ใน File Cabinet โฟลเดอร์ <code>' +
+      esc(OUTPUT_FOLDER_NAME) + '</code> — ไฟล์ชั่วคราวระหว่างทางถูกลบทิ้งเมื่องานจบแล้ว</p>',
+      body,
+      '<p><button class="primary" onclick="history.back()">กลับ</button></p>'
+    ].join('\n')));
+  }
+
+  function writeQueuedPage(context, tel, recType, count, taskId) {
+    var html = pageShell('ส่งเข้าคิวแล้ว', [
+      '<h1>ส่งเข้าคิวแล้ว</h1>',
+      '<p class="sub">ชุดนี้มี ' + count + ' ใบ ซึ่งมากกว่าที่พิมพ์สดได้ในครั้งเดียว ' +
+      'ระบบจึงทยอยสร้างให้เบื้องหลัง</p>',
+      '<p class="ref">เมื่อเสร็จ ระบบจะ<b>อีเมลลิงก์ไฟล์รวม</b>ไปที่อีเมลของคุณ ' +
+      'และเก็บไฟล์ไว้ใน File Cabinet โฟลเดอร์ <code>' + esc(OUTPUT_FOLDER_NAME) + '</code><br />' +
+      'หมายเลขงาน <code>' + esc(taskId) + '</code> · รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p>',
+      '<p class="hint">ติดตามสถานะได้ที่ Customization → Scripting → Map/Reduce Script Status ' +
+      '(ค้นด้วยหมายเลขงานด้านบน) · ใบที่สร้างไม่สำเร็จจะถูกระบุไว้ในอีเมลเป็นรายใบ</p>',
+      '<p><a href="?action=files">ดูไฟล์ชุดที่สร้างไว้แล้ว</a></p>',
+      '<p><button class="primary" onclick="history.back()">กลับไปเลือกชุดถัดไป</button></p>'
+    ].join('\n'));
+
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(html);
+  }
+
   /**
    * เอกสารที่ resolve ออกมาเป็น XML ที่ parse ไม่ผ่าน ต้องถูกจับ **ตรงใบนั้น**
    *
@@ -298,7 +472,9 @@ define([
 
     return [
       '<form method="POST" class="picker" id="pld-form">',
-      '<input type="hidden" name="action" value="print" />',
+      // ปุ่มสองปุ่มใช้ hidden field ตัวนี้เลือกปลายทาง — ไม่ใช่ name="action" ที่ตัวปุ่ม
+      // เพราะ field ชื่อซ้ำกันส่งถึง Suitelet แค่ค่าแรก (ดู parseIds)
+      '<input type="hidden" name="action" id="pld-action" value="print" />',
       '<input type="hidden" name="rectype" value="' + esc(recType) + '" />',
       '<input type="hidden" name="docids" id="pld-docids" value="" />',
       templateSelect(recType, tplId),
@@ -309,8 +485,10 @@ define([
       '</div>',
       '<table class="docs"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>',
       '<p class="actions"><button class="primary" type="submit">พิมพ์เป็นชุด</button>',
-      '<span class="hint">พิมพ์ได้ประมาณสิบกว่าใบต่อครั้งตามโควตาสคริปต์ของ NetSuite — ' +
-      'ถ้าเลือกเกิน ระบบจะบอกว่าพิมพ์ได้กี่ใบและเหลือกี่ใบ ไม่ตัดทิ้งเงียบ</span></p>',
+      '<button type="submit" id="pld-queue">ส่งเข้าคิว (ชุดใหญ่)</button>',
+      '<span class="hint">พิมพ์สดได้ราว 6 ใบต่อครั้งตามโควตาสคริปต์ของ NetSuite (วัดจากของจริง) — ' +
+      'เลือกเกินก็กด <b>ส่งเข้าคิว</b> ได้ ระบบจะสร้างเบื้องหลังแล้วอีเมลลิงก์ไฟล์รวมให้ · ' +
+      'ไม่ว่าทางไหนก็ไม่ตัดทิ้งเงียบ</span></p>',
       '</form>',
       listScript()
     ].join('\n');
@@ -341,6 +519,9 @@ define([
       '      if(!hit){ box(r).checked=false; }\n' +
       '    });\n' +
       '  });}\n' +
+      '  var qbtn=document.getElementById("pld-queue");\n' +
+      '  var act=document.getElementById("pld-action");\n' +
+      '  if(qbtn&&act){qbtn.addEventListener("click",function(){ act.value="queue"; });}\n' +
       '  if(form){form.addEventListener("submit",function(e){\n' +
       '    var ids=rows.filter(function(r){ return box(r).checked; }).map(function(r){ return box(r).value; });\n' +
       '    if(ids.length===0){ e.preventDefault(); alert("ยังไม่ได้เลือกเอกสารที่จะพิมพ์"); return; }\n' +
@@ -398,6 +579,9 @@ define([
     if (result.pending.length > 0) {
       parts.push(reprintForm(recType, tplId, result.pending,
         'พิมพ์ ' + result.pending.length + ' ใบที่เหลือ'));
+      // ทางลัดที่จบในคลิกเดียวเมื่อส่วนที่เหลือยังใหญ่กว่าโควตาอยู่ดี
+      parts.push(reprintForm(recType, tplId, result.pending,
+        'ส่ง ' + result.pending.length + ' ใบที่เหลือเข้าคิว', 'queue'));
     }
     parts.push('<p class="hint">การกดปุ่มคือการสั่ง render ใหม่สำหรับใบในกลุ่มนั้น ' +
       'ระบบไม่ได้เก็บไฟล์ที่สร้างค้างไว้</p>');
@@ -407,9 +591,9 @@ define([
     context.response.write(pageShell('พิมพ์เป็นชุดไม่ครบ', parts.join('\n')));
   }
 
-  function reprintForm(recType, tplId, ids, label) {
+  function reprintForm(recType, tplId, ids, label, action) {
     return '<form method="POST" class="again">' +
-      '<input type="hidden" name="action" value="print" />' +
+      '<input type="hidden" name="action" value="' + esc(action || 'print') + '" />' +
       '<input type="hidden" name="rectype" value="' + esc(recType) + '" />' +
       (tplId ? '<input type="hidden" name="tplid" value="' + esc(tplId) + '" />' : '') +
       '<input type="hidden" name="docids" value="' + esc(ids.join(',')) + '" />' +
