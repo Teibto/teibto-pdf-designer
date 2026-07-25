@@ -96,4 +96,105 @@ const companyConfigStub = {
   }),
 };
 
-module.exports = { queryStub, recordStub, formatStub, logStub, companyConfigStub };
+/** N/xml stub — only escape() is used by the engine. */
+const xmlStub = {
+  escape({ xmlText }) {
+    return String(xmlText)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  },
+};
+
+/** N/runtime stub. */
+function runtimeStub({ user = { id: 9, name: 'QA Tester', email: 'qa@example.test' }, script = { id: 'customscript_pld_render', deploymentId: 'customdeploy_pld_render' } } = {}) {
+  return {
+    getCurrentUser: () => user,
+    getCurrentScript: () => script,
+    EnvType: { SANDBOX: 'SANDBOX', PRODUCTION: 'PRODUCTION' },
+    envType: 'SANDBOX',
+  };
+}
+
+/**
+ * N/search stub. `rows` is the result set; each row is { id, values } and gets a
+ * positional getValue(fieldId) like the real search.Result.
+ */
+function searchStub(rows = []) {
+  const results = rows.map((r) => ({
+    id: r.id,
+    getValue: (field) => {
+      const key = typeof field === 'object' && field ? field.name : field;
+      return Object.prototype.hasOwnProperty.call(r.values || {}, key) ? r.values[key] : '';
+    },
+  }));
+  const created = [];
+  return {
+    created,
+    module: {
+      create(opts) {
+        created.push(opts);
+        return {
+          run: () => ({
+            getRange: () => results.slice(),
+            each: (fn) => { results.every((row) => fn(row) !== false); },
+          }),
+        };
+      },
+    },
+  };
+}
+
+/** N/render stub — records what was rendered so tests can assert on it. */
+function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf>' } = {}) {
+  const calls = { created: 0, dataSources: [], records: [], renderedAsPdf: 0, xmlToPdf: [] };
+  return {
+    calls,
+    module: {
+      DataSource: { OBJECT: 'OBJECT', JSON: 'JSON', XML_STRING: 'XML_STRING' },
+      create() {
+        calls.created += 1;
+        return {
+          templateContent: '',
+          addCustomDataSource(ds) { calls.dataSources.push(ds); },
+          addRecord(r) { calls.records.push(r); },
+          renderAsPdf() { calls.renderedAsPdf += 1; return { name: pdfName }; },
+          renderAsString() { return asString; },
+        };
+      },
+      xmlToPdf(opts) { calls.xmlToPdf.push(opts); return { name: pdfName }; },
+    },
+  };
+}
+
+/** N/file stub — only load() is used (version stamp). */
+function fileStub({ contents = '{"version":"test"}' } = {}) {
+  return { load: () => ({ getContents: () => contents }) };
+}
+
+/** Suitelet response recorder. */
+function responseStub() {
+  const state = { headers: {}, body: '', files: [] };
+  return {
+    state,
+    headers: state.headers,
+    setHeader({ name, value }) { state.headers[name] = value; },
+    write(arg) {
+      state.body += typeof arg === 'string' ? arg : String((arg && arg.output) || '');
+    },
+    writeFile({ file, isInline }) { state.files.push({ file, isInline }); },
+  };
+}
+
+/** Suitelet request/response context. */
+function contextStub({ parameters = {}, method = 'GET', body = '' } = {}) {
+  const response = responseStub();
+  return { context: { request: { parameters, method, body }, response }, response };
+}
+
+module.exports = {
+  queryStub, recordStub, formatStub, logStub, companyConfigStub,
+  xmlStub, runtimeStub, searchStub, renderStub, fileStub, responseStub, contextStub,
+};
