@@ -50,8 +50,19 @@ jobs:
         # เริ่มแบบ non-blocking (|| true) — เอาออกเมื่อทีมเก็บ lint เดิมหมดแล้ว
 
       # 4) Template pack — well-formed XML + กับดัก BFO/FreeMarker (#10)
+      #    รวม binding contract: master ที่ bind key นอกสิ่งที่ engine จ่ายจริง = fail (#155)
       - name: Validate templates
         run: bash scripts/validate-templates.sh
+
+      # 4b) Engine (SuiteScript) — เดิม CI ไม่ครอบ engine/ เลย (#155)
+      #     node --check จับ syntax · node --test รัน unit test ที่ mount AMD module จริง
+      #     ผ่าน stub ของ N/* (engine/tests/helpers/) — ไม่ต้องมี NetSuite session
+      - name: Engine — syntax check + unit tests
+        run: |
+          for f in engine/src/FileCabinet/SuiteScripts/pdf-layout-designer/*.js; do
+            node --check "$f"
+          done
+          node --test "engine/tests/**/*.test.js"
 
       # ==================== STACK: Node (designer/) ====================
       # monorepo: แอปหลักอยู่ designer/ — ไม่มี package.json ที่ root

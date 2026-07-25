@@ -28,8 +28,10 @@
 | E2E | `npx playwright test` | 83 passed |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
+| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 8 passed |
+| Template pack (จาก repo root) | `bash scripts/validate-templates.sh` | ✅ ผ่านทุกไฟล์ |
 
-CI `quality-gate` รัน lint + vitest + e2e + template validator + secret-scan แต่ **ไม่ครอบ `engine/`** — SuiteScript ตรวจเองด้วย `node --check <file>.js` ก่อน commit.
+CI `quality-gate` รัน lint + vitest + e2e + template validator + engine unit test + secret-scan — ตั้งแต่ #155 **ครอบ `engine/` ด้วย** (`node --check` ทุกไฟล์ + `node --test`) ไม่ต้องเช็ค syntax มือแล้ว แต่ change ที่แตะ BFO output ยังต้อง QA สดบน SB2 เหมือนเดิม
 
 ## 🧩 กับดัก designer (SPA)
 
@@ -48,7 +50,9 @@ CI `quality-gate` รัน lint + vitest + e2e + template validator + secret-sc
 - full deploy คือ `scripts/deploy.sh` — stamp version แล้ว build กับ stage bundle แล้ว loop `defaultAuthId` ต่อ account พร้อมสรุป PASS/FAIL · ดู version ที่ deploy จาก account ผ่าน `?action=version`
 - อ่าน Script Execution Log บน account — เปิด `script.nl?id=<scriptid>` (ไม่ใช่ `scriptrecord.nl` ที่จะขึ้น "Record does not exist") แล้วคลิก subtab `#executionlogtxt` log จะขึ้น inline
 - data classification (Internal) — account ลูกค้าห้ามแตะแม้ dryrun · deploy เฉพาะ Teibto sandbox เท่านั้น
-- verify engine change — `node --check` + review + QA สดบน SB2 (skill `netsuite-qa-browser`)
+- verify engine change — `node --check` + `node --test "engine/tests/**/*.test.js"` + review + QA สดบน SB2 (skill `netsuite-qa-browser`)
+- **binding contract (#155)**: rectype ที่อยู่ใน `DOC_TITLES` bind object จาก `pld_lib_invoice_data.js` แทน record ดิบ ดังนั้น key ที่ template อ้างต้องอยู่ใน `CURATED_KEYS` / `RAW_ALIAS_KEYS` / `ITEM_BINDING_KEYS` — เพิ่ม/ลบ key ต้องแก้ทั้ง list กับ object ที่ return (unit test บังคับให้ตรงกัน) · key ที่หลุด contract ไม่ error แต่พิมพ์ว่าง เพราะ binding null-safe (#2) กลืนไว้
+- เขียน unit test ของ engine — `engine/tests/` ใช้ AMD shim (`helpers/amd.js`) mount โมดูลจริงโดย stub เฉพาะ `N/*` (`helpers/ns-stubs.js`); sibling lib (`./pld_lib_*`) โหลดของจริง จะ override ก็ใส่ key ชื่อเดียวกันใน stubs
 
 ## 📄 เขียนหรือแก้ BFO template
 
@@ -72,6 +76,8 @@ Skeleton บังคับ copy จาก `templates/master/tax-invoice.xml` �
 | CSS `object-fit` `text-overflow` `@page` margin box `counter(page)` | หลีกเลี่ยง (BFO เมินเงียบ) | 3, 5 |
 | `<div>` ระดับ body | `<p>` หรือ `<table>` (BFO ทิ้ง div ทั้ง element เงียบ) | 10 |
 | สตริงไทยยาวตัดกลางคำ | แทรก ZWSP `\x200B` ระหว่างหน่วย (BFO ไม่มี Thai word-break) | 35 |
+| ไม่มี marker `pld:rectype <recordtype>` ใน comment หัวไฟล์ | ใส่เสมอ — บอกว่า template ผูกกับ record type ไหน (validator ใช้เลือกว่าจะเทียบ binding contract แบบ curated หรือข้าม) | 155 |
+| bind key ที่ engine ไม่ได้จ่ายสำหรับ rectype นั้น | ใช้ key ใน contract หรือเพิ่ม alias ที่ `pld_lib_invoice_data.js` — ไม่งั้นพิมพ์ว่างเงียบ | 155 |
 
 Validate แล้ว smoke-test:
 
