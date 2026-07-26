@@ -85,16 +85,28 @@ describe('กฎที่จับกับดักซึ่งทำให้�
     expect(rules(guarded)).not.toContain('number-format-in-template');
   });
 
-  it('<div> เป็นคำเตือน ไม่บล็อก — generator ใช้เป็นกล่องจัดวางและพิมพ์ออกจริง (#10)', () => {
-    const report = lintBfoXml(wrap('<div><p>x</p></div>'));
-    expect(report.warnings.map((f) => f.rule)).toContain('div-element');
-    expect(report.ok).toBe(true);
+  it('<div> ที่ครอบ element ปกติ ไม่ถูกฟ้อง — BFO วาดเป็นกล่อง block ตามปกติ (#195)', () => {
+    expect(rules(wrap('<div><p>x</p></div>'))).toEqual([]);
+    expect(rules(wrap('<div style="border: 1pt solid #000"><div><p>x</p></div></div>'))).toEqual([]);
   });
 
-  it('CSS ที่ BFO เมินเป็นคำเตือน — เอกสารยังพิมพ์ออก (#5)', () => {
+  it('ข้อความเปล่าใน <div> บล็อกการบันทึก — เนื้อหาหายจริงจากเอกสาร (#195)', () => {
+    const bare = lintBfoXml(wrap('<div>ข้อความนี้จะหาย</div>'));
+    expect(bare.errors.map((f) => f.rule)).toContain('div-bare-text');
+    expect(bare.ok).toBe(false);
+
+    // ข้อความที่คั่นระหว่าง element ก็หายเหมือนกัน
+    const tail = lintBfoXml(wrap('<div><p>ok</p> ต่อท้ายแบบเปล่า</div>'));
+    expect(tail.errors.map((f) => f.rule)).toContain('div-bare-text');
+  });
+
+  it('CSS ที่ BFO เมินเป็นคำเตือน — เอกสารยังพิมพ์ออก (#5/#195)', () => {
     const report = lintBfoXml(wrap('<p style="text-overflow: ellipsis">x</p>'));
     expect(report.warnings.map((f) => f.rule)).toContain('unsupported-css');
     expect(report.ok).toBe(true);
+    // ข้อความต้องบอกความจริงว่าอะไรทำงานอะไรไม่ทำงาน ไม่ใช่แค่ว่า "ไม่รองรับ"
+    expect(report.warnings.find((f) => f.rule === 'unsupported-css')!.message)
+      .toMatch(/ตัดห้วน/);
     expect(rules(wrap('<p style="object-fit: cover">x</p>'))).toContain('unsupported-css');
   });
 
@@ -192,6 +204,9 @@ describe('เทมเพลตตัวอย่างทุกใบใน rep
       // generator เป็นคนสร้าง XML นี้ — ผิดกฎเมื่อไหร่แปลว่า generator มีบั๊ก
       // ไม่ใช่ว่ากฎเข้มไป (ห้ามผ่อนกฎเพื่อให้เทสเขียว)
       expect(report.errors.map((f) => `${f.rule}: ${f.message} ${f.sample ?? ''}`)).toEqual([]);
+      // และต้องไม่เตือนเรื่อง CSS ที่ BFO เมินด้วย (#195) — ปล่อยให้เตือนทุกครั้งที่ export
+      // คือการสอนผู้ใช้ให้เลิกอ่านคำเตือน แล้วข้อที่สำคัญจริงก็จะถูกมองข้ามไปด้วย
+      expect(report.warnings.filter((f) => f.rule === 'unsupported-css')).toEqual([]);
     });
   }
 });

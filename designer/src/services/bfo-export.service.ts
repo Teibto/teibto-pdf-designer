@@ -536,7 +536,11 @@ function imageToHtml(el: ImageElement, recordType: string, useFreeMarker: boolea
     ? convertBindingToFreeMarker(el.binding, recordType)
     : escapeXml(el.src || '');
 
-  const img = `<img src="${src}" style="width: ${el.w}pt; height: ${el.h}pt; object-fit: ${el.objectFit};" />`;
+  // `object-fit` ไม่ถูกส่งลง XML: พิสูจน์บน SB2 2026-07-26 (#195) ว่า BFO ให้ภาพ
+  // เหมือนกันทุกประการไม่ว่าจะ contain / cover / ไม่ใส่เลย · ปล่อยลงไปมีแต่จะทำให้
+  // ตัวตรวจกับดักเตือนทุกครั้งจนผู้ใช้เลิกอ่านคำเตือน · el.objectFit ยังมีผลกับ
+  // พรีวิวบนจอของดีไซเนอร์ตามเดิม · กล่องครบสองแกนคือสิ่งที่ BFO ใช้จริง (#178)
+  const img = `<img src="${src}" style="width: ${el.w}pt; height: ${el.h}pt;" />`;
   if (el.binding && useFreeMarker) {
     // An empty bound URL (e.g. company.logo not configured) renders BFO's
     // broken-image box — skip the img entirely instead (#73). NOT ?has_content:
@@ -549,7 +553,11 @@ function imageToHtml(el: ImageElement, recordType: string, useFreeMarker: boolea
 
 /**
  * Generate inline CSS for a table cell based on column overflow mode.
- * BFO supports: word-wrap, overflow:hidden, text-overflow:ellipsis
+ *
+ * ที่ BFO ทำจริง (พิสูจน์บน SB2 2026-07-26, #195): `white-space: nowrap` กับ
+ * `overflow: hidden` **ตัดข้อความที่ยาวเกินคอลัมน์ได้จริง** ส่วน `text-overflow: ellipsis`
+ * ไม่เพิ่มอะไรเลย — ไม่มี `…` ต่อท้าย ผลออกมาเท่ากับโหมด clip ทุกประการ จึงไม่ส่งลง XML
+ * (โหมด ellipsis ยังต่างจาก clip ในพรีวิวบนจอของดีไซเนอร์ตามเดิม)
  */
 function cellOverflowStyle(col: TableColumn, borderColor: string): string {
   const parts = [
@@ -572,9 +580,9 @@ function cellOverflowStyle(col: TableColumn, borderColor: string): string {
       parts.push('overflow: hidden');
     }
   } else if (overflow === 'ellipsis') {
+    // เท่ากับ clip บนกระดาษ — BFO ไม่วาด `…` ให้ (#195)
     parts.push('white-space: nowrap');
     parts.push('overflow: hidden');
-    parts.push('text-overflow: ellipsis');
   } else {
     // clip
     parts.push('white-space: nowrap');
