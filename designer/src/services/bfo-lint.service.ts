@@ -239,28 +239,33 @@ export function lintBfoXml(xml: string, contract?: BindingContract | null): Lint
     });
   }
 
-  // ── 6) <div> (#10) ────────────────────────────────────────────────────────
-  // กฎของ repo บอกให้เลี่ยง <div> เพราะ BFO เคยทิ้งทั้ง element เงียบ ๆ — แต่
-  // generator ใช้ <div> เป็นกล่องจัดวางของ header/content/summary/footer และ
-  // เทมเพลตเหล่านั้นพิมพ์ออกจริงบน SB2 มาตลอด จึงเป็นคำเตือน ไม่ใช่ตัวบล็อก
-  // (ดู PR ของ #191 — ข้อนี้รอผลตรวจสดเพื่อชี้ขาดว่ากฎเดิมแคบกว่าที่เขียนไว้แค่ไหน)
-  if (/<div\b/i.test(body)) {
+  // ── 6) text เปล่าใน <div> (#195) ──────────────────────────────────────────
+  // แก้ความเข้าใจเดิมที่ว่า BFO ทิ้ง <div> ทั้ง element: พิสูจน์บน SB2 2026-07-26 แล้วว่า
+  // div เรนเดอร์ปกติ (border / padding / ซ้อนชั้น ใช้ได้ทั้งหมด) สิ่งที่หายเงียบคือ
+  // text node เปล่าที่วางตรงใน div — เนื้อหาหายจริงจึงเป็น error ไม่ใช่คำเตือน
+  for (const found of bareTextInDiv(xml)) {
     add({
-      rule: 'div-element',
-      severity: 'warning',
-      message: '<div> — กฎของ repo ให้เลี่ยง เพราะ BFO เคยทิ้งทั้ง element เงียบ ๆ',
-      hint: 'กล่องที่พิสูจน์แล้วว่าปลอดภัยคือ <p> และ <table>',
+      rule: 'div-bare-text',
+      severity: 'error',
+      message: 'ข้อความที่วางตรงใน <div> จะหายไปจากเอกสารโดยไม่มี error',
+      hint: 'ห่อข้อความด้วย <p> หรือ <span>',
+      sample: snippet(found),
     });
   }
 
-  // ── 7) CSS ที่ BFO เมินเงียบ (#5) ─────────────────────────────────────────
+  // ── 7) CSS ที่ BFO เมินเงียบ (#5, ยืนยันสดที่ #195) ───────────────────────
   for (const { label, pattern } of IGNORED_CSS) {
     if (!pattern.test(body)) continue;
+    const isEllipsis = label === 'text-overflow';
     add({
       rule: 'unsupported-css',
       severity: 'warning',
-      message: `CSS \`${label}\` — เอกสารยังพิมพ์ออก แต่ BFO เมินคุณสมบัตินี้ ผลบนกระดาษจะไม่ตรงกับที่เห็นในดีไซเนอร์`,
-      hint: 'คุมขนาดด้วยความกว้าง/ความสูงของกล่อง และตัดข้อความด้วยความกว้างคอลัมน์แทน',
+      message: isEllipsis
+        ? 'CSS `text-overflow` — BFO ไม่วาด `…` ให้ ข้อความที่ยาวเกินคอลัมน์จะถูกตัดห้วน (ตัวการตัดคือ overflow: hidden ซึ่งทำงานปกติ)'
+        : `CSS \`${label}\` — เอกสารยังพิมพ์ออก แต่ BFO เมินคุณสมบัตินี้ ผลบนกระดาษจะไม่ตรงกับที่เห็นในดีไซเนอร์`,
+      hint: isEllipsis
+        ? 'อยากได้ `…` ต้องตัดข้อความมาตั้งแต่ต้นทาง หรือขยายความกว้างคอลัมน์'
+        : 'คุมขนาดด้วยความกว้าง/ความสูงของกล่องแทน',
     });
   }
 
@@ -366,6 +371,36 @@ function checkContract(
     'คอลัมน์นี้ในตารางจะว่างทุกแถว');
   scan(/(?:^|[^A-Za-z0-9_.])copy\.([A-Za-z_][A-Za-z0-9_]*)/g, contract.copy, 'copy',
     'ป้ายชุดเอกสารจะไม่ขึ้น');
+}
+
+/**
+ * ข้อความเปล่าที่วางตรงใน `<div>` — BFO ทิ้งทิ้งเงียบ (#195)
+ *
+ * เดินบน DOM ที่ mask FreeMarker ออกแล้ว จึงอ่านโครงจริงไม่ใช่เดาด้วย regex:
+ * `firstChild` ที่เป็น text node คือข้อความก่อน element ตัวแรก และ text node ที่คั่น
+ * ระหว่าง element ก็หายเหมือนกัน · ไม่มี DOM (unit test บน node ล้วน) = ข้ามข้อนี้
+ * เหมือนกฎ well-formed
+ */
+function bareTextInDiv(xml: string): string[] {
+  if (typeof DOMParser === 'undefined') return [];
+
+  const masked = maskFreeMarker(xml);
+  const start = masked.indexOf('<pdf');
+  const doc = new DOMParser().parseFromString(
+    start >= 0 ? masked.slice(start) : masked,
+    'application/xml',
+  );
+  if (doc.querySelector('parsererror')) return [];   // กฎ well-formed รายงานไปแล้ว
+
+  const found: string[] = [];
+  for (const div of Array.from(doc.getElementsByTagName('div'))) {
+    for (const node of Array.from(div.childNodes)) {
+      if (node.nodeType !== 3) continue;             // TEXT_NODE
+      const text = (node.nodeValue || '').trim();
+      if (text) found.push(text);
+    }
+  }
+  return found;
 }
 
 /**

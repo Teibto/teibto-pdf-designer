@@ -384,7 +384,7 @@ describe('edge cases', () => {
 // ═══════════════════════════════════════
 
 describe('column overflow in BFO table', () => {
-  it('ellipsis mode: generates text-overflow:ellipsis CSS', () => {
+  it('ellipsis mode: ตัดข้อความด้วย nowrap+overflow และไม่ส่ง text-overflow ลง XML (#195)', () => {
     const table = makeTable({
       columns: [
         { key: 'desc', label: 'Desc', width: 200, align: 'left', format: 'text', overflow: 'ellipsis', maxLines: 1, hidden: false, bold: false, uppercase: false },
@@ -393,7 +393,9 @@ describe('column overflow in BFO table', () => {
     const state = createMockState([table]);
     const xml = exportBfoXml(state);
 
-    expect(xml).toContain('text-overflow: ellipsis');
+    // BFO ไม่วาด `…` ให้ (พิสูจน์บน SB2 2026-07-26) — ผลบนกระดาษเท่ากับโหมด clip
+    // ปล่อย text-overflow ลงไปมีแต่ทำให้ตัวตรวจกับดักเตือนทุกครั้งโดยไม่มีอะไรให้แก้
+    expect(xml).not.toContain('text-overflow');
     expect(xml).toContain('white-space: nowrap');
     expect(xml).toContain('overflow: hidden');
   });

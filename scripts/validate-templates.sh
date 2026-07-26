@@ -150,6 +150,28 @@ def check_binding_contract(path: Path, src: str, name: str):
             errors.append((name, f'${{line.{key}}} ไม่มีใน ITEM_BINDING_KEYS ของ engine — '
                                  f'แถวในตารางจะพิมพ์ว่างเงียบ ๆ (#155)'))
 
+def check_bare_text_in_div(masked: str, name: str):
+    """text node เปล่าที่วางตรงใน <div> ถูก BFO ทิ้งเงียบ (#195).
+
+    เดินบน XML ที่ mask FreeMarker ออกแล้ว จึงตรวจโครงจริงไม่ใช่เดาด้วย regex —
+    `elem.text` คือข้อความก่อน child ตัวแรก, `child.tail` คือข้อความหลัง child แต่ละตัว.
+    """
+    start = masked.find('<pdf')
+    try:
+        root = ET.fromstring(masked[start:] if start >= 0 else masked)
+    except ET.ParseError:
+        return  # ข้อ 1 รายงานไปแล้ว
+
+    for div in root.iter('div'):
+        if (div.text or '').strip():
+            errors.append((name, f'text เปล่าใน <div> ("{(div.text or "").strip()[:40]}") — '
+                                 f'BFO ทิ้ง text node ที่วางตรงใน div เงียบ ๆ ห่อด้วย <p> หรือ <span> (#195)'))
+        for child in div:
+            if (child.tail or '').strip():
+                errors.append((name, f'text เปล่าใน <div> หลัง <{child.tag}> ("{(child.tail or "").strip()[:40]}") — '
+                                     f'ห่อด้วย <p> หรือ <span> (#195)'))
+
+
 def check_template(path: Path):
     src = path.read_text(encoding='utf-8')
     name = path.name
@@ -201,9 +223,11 @@ def check_template(path: Path):
         if re.search(pat, src, re.IGNORECASE):
             errors.append((name, f'CSS ต้องห้าม `{label}` — BFO ไม่รองรับ/เมินเงียบ (TOOLSTACK #3/#5)'))
 
-    # 6) <div> ระดับ body ถูก BFO ทิ้งเงียบ — ใช้ <p>/<table> (#10)
-    if re.search(r'<div\b', src, re.IGNORECASE):
-        errors.append((name, '<div> — BFO ทิ้งทั้ง element เงียบ ใช้ <p>/<table> เท่านั้น (#10)'))
+    # 6) text เปล่าใน <div> หายเงียบ (#10, แก้ความเข้าใจเดิมที่ #195)
+    #    BFO วาด <div> เป็นกล่อง block ปกติ — border/padding/ซ้อนชั้นใช้ได้ทั้งหมด
+    #    สิ่งที่หายคือ text node ที่วางตรงใน div ก่อนเจอ element ตัวแรก
+    #    (พิสูจน์บน SB2 2026-07-26: `<div>x</div>` หายทั้งบรรทัด)
+    check_bare_text_in_div(masked, name)
 
     # 7) binding ต้องอยู่ใน contract ที่ engine bind จริง (#155)
     check_binding_contract(path, src, name)
