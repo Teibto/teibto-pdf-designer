@@ -17,19 +17,30 @@ env:
 jobs:
   quality-gate:
     name: quality-gate
-    runs-on: ubuntu-latest
+    # self-hosted runner ของทีม (org runner `teibto-devtools`, group Default)
+    # ⚠️ ห้ามใช้ self-hosted กับ repo public — PR จาก fork = รันโค้ดคนนอกบนเครื่องทีม
+    # rollback = เปลี่ยนบรรทัดล่างกลับเป็น `runs-on: ubuntu-latest`
+    runs-on: [self-hosted, teibto-devtools]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install gitleaks (pinned)
+      # ติดตั้งลง $RUNNER_TEMP (ลบทิ้งทุก job) — ไม่ใช้ sudo และไม่เขียน /usr/local/bin
+      # เหตุผล: บน runner ถาวร sudo ใน job path = PR ทุกใบได้ root บนเครื่องทีม และ repo ที่ pin
+      # GITLEAKS_VERSION ต่างกันจะแข่งเขียนไฟล์เดียวกันเมื่อรันพร้อมกัน
+      - name: Install gitleaks (pinned, per-job)
         run: |
-          curl -sfL -o /tmp/gitleaks.tgz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/
-          gitleaks version
+          case "$(uname -m)" in
+            aarch64|arm64) GL_ARCH=arm64 ;;
+            *)             GL_ARCH=x64 ;;
+          esac
+          curl -sfL -o "${RUNNER_TEMP}/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GL_ARCH}.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/gitleaks.tgz" -C "${RUNNER_TEMP}" gitleaks
+          chmod +x "${RUNNER_TEMP}/gitleaks"
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}" # มีผลกับ step ถัดไป (step นี้ยังต้องเรียกเต็ม path)
+          "${RUNNER_TEMP}/gitleaks" version
 
       # 1) Secret scan — ห้าม opt-out ทุก governance profile (Playbook §2.4)
       - name: Secret scan (working tree + staged)
