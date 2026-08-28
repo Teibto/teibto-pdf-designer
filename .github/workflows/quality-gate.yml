@@ -96,5 +96,7 @@ jobs:
         if: hashFiles('designer/package.json') != ''
         working-directory: designer
         run: |
-          npx playwright install --with-deps chromium
+          # ไม่ใช้ --with-deps: มันเรียก sudo apt-get ซึ่ง user gh-runner ทำไม่ได้
+          # OS deps ของ chromium ติดตั้งที่ตัว runner แล้ว (Playbook §3.4 ตาราง prerequisite)
+          npx playwright install chromium
           npm run test:e2e
