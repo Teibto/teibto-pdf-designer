@@ -20,10 +20,21 @@
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_pld_batch_merge">
       <isdeployed>T</isdeployed>
-      <loglevel>DEBUG</loglevel>
+      <loglevel>AUDIT</loglevel>
       <runasrole></runasrole>
       <status>NOTSCHEDULED</status>
       <title>PLD Batch Merge MR</title>
+      <buffersize>1</buffersize>
+      <concurrencylimit>1</concurrencylimit>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_batch_merge_2">
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <runasrole></runasrole>
+      <status>NOTSCHEDULED</status>
+      <title>PLD Batch Merge MR 2</title>
+      <buffersize>1</buffersize>
+      <concurrencylimit>1</concurrencylimit>
     </scriptdeployment>
   </scriptdeployments>
 </mapreducescript>

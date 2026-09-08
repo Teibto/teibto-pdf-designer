@@ -307,7 +307,7 @@ test('signed but inconsistent output manifests cannot publish duplicate, unorder
 
 function recoveryFixture(status = 'FAILED') {
   const f=fixture(), submitted=[], checked=[];
-  Object.assign(f.job,{custrecord_pld_job_status:'FAILED',custrecord_pld_job_phase:'MERGE_FAILED',
+  Object.assign(f.job,{custrecord_pld_job_status:'FAILED',custrecord_pld_job_phase:'MERGE_FAILED',custrecord_pld_job_result:'',custrecord_pld_job_resultseal:'',
     custrecord_pld_job_mergetask:'OLD_MERGE_TASK',custrecord_pld_job_snapshotdigest:'a'.repeat(64),
     custrecord_pld_job_plan:f.integrity.seal('plan',{jobId:'501',snapshotDigest:'a'.repeat(64),chunks:[{ordinal:0,sequences:[0]}]})});
   signJob(f.stubs,'501',f.job);
@@ -334,6 +334,7 @@ test('merge recovery requires POST, authoritative terminal task and a single ato
     assert.deepEqual(f.checked,['OLD_MERGE_TASK']);
     assert.equal(f.submitted.length,1);
     assert.equal(f.submitted[0].scriptId,'customscript_pld_batch_merge');
+    assert.equal(Object.hasOwn(f.submitted[0],'deploymentId'),false);
     assert.equal(f.submitted[0].params.custscript_pld_merge_job,'501');
     assert.equal(f.jobs.load('501').mergetask,'NEW_MERGE_TASK');
     f.request();assert.equal(f.submitted.length,1,'double submission must not acquire a second claim');
@@ -405,6 +406,7 @@ test('known-terminal render recovery claims same immutable job once and ignores 
     assert.match(f.request('POST',f.recoveryToken,{kind:'MERGE',phase:'MERGE_FAILED'}).body,/ส่งเข้าคิวแล้ว/);
     assert.deepEqual(f.checked,['OLD_RENDER_TASK']);assert.equal(f.submitted.length,1);
     assert.equal(f.submitted[0].scriptId,'customscript_pld_batch_mr');
+    assert.equal(Object.hasOwn(f.submitted[0],'deploymentId'),false);
     assert.equal(f.submitted[0].params.custscript_pld_mr_job,'501');
     const job=f.jobs.load('501');assert.equal(job.phase,'RENDER_SUBMITTING');assert.equal(job.task,'NEW_RENDER_TASK');assert.equal(job.plan,'');
     f.request();assert.equal(f.submitted.length,1);
@@ -461,4 +463,50 @@ test('unknown recovery outcome has a status link without claiming PDF creation f
   assert.match(response.body,/รหัสอ้างอิง/);
   assert.doesNotMatch(response.body,/ระบบสร้างไฟล์ PDF ของชุดนี้ไม่ได้/);
   assert.doesNotMatch(response.body,/setTimeout|\.submit\(\)/);
+});
+
+test('definite recovery rejection waits for explicit signed retry in both stages without requiring a missing old task',()=>{
+  for(const build of [recoveryFixture,renderRecoveryFixture]) {
+    const f=build();const merge=f.jobs.load('501').phase==='MERGE_FAILED';let attempts=0;let reject=true;
+    f.stubs['N/task'].create=()=>({submit(){attempts++;if(reject){const e=new Error('rejected');e.code='FAILED_TO_SUBMIT_JOB_REQUEST_1';throw e;}return'RETRY_ACCEPTED';}});
+    assert.match(f.request().body,/ระบบยังไม่รับงานรอบนี้/);
+    assert.equal(f.jobs.load('501').phase,merge?'MERGE_WAITING':'RENDER_WAITING');
+    assert.equal(f.jobs.load('501').status,merge?'RUNNING':'QUEUED');
+    assert.equal(f.checked.length,1);
+    f.request('POST',null);assert.equal(attempts,1);
+    assert.match(f.request('POST',f.issueToken()).body,/ระบบยังไม่รับงานรอบนี้/);
+    assert.equal(f.checked.length,1,'no old task inspection for signed WAITING');
+    reject=false;const token=f.issueToken();assert.match(f.request('POST',token).body,/ส่งเข้าคิวแล้ว/);
+    assert.equal(f.jobs.load('501')[merge?'mergetask':'task'],'RETRY_ACCEPTED');
+    f.request('POST',token);assert.equal(attempts,3);
+  }
+});
+
+test('native unsigned WAITING state and caller-supplied waiting hints cannot authorize retry',()=>{
+  const f=renderRecoveryFixture();
+  f.job.custrecord_pld_job_status='QUEUED';f.job.custrecord_pld_job_phase='RENDER_WAITING';f.job.custrecord_pld_job_task='';
+  assert.match(f.request().body,/integrity/);assert.equal(f.submitted.length,0);
+  const unknown=renderRecoveryFixture();unknown.jobs.update('501',{status:'RUNNING',phase:'RENDER_SUBMIT_UNKNOWN',task:''});
+  unknown.request('POST',unknown.recoveryToken,{phase:'RENDER_WAITING',waiting:'true'});assert.equal(unknown.submitted.length,0);
+});
+
+
+test('malformed recovery task identities remain unknown in both stages',()=>{
+  for(const build of [recoveryFixture,renderRecoveryFixture]) for(const value of ['   ',42,{},true]) {
+    const f=build();const kind=f.jobs.load('501').phase==='MERGE_FAILED'?'MERGE':'RENDER';let attempts=0;
+    f.stubs['N/task'].create=()=>({submit(){attempts++;return value;}});
+    assert.match(f.request().body,/ไม่ต้องส่งซ้ำ/);
+    assert.equal(f.jobs.load('501').phase,kind+'_SUBMIT_UNKNOWN');
+    assert.equal(f.jobs.load('501')[kind==='MERGE'?'mergetask':'task'],'');
+    f.request('POST',f.issueToken());assert.equal(attempts,1);
+  }
+});
+
+test('rejected recovery without durable WAITING cannot issue retry permission',()=>{
+  const f=renderRecoveryFixture(), save=f.stubs['N/record'].submitFields;let attempts=0;
+  f.stubs['N/task'].create=()=>({submit(){attempts++;throw Object.assign(new Error('rejected'),{name:'FAILED_TO_SUBMIT_JOB_REQUEST_1'});}});
+  f.stubs['N/record'].submitFields=opts=>{if(opts.values.custrecord_pld_job_phase==='RENDER_WAITING')throw new Error('state write failed');return save(opts);};
+  assert.match(f.request().body,/ระบบยังไม่รับงานรอบนี้/);
+  assert.equal(f.jobs.load('501').phase,'RENDER_SUBMITTING');
+  f.request('POST',f.issueToken());assert.equal(attempts,1);
 });

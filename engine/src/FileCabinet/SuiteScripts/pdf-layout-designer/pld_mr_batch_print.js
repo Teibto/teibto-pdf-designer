@@ -253,8 +253,9 @@ define([
       throw error;
     }
     // Persist the intent before calling an external scheduler; ambiguity is operator-visible.
+    var mergeClaim;
     try {
-      jobs.update(
+      mergeClaim = jobs.update(
         job.jobId,
         { phase: "MERGE_SUBMITTING", mergetask: "" },
         { phase: "MERGE_PENDING", status: "RUNNING" },
@@ -267,18 +268,28 @@ define([
     try {
       var pending = task.create({ taskType: task.TaskType.MAP_REDUCE });
       pending.scriptId = "customscript_pld_batch_merge";
-      pending.deploymentId = "customdeploy_pld_batch_merge";
+      // Leave deployment selection to NetSuite; retain the caller and fixed script.
       pending.params = { custscript_pld_merge_job: job.jobId };
       taskId = pending.submit();
-      if (!taskId) throw new Error("Merge task submission returned no task ID");
+      if (typeof taskId !== "string" || !taskId.trim()) throw new Error("Merge task submission returned no task ID");
     } catch (error) {
+      var rejected = !!error && (error.name === "FAILED_TO_SUBMIT_JOB_REQUEST_1" || error.code === "FAILED_TO_SUBMIT_JOB_REQUEST_1");
+      var waitingPersisted = false;
       try {
-        jobs.update(job.jobId, { phase: "MERGE_SUBMIT_UNKNOWN" });
+        jobs.update(job.jobId, { phase: rejected ? "MERGE_WAITING" : "MERGE_SUBMIT_UNKNOWN" },
+          { status: "RUNNING", phase: "MERGE_SUBMITTING", mergetask: "", outputs: "", result: "",
+            snapshot: mergeClaim.snapshot, snapshotdigest: mergeClaim.snapshotdigest, plan: mergeClaim.plan });
+        waitingPersisted = rejected;
       } catch (persistError) {
         log.error({
           title: "PLD merge submission state unavailable",
           details: { jobId: job.jobId, message: persistError.message },
         });
+      }
+      if (rejected) {
+        if (waitingPersisted) pipeline.notifyDeferred(job);
+        log.audit({ title: "PLD merge submission rejected; explicit retry required", details: { jobId: job.jobId } });
+        return;
       }
       throw error;
     }

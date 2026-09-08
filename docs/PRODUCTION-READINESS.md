@@ -20,7 +20,7 @@ Local test doubles do not execute FreeMarker/BFO or establish NetSuite role perm
 | P1 | Accepted queue task reported as rejected after metadata failure | Enqueue separates preparation failure cleanup from the submit boundary. Once submit is attempted, thrown/empty responses retain snapshot/status and report uncertainty; a guarded update cannot downgrade an advanced worker. Accepted-task ID/link failures preserve work and show tracking. Connected task/role behavior remains required. |
 | P2 | Repeated transaction reads per copy | Implemented request-local frozen snapshot; copy titles/labels remain independent. Measure real governance and latency before capacity claims. |
 | P2 | Queue reads mutable templates | Schema v5 authenticates job state, enqueue snapshots, ledger artifacts, chunk plans and output manifests. Guarded downloads verify actual PDF bytes. Bounds: 1,000,000 XML characters / 8 MiB job, 8 MiB XML per chunk and 10 MiB PDF per chunk. Native secret/script access and historical/replay policy remain live gates. |
-| P2 | Unbounded batch merge | Schema v5 uses a separate reduce-stage merge, at most 25 documents / 8 MiB framed XML per chunk, within 500-document and 20-copy input limits. Planning/finalization read ledger metadata rather than all XML/PDF contents. Owner-triggered merge recovery requires a terminal task and atomic claim. Native governance/capacity, orphan adoption, retention and deployment pools remain open. |
+| P2 | Unbounded batch merge | Schema v5 uses a separate reduce-stage merge, at most 25 documents / 8 MiB framed XML per chunk, within 500-document and 20-copy input limits. Planning/finalization read metadata. Native selection uses two packaged deployments per stage; exact documented rejection supports signed manual retry, while ambiguous submissions stay fenced. Native governance/capacity, orphan adoption and age-based retention remain open. |
 | P2 | Modal accessibility / keyboard-only workflows | Native named dialog implemented with background inertness, browser focus containment/restoration, topmost Escape, local cheatsheet toggle and inline save errors. Real Chromium regressions cover slotted/shadow inputs and narrow screen. Remaining dialog-specific errors/toasts and live Thai UX need QA. |
 | P2 | Save dialog metadata/draft consistency | Implemented omitted metadata preservation, explicit false default removal and atomic session-owned draft acknowledgement across saves. Corrected original review: server previously ignored false rather than unsetting on quick-save. Durable content/default-cleanup warning retains ID/version; conflicting defaults now block print. Cross-record default updates still require live permission/concurrency QA. |
 | P2 | Dependency security | Full dependency audit now reports zero findings after Vite 6.4.3, Vitest 3.2.7, Storybook 9.1.20 and ESLint 10 migration. Lockfile/runtime upgrades verified with unit tests, builds and Chromium. Continue monitoring advisories. |
@@ -118,11 +118,12 @@ document/template IDs, timestamp, error IDs and redacted artifact paths.
 
 ## Agent goal assignments
 
-The next persistence, merge-phase, authentication and recovery contracts are documented in
-[Batch reliability](architecture/BATCH-RELIABILITY.md). Signing and byte verification are implemented
-locally; chunking/recovery remain planned work. The enqueue candidate `9fcc8c3` passed
-[CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34269318029); signing additions require
-their own full checks and account evidence.
+Current persistence, merge, authentication, recovery and native pool contracts are documented in
+[Batch reliability](architecture/BATCH-RELIABILITY.md). Signing, bounded chunks, pre-plan render and
+merge recovery, published-input cleanup and native deployment selection are implemented locally.
+Orphan adoption, age-based retention and native-account security/capacity/parity evidence remain
+required. The following entries preserve historical verification counts for their respective slices;
+use the latest candidate evidence and current requirement matrix for acceptance.
 
 Schema v4 local verification: **201/201** engine tests, including real Node crypto adapters,
 native field/snapshot/part/result tampering, post-save PDF substitution, missing secrets and
@@ -163,6 +164,17 @@ and preparation-only cleanup. Snapshot and advanced worker state survive every i
 submit response. Syntax and MR object XML well-formedness pass; this is not native SDF validation.
 Deployment documentation now distinguishes MR caller inheritance from its fixed Administrator UI
 field and records the documented native deployment-selection option for the next pool integration.
+
+Native-pool candidate verification: **265/265** engine tests pass. The synthetic scheduler accepts
+two distinct jobs, defers a third on exact native rejection and permits an explicit signed retry
+after a slot is released; generic saturation errors remain unknown. Tests cover repeated rejection,
+malformed task IDs, wrong/stale tokens, advanced workers, preserved plans/snapshots and deferred
+notification failure. All engine syntax and ten SDF object XML well-formedness checks pass. An
+independent read-only review reran 23 focused outcome/retry/race tests without a blocking finding.
+The preceding `7f5d85c` candidate passed
+[full CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34275862247).
+These pool changes still require their own CI, native deployment readback, mixed-role saturation
+tests and measured capacity; no NetSuite account was modified.
 
 Use these as task/objective text when assigning agents; they are not assumed CLI syntax.
 Assign non-overlapping file ownership per task, preserve other agents' work, and return exact

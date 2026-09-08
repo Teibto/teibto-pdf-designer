@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Add native deployment selection with two on-demand render and two merge deployments, concurrency/buffer size 1 and Audit logging. Exact documented submission rejection preserves a signed WAITING state for explicit same-job retry; ambiguous outcomes remain fenced. Deferred merge handoff attempts a requester notification without claiming completion. Account capacity, extra deployments and native rejection behavior require sandbox verification.
+
 ### Production-readiness candidate (#199; sandbox acceptance pending)
 - Schema v5 adds an authenticated PART/CHUNK ledger and a separate current-role merge phase, bounded to 25 documents / 8 MiB XML per chunk. Ordered downloads show missing sequences; explicit merge recovery requires a verified terminal task and an atomic claim. New artifact permissions and merge-script secret access require sandbox validation.
 - Add owner-triggered cleanup of published XML inputs with signed POST continuations, terminal-task checks, verified PDF/part bytes and three-sequence request bounds. Preserve PDFs, snapshots, unpublished inputs and orphans; interrupted scans are safely repeatable. Native delete permissions/concurrency and age-based retention remain unverified/open.

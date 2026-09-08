@@ -8,7 +8,7 @@ rendering, metadata-only planning/finalization, a separate bounded merge reduce 
 PDF-byte downloads. Owner-triggered merge recovery verifies the prior task is terminal and claims
 the job atomically. These are local implementations, not native-account security or capacity proof.
 Owner-triggered render recovery before plan publication is implemented locally. Recovery after
-an immutable plan is sealed, orphan adoption, age-based retention and deployment pools remain unfinished.
+an immutable render plan is sealed, orphan adoption, age-based retention and native capacity QA remain unfinished.
 Owner-triggered cleanup of published XML inputs is bounded and implemented locally.
 
 ## Enqueue acceptance boundary
@@ -178,19 +178,35 @@ Do not run simultaneous writers against the shared batch library. Schema migrati
 old tasks and reject incompatible envelopes explicitly. New phases are not enabled on an account
 until secret/permission setup, deployment identity and recovery/negative tests are verified there.
 
-### Deployment pool evidence and next integration
+### Native deployment pool and deferred submission
 
-The package currently has one render and one merge deployment, and initial queue, recovery and
-render-to-merge handoff each pin a deployment ID. Oracle documents native selection when
+The package has two render and two merge deployments. Each is Not Scheduled with concurrency and
+buffer size explicitly set to one and Audit logging. Initial queue, recovery and render-to-merge
+handoff supply fixed stage script/parameter identities and omit the deployment ID. Oracle documents native selection when
 `deploymentId` is omitted: an eligible deployment is deployed, Not Scheduled, and has no unfinished
 instance. Programmatic submission inherits the calling script's user/role. This provides a native
-pool option without an administrator dispatcher; pool size still does not establish throughput.
+pool option without an administrator dispatcher; four deployments do not establish throughput or
+guarantee four simultaneously executing tasks. Account processor allocation remains authoritative.
 [On-demand submission](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
 
-Integration must use fixed stage script/parameter identities, preserve the signed job and submission
-boundary at every call site, and audit account-added eligible deployments. Do not try another slot
-after an unknown submit outcome. A full pool needs an explicit nonacceptance/reconciliation contract
-before automatic retry can be safe; an elapsed timer is not evidence that no task was accepted.
+Audit account-added eligible deployments because native selection may use them as well. Do not try
+another slot after an unknown submit outcome. The exact native error `FAILED_TO_SUBMIT_JOB_REQUEST_1`
+is documented as a task that cannot be submitted. Only this name/code authorizes a guarded WAITING
+state with no stage task ID: QUEUED/RENDER_WAITING or RUNNING/MERGE_WAITING. A current signed POST
+can explicitly retry that deferred submission, without a prior task-status lookup because native
+nonacceptance is already recorded. Repeated rejection remains deferred. Ordinary failed-worker
+recovery still requires the previous task to be terminal. Message text, generic exceptions and
+missing task IDs never authorize this path. No automatic retries/timers are introduced.
+[Submit API error contract](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_453639770507.html).
+
+The WAITING transition must compare the original submitting state, stage task ID and storage/plan
+identity. It cannot overwrite an advanced worker. Missing permission or invalid configuration can
+also cause definite rejection; WAITING does not assert that pool saturation was the cause. An elapsed
+timer is not evidence that no task was accepted.
+After a merge handoff enters WAITING, the worker attempts a requester-only email with the job
+reference and status route. It rechecks the waiting state before notification and avoids a false
+completion claim. Delivery failure is logged and leaves the deferred job/inputs intact; users can
+always return to their job list. This notification is best-effort, not an exactly-once receipt.
 MR UI Execute As Role is fixed Administrator, while effective programmatic execution inherits its
 caller; the blank XML field is not the runtime authorization mechanism. Validate all stages under
 the intended restricted role and do not use Save and Execute or scheduled System-user dispatch.

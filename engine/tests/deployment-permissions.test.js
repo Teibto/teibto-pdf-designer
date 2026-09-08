@@ -29,3 +29,20 @@ test('packaged PDF deployments do not pin a role and Suitelets prohibit anonymou
     }
   }
 });
+
+test('render and merge each package two distinct on-demand deployments with bounded processing settings', () => {
+  const deployments = new Set();
+  for (const stage of ['mr', 'merge']) {
+    const xml = fs.readFileSync(path.join(__dirname, '../src/Objects/customscript_pld_batch_' + stage + '.xml'), 'utf8');
+    const rows = [...xml.matchAll(/<scriptdeployment\s+scriptid="([^"]+)"[^>]*>([\s\S]*?)<\/scriptdeployment>/g)];
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows.map(row => row[1]), ['customdeploy_pld_batch_' + stage, 'customdeploy_pld_batch_' + stage + '_2']);
+    for (const [, id, body] of rows) {
+      assert.ok(!deployments.has(id), 'stage deployments must not collide'); deployments.add(id);
+      for (const [field, value] of Object.entries({ isdeployed: 'T', status: 'NOTSCHEDULED', buffersize: '1', concurrencylimit: '1', loglevel: 'AUDIT' })) {
+        assert.match(body, new RegExp('<' + field + '>' + value + '</' + field + '>'), id + ':' + field);
+      }
+      assert.doesNotMatch(body, /<recurrence\b/);
+    }
+  }
+});

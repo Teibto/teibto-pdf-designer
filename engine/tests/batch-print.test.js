@@ -715,3 +715,101 @@ test('unknown-phase persistence failure still preserves snapshot and displays ho
   assert.match(ctx.response.state.body, /action=status.*job=501/);
   assert.doesNotMatch(ctx.response.state.body, /ส่งเข้าคิวแล้ว|ระบบสร้างไฟล์ PDF ของชุดนี้ไม่ได้/);
 });
+
+test('native deployment selection accepts two jobs through free slots and isolates saturated submission', () => {
+  const f = buildBatch({ templates: TEMPLATES });
+  const jobs = loadAmd('./pld_lib_batch_jobs', f.stubs);
+  const slots = [{ task: null }, { task: null }];
+  const attempts = [];
+  // Models the documented native selection boundary; it does not claim to
+  // validate target-account deployment availability or concurrency behavior.
+  f.task.module.create = opts => ({ submit() {
+    assert.equal(Object.hasOwn(opts, 'deploymentId'), false);
+    assert.equal(opts.scriptId, 'customscript_pld_batch_mr');
+    assert.deepEqual(Object.keys(opts.params), ['custscript_pld_mr_job']);
+    attempts.push(opts.params.custscript_pld_mr_job);
+    const index = slots.findIndex(slot => slot.task === null);
+    if (index < 0) throw new Error('Synthetic native pool has no available deployment');
+    slots[index].task = 'native-task-' + index;
+    slots[index].job = opts.params.custscript_pld_mr_job;
+    return slots[index].task;
+  } });
+  for (const id of ['11', '12']) {
+    const ctx = queueRequest([id], { deploymentId: 'untrusted-deployment', scriptId: 'untrusted-script' });
+    f.suitelet.onRequest(ctx.context);
+    assert.match(ctx.response.state.body, /ส่งเข้าคิวแล้ว/);
+  }
+  const first = jobs.load('501');
+  const second = jobs.load('503');
+  assert.equal(first.task, 'native-task-0');
+  assert.equal(second.task, 'native-task-1');
+  assert.deepEqual(slots.map(slot => slot.job), ['501', '503']);
+  const third = queueRequest(['13']); f.suitelet.onRequest(third.context);
+  assert.deepEqual(attempts, ['501', '503', '505'], 'saturation must not cause speculative retries');
+  assert.deepEqual(jobs.load('501'), first);
+  assert.deepEqual(jobs.load('503'), second);
+  const waiting = jobs.load('505');
+  assert.equal(waiting.status, 'QUEUED');
+  assert.equal(waiting.phase, 'RENDER_SUBMIT_UNKNOWN');
+  assert.equal(waiting.task, '');
+  assert.equal(f.files.deleted.length, 0);
+  assert.equal(f.files.created.length, 3);
+  assert.deepEqual(f.openSnapshot(jobs.loadFile(waiting, waiting.snapshot).getContents()).ids, ['13']);
+  assert.match(third.response.state.body, /ยังยืนยันการส่งงานไม่ได้/);
+  assert.doesNotMatch(third.response.state.body, /ส่งเข้าคิวแล้ว/);
+});
+
+test('documented full-pool rejection waits on the same job and retries only after a signed owner POST', () => {
+  const f = buildBatch({ templates: TEMPLATES }); let available = false; let attempts = 0;
+  f.task.module.create = opts => ({ submit() {
+    attempts++; assert.equal(Object.hasOwn(opts, 'deploymentId'), false);
+    if (!available) { const e = new Error('synthetic capacity rejection'); e.name = 'FAILED_TO_SUBMIT_JOB_REQUEST_1'; throw e; }
+    return 'newly-free-native-slot';
+  } });
+  f.task.module.checkStatus = () => { throw new Error('WAITING has no old task to inspect'); };
+  const first = queueRequest(['11']); f.suitelet.onRequest(first.context);
+  const jobs = loadAmd('./pld_lib_batch_jobs', f.stubs);
+  assert.equal(jobs.load('501').phase, 'RENDER_WAITING'); assert.equal(jobs.load('501').status, 'QUEUED');
+  assert.equal(f.files.deleted.length, 0);
+  assert.match(first.response.state.body, /ระบบยังไม่รับงานรอบนี้/);
+  assert.doesNotMatch(first.response.state.body, /ส่งเข้าคิวแล้ว|ยังยืนยันการส่งงานไม่ได้|setTimeout/);
+  function token() {
+    const page = contextStub({ parameters: { action: 'status', job: '501' } }); f.suitelet.onRequest(page.context);
+    assert.match(page.response.state.body, /รอส่งขั้นสร้างเอกสาร|ลองส่งขั้นสร้างเอกสารอีกครั้ง/);
+    const value = page.response.state.body.match(/name="token" value="([^"]+)"/)[1];
+    return value.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  }
+  function retry(sealed) {
+    const ctx = contextStub({ method: 'POST', parameters: { action: 'recover', job: '501', token: sealed } }); f.suitelet.onRequest(ctx.context); return ctx.response.state;
+  }
+  retry(null); assert.equal(attempts, 1);
+  assert.match(retry(token()).body, /ระบบยังไม่รับงานรอบนี้/);
+  assert.equal(attempts, 2); assert.equal(jobs.load('501').phase, 'RENDER_WAITING');
+  const waitingToken = token(); available = true;
+  assert.match(retry(waitingToken).body, /ส่งเข้าคิวแล้ว/);
+  assert.equal(attempts, 3); assert.equal(jobs.load('501').task, 'newly-free-native-slot');
+  retry(waitingToken); assert.equal(attempts, 3);
+  assert.equal(f.files.created.length, 1, 'explicit retry preserves original snapshot');
+});
+
+test('only exact native rejection name or code creates waiting; a matching message remains unknown', () => {
+  for (const field of ['name', 'code', 'message']) {
+    const f = buildBatch({ templates: TEMPLATES });
+    f.task.module.create = () => ({ submit() { const e = new Error('failure'); e[field] = 'FAILED_TO_SUBMIT_JOB_REQUEST_1'; throw e; } });
+    f.suitelet.onRequest(queueRequest(['11']).context);
+    const job = loadAmd('./pld_lib_batch_jobs', f.stubs).load('501');
+    assert.equal(job.phase, field === 'message' ? 'RENDER_SUBMIT_UNKNOWN' : 'RENDER_WAITING');
+    assert.equal(f.files.deleted.length, 0);
+  }
+});
+
+test('definite rejection cannot mark a concurrently advanced worker as waiting', () => {
+  const f = buildBatch({ templates: TEMPLATES }); const jobs = loadAmd('./pld_lib_batch_jobs', f.stubs);
+  f.task.module.create = () => ({ submit() {
+    jobs.update('501', { status: 'RUNNING', phase: 'RENDERING', task: 'existing-worker' });
+    const e = new Error('rejected attempt'); e.code = 'FAILED_TO_SUBMIT_JOB_REQUEST_1'; throw e;
+  } });
+  f.suitelet.onRequest(queueRequest(['11']).context);
+  assert.equal(jobs.load('501').phase, 'RENDERING'); assert.equal(jobs.load('501').task, 'existing-worker');
+  assert.equal(f.files.deleted.length, 0);
+});

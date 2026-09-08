@@ -451,8 +451,9 @@ old valid signed state; exactly-once publication and historical-access policy re
 
 #### Merge deployment and recovery (schema v5)
 
-Deploy `pld_mr_batch_merge.js` as `customscript_pld_batch_merge` /
-`customdeploy_pld_batch_merge`, Not Scheduled, submitted programmatically with the caller's role. Parameter
+Deploy `pld_mr_batch_merge.js` as `customscript_pld_batch_merge` with
+`customdeploy_pld_batch_merge` and `customdeploy_pld_batch_merge_2`, Not Scheduled, submitted
+programmatically with the caller's role. Parameter
 `custscript_pld_merge_job` contains the authenticated job record ID. Render workers publish PART
 records before MR output; merge reduce publishes one CHUNK record per bounded invocation.
 Exact `(job, snapshot digest, kind, ordinal)` external IDs provide logical uniqueness, which must
@@ -492,10 +493,30 @@ Initial queue submission also treats a thrown or missing task-ID response as unc
 `submit()` was called. It retains the private snapshot and exposes the job/error reference; a
 guarded RENDER_SUBMIT_UNKNOWN marker cannot overwrite a worker that already advanced. Only
 preparation failures before the call may mark the job failed and remove its snapshot. Unknown
-submissions have no automatic retry, including when the deployment pool is saturated.
+submissions have no automatic retry.
+
+#### Native deployment pool (schema v5)
+
+The package retains the original render/merge deployment IDs and adds `customdeploy_pld_batch_mr_2`
+and `customdeploy_pld_batch_merge_2`. All four use Not Scheduled, concurrency 1, buffer size 1 and
+Audit logs. Submitters specify only the fixed stage script and job parameter. NetSuite selects an
+available deployed instance for that script; account-added eligible deployments participate too.
+Inventory them before rollout and verify script parameters/settings and caller-role inheritance.
+Do not use UI/scheduled execution. Pool size is not a processor or throughput guarantee.
+[Native selection](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
+
+Only the exact native `FAILED_TO_SUBMIT_JOB_REQUEST_1` name/code records definite nonacceptance.
+A guarded RENDER_WAITING or MERGE_WAITING state permits a current signed manual retry with the
+same job and snapshot/plan. Repeated rejection keeps the work deferred; other exceptions and empty
+task IDs stay unknown without automatic retry. Do not classify rejection by translated message text.
+[Submit error contract](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_453639770507.html).
+Test two occupied slots, a deferred third job, release of one slot, explicit retry, mixed restricted
+users/roles and unrelated account workloads. Before rolling back to pinned deployment code, stop
+new submissions, finish/reconcile jobs using both secondary slots and disable the secondary
+deployments; do not remove an active deployment or its inputs.
 
 Age-based retention, adoption of files saved before ledger commit, recovery after a sealed plan and
-deployment pools remain pending. Size limits are safety bounds; measure actual BFO usage, output
+pool saturation/capacity QA remain pending. Size limits are safety bounds; measure actual BFO usage, output
 size and Thai layout before setting release capacity.
 
 ---

@@ -279,10 +279,10 @@ define([
       jobFileId = snapshotFile.save();
       jobs.loadFile(jobs.load(jobId), jobFileId);
       jobs.update(jobId, { snapshot: jobFileId, snapshotdigest: integrity.digest(jobContents), status: 'QUEUED', phase: 'RENDER_QUEUED' });
+      // Native selection chooses an available deployment for this fixed script.
       var pending = task.create({
         taskType: task.TaskType.MAP_REDUCE,
         scriptId: 'customscript_pld_batch_mr',
-        deploymentId: 'customdeploy_pld_batch_mr',
         params: { custscript_pld_mr_job: jobId }
       });
       if (!pending || typeof pending.submit !== 'function') throw new Error('Render task preparation failed');
@@ -294,14 +294,15 @@ define([
       if (submissionAttempted) {
         // Submission may have been accepted before an exception/empty reply.
         // Keep its input and never downgrade a worker which already advanced.
-        try { jobs.update(jobId, { phase: 'RENDER_SUBMIT_UNKNOWN' }, {
+        var rejected = definiteSubmissionRejection(e);
+        try { jobs.update(jobId, { phase: rejected ? 'RENDER_WAITING' : 'RENDER_SUBMIT_UNKNOWN' }, {
           status: 'QUEUED', phase: 'RENDER_QUEUED', task: '', snapshot: String(jobFileId),
           snapshotdigest: integrity.digest(jobContents), plan: '', outputs: '', mergetask: ''
         }); } catch (outcomeError) {
           log.error({ title: 'PLD initial queue outcome persistence failed', details: { jobId: jobId, message: outcomeError.message } });
         }
         logBatchError(tel, e);
-        return writeQueueUnknown(context, tel, jobId);
+        return rejected ? writeSubmissionWaiting(context, tel, jobId) : writeQueueUnknown(context, tel, jobId);
       }
       // Preparation failed before submit was called. Cleanup is safe; preserve
       // the initiating error when secondary state/cleanup operations also fail.
@@ -346,8 +347,18 @@ define([
     return bytes;
   }
 
+  function definiteSubmissionRejection(error) {
+    return !!error && (error.name === 'FAILED_TO_SUBMIT_JOB_REQUEST_1' || error.code === 'FAILED_TO_SUBMIT_JOB_REQUEST_1');
+  }
+  function isWaiting(job, kind) {
+    return (kind === 'RENDER' && job.status === 'QUEUED' && job.phase === 'RENDER_WAITING') ||
+      (kind === 'MERGE' && job.status === 'RUNNING' && job.phase === 'MERGE_WAITING');
+  }
   function recoveryKind(job) {
-    if (job.status !== 'FAILED' || job.outputs) return '';
+    if (job.outputs || job.result) return '';
+    if (isWaiting(job, 'RENDER') && !job.task && !job.plan && !job.mergetask && job.snapshot && job.snapshotdigest) return 'RENDER';
+    if (isWaiting(job, 'MERGE') && !job.mergetask && job.plan && job.snapshot && job.snapshotdigest) return 'MERGE';
+    if (job.status !== 'FAILED') return '';
     if (job.phase === 'MERGE_FAILED' && job.mergetask && job.plan) return 'MERGE';
     if (job.phase === 'DONE' && !job.plan && !job.mergetask && job.snapshot && job.snapshotdigest && job.task) return 'RENDER';
     return '';
@@ -385,9 +396,11 @@ define([
       }
     } else validateRecoverySnapshot(job);
     var taskField = kind === 'MERGE' ? 'mergetask' : 'task';
-    var checked = task.checkStatus({ taskId: job[taskField] });
-    if (!checked || (checked.status !== task.TaskStatus.COMPLETE && checked.status !== task.TaskStatus.FAILED)) {
-      throw new Error('งานประมวลผลเดิมยังไม่สิ้นสุดหรือยังตรวจสอบไม่ได้ — ไม่ต้องส่งซ้ำ');
+    if (!isWaiting(job, kind)) {
+      var checked = task.checkStatus({ taskId: job[taskField] });
+      if (!checked || (checked.status !== task.TaskStatus.COMPLETE && checked.status !== task.TaskStatus.FAILED)) {
+        throw new Error('งานประมวลผลเดิมยังไม่สิ้นสุดหรือยังตรวจสอบไม่ได้ — ไม่ต้องส่งซ้ำ');
+      }
     }
     var claim = { status: 'RUNNING', phase: kind + '_SUBMITTING' };
     claim[taskField] = '';
@@ -400,14 +413,17 @@ define([
       params[kind === 'MERGE' ? 'custscript_pld_merge_job' : 'custscript_pld_mr_job'] = job.id;
       taskId = task.create({ taskType: task.TaskType.MAP_REDUCE,
         scriptId: kind === 'MERGE' ? 'customscript_pld_batch_merge' : 'customscript_pld_batch_mr',
-        deploymentId: kind === 'MERGE' ? 'customdeploy_pld_batch_merge' : 'customdeploy_pld_batch_mr', params: params }).submit();
-      if (!taskId) throw new Error('Missing recovery task identity');
+        params: params }).submit();
+      if (typeof taskId !== 'string' || !taskId.trim()) throw new Error('Missing recovery task identity');
     } catch (submitError) {
-      var submitting = { status: 'RUNNING', phase: kind + '_SUBMITTING' }; submitting[taskField] = '';
-      try { jobs.update(job.id, { phase: kind + '_SUBMIT_UNKNOWN' }, submitting); } catch (stateError) {
+      var submitting = { status: 'RUNNING', phase: kind + '_SUBMITTING', snapshot: job.snapshot, snapshotdigest: job.snapshotdigest, plan: job.plan, outputs: '', result: '' }; submitting[taskField] = '';
+      var rejected = definiteSubmissionRejection(submitError);
+      var outcome = rejected ? { status: kind === 'RENDER' ? 'QUEUED' : 'RUNNING', phase: kind + '_WAITING' } : { phase: kind + '_SUBMIT_UNKNOWN' };
+      try { jobs.update(job.id, outcome, submitting); } catch (stateError) {
         log.error({ title: 'PLD recovery outcome persistence failed', details: { jobId: job.id, message: stateError.message } });
       }
-      log.error({ title: 'PLD recovery submission unknown', details: { jobId: job.id, message: submitError.message } });
+      log.error({ title: rejected ? 'PLD recovery submission rejected' : 'PLD recovery submission unknown', details: { jobId: job.id, message: submitError.message } });
+      if (rejected) return writeSubmissionWaiting(context, tel, job.id);
       throw new Error('ยังยืนยันผลการส่งงานไม่ได้ — แจ้งผู้ดูแลพร้อมหมายเลขงาน ' + job.id + ' และไม่ต้องส่งซ้ำ');
     }
     var warning = '';
@@ -423,7 +439,8 @@ define([
   function jobSummary(job) {
     var statuses = { PREPARING: 'เตรียมงาน', QUEUED: 'รอประมวลผล', RUNNING: 'กำลังประมวลผล',
       COMPLETE: 'สำเร็จครบ', PARTIAL: 'สำเร็จบางส่วน', FAILED: 'ไม่สำเร็จ' };
-    var text = '<p>งาน ' + esc(job.id) + ' · ' + esc(statuses[job.status] || job.status) + '</p>' +
+    var displayStatus = isWaiting(job, 'RENDER') ? 'รอส่งขั้นสร้างเอกสาร' : (isWaiting(job, 'MERGE') ? 'รอส่งขั้นรวมไฟล์' : (statuses[job.status] || job.status));
+    var text = '<p>งาน ' + esc(job.id) + ' · ' + esc(displayStatus) + '</p>' +
       '<p>เลือก ' + esc(job.requested) + ' ใบ · สำเร็จ ' + esc(job.printed) + ' ใบ · ล้มเหลว ' + esc(job.failed) + ' ใบ</p>';
     if (job.status === 'PARTIAL') text += '<p class="warn">ไฟล์นี้ไม่ครบทุกใบ กรุณาตรวจสอบรายการที่ล้มเหลวก่อนใช้งาน</p>';
     var recovery = recoveryKind(job);
@@ -432,7 +449,7 @@ define([
       text += '<form method="POST" action="' + esc(jobs.route(job.id, 'recover')) + '">' +
         '<input type="hidden" name="action" value="recover"><input type="hidden" name="job" value="' + esc(job.id) + '">' +
         '<input type="hidden" name="token" value="' + esc(recoveryToken) + '">' +
-        '<button type="submit">' + (recovery === 'MERGE' ? 'ทำขั้นรวมไฟล์ต่อ' : 'ทำขั้นสร้างเอกสารต่อ') + '</button>' +
+        '<button type="submit">' + (isWaiting(job, recovery) ? (recovery === 'MERGE' ? 'ลองส่งขั้นรวมไฟล์อีกครั้ง' : 'ลองส่งขั้นสร้างเอกสารอีกครั้ง') : (recovery === 'MERGE' ? 'ทำขั้นรวมไฟล์ต่อ' : 'ทำขั้นสร้างเอกสารต่อ')) + '</button>' +
         '<p>ใช้ผลรายเอกสารและไฟล์ส่วนที่ตรวจสอบแล้ว ไม่สร้างงานพิมพ์ใหม่</p></form>';
     }
     if (job.phase === 'MERGE_SUBMIT_UNKNOWN' || job.phase === 'RENDER_SUBMIT_UNKNOWN') text += '<p class="warn">ยังยืนยันการส่งงานประมวลผลไม่ได้ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงานและไม่ต้องส่งซ้ำ</p>';
@@ -508,6 +525,16 @@ define([
       (rows.length ? rows.map(function (job) {
         return '<section><a href="' + esc(jobs.route(job.id)) + '">ดูสถานะงาน</a>' + jobSummary(job) + '</section>';
       }).join('') : '<p>ยังไม่มีงานพิมพ์ในบทบาทนี้</p>')));
+  }
+
+  function writeSubmissionWaiting(context, tel, jobId) {
+    var tracking = '';
+    try { var current = jobs.load(jobId); tracking = '<a href="' + esc(jobs.route(current.id)) + '">ตรวจสถานะงานและลองส่งอีกครั้ง</a>'; }
+    catch (unavailable) { /* The submission rejection remains known even if status readback fails. */ }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ระบบยังไม่รับงานรอบนี้', '<h1>ระบบยังไม่รับงานรอบนี้</h1>' +
+      '<p>หมายเลขงาน <code>' + esc(jobId) + '</code> ยังคงเก็บข้อมูลเดิมไว้ กรุณาตรวจสถานะงานแล้วกดลองส่งอีกครั้งเมื่อพร้อม</p>' +
+      '<p>รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p><p>' + tracking + '</p>'));
   }
 
   function writeQueueUnknown(context, tel, jobId) {

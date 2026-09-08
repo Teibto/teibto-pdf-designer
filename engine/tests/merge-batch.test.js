@@ -267,6 +267,7 @@ test("real render, artifact ledger, merge and authenticated download complete th
   );
   assert.equal(f.tasks.length, 1);
   assert.equal(f.tasks[0].scriptId, "customscript_pld_batch_merge");
+  assert.equal(f.tasks[0].deploymentId, undefined, "native selection must not pin merge handoff to one deployment");
   assert.equal(f.tasks[0].params.custscript_pld_merge_job, "501");
   assert.equal(f.jobs.load("501").status, "RUNNING");
   assert.throws(() => f.jobs.download("501"), /not committed/);
@@ -907,4 +908,58 @@ test("merge input cannot select chunks or sequences outside the authenticated pl
     /Invalid merge chunk/,
   );
   assert.equal(f.render.calls.xmlToPdf.length, 0);
+});
+
+
+test("native merge rejection persists waiting and informs the owner without automatic retry", () => {
+  for (const emailFails of [false, true]) {
+    const f = buildMr({emailFails}); let attempts = 0;
+    f.stubs["N/task"].create = () => ({submit() {
+      attempts++;
+      throw Object.assign(new Error("rejected"), {name: "FAILED_TO_SUBMIT_JOB_REQUEST_1"});
+    }});
+    runRender(f);
+    const job = f.jobs.load("501");
+    assert.equal(job.phase, "MERGE_WAITING"); assert.equal(job.mergetask, "");
+    assert.ok(job.plan); assert.equal(job.outputs, "");
+    assert.equal(f.files.deleted.length, 0);
+    if (!emailFails) {
+      assert.equal(f.emails.length, 1);
+      assert.match(f.emails[0].body, /501/);
+      assert.doesNotMatch(f.emails[0].body, /สร้างสำเร็จ:/);
+    }
+    f.mr.summarize(summaryStub()); assert.equal(attempts, 1);
+  }
+});
+
+test("merge handoff malformed task identities and message-only rejection remain unknown", () => {
+  for (const value of ["   ", 42, {}, true, null, ""]) {
+    const f = buildMr(); let attempts = 0;
+    f.stubs["N/task"].create = () => ({submit() {attempts++; return value;}});
+    assert.throws(() => runRender(f), /no task ID/);
+    assert.equal(f.jobs.load("501").phase, "MERGE_SUBMIT_UNKNOWN");
+    assert.equal(f.jobs.load("501").mergetask, "");
+    f.mr.summarize(summaryStub()); assert.equal(attempts, 1);
+  }
+  const f = buildMr();
+  f.stubs["N/task"].create = () => ({submit() {throw new Error("FAILED_TO_SUBMIT_JOB_REQUEST_1");}});
+  assert.throws(() => runRender(f), /FAILED_TO_SUBMIT/);
+  assert.equal(f.jobs.load("501").phase, "MERGE_SUBMIT_UNKNOWN");
+});
+
+test("rejected merge handoff cannot downgrade an advanced worker or announce unpersisted waiting", () => {
+  for (const mode of ["advanced", "write-failure"]) {
+    const f = buildMr(), save = f.stubs["N/record"].submitFields;
+    f.stubs["N/task"].create = () => ({submit() {
+      if (mode === "advanced") f.jobs.update("501", {phase: "MERGING", mergetask: "ACTIVE_WORKER"});
+      throw Object.assign(new Error("rejected"), {code: "FAILED_TO_SUBMIT_JOB_REQUEST_1"});
+    }});
+    if (mode === "write-failure") f.stubs["N/record"].submitFields = opts => {
+      if (opts.values.custrecord_pld_job_phase === "MERGE_WAITING") throw new Error("state write failed");
+      return save(opts);
+    };
+    runRender(f);
+    assert.equal(f.jobs.load("501").phase, mode === "advanced" ? "MERGING" : "MERGE_SUBMITTING");
+    assert.equal(f.emails.length, 0);
+  }
 });

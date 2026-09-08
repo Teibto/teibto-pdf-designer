@@ -250,6 +250,33 @@ define([
     }
   }
 
+  function notifyDeferred(job) {
+    try {
+      var current = jobs.load(job.jobId);
+      // A user may already have retried from the status page. Do not send a
+      // waiting notification if that state has advanced before this check.
+      if (current.status !== "RUNNING" || current.phase !== "MERGE_WAITING" || current.mergetask || current.outputs) return;
+      var tracking = "เปิดหน้าพิมพ์เป็นชุดและเลือกงานของฉันด้วยผู้ใช้และบทบาทเดิม";
+      try {
+        var candidate = absoluteUrl(jobs.route(current.id));
+        if (!/^https:\/\/[a-zA-Z0-9.-]+\//.test(candidate)) throw new Error("Deferred batch absolute URL unavailable");
+        tracking = candidate;
+      }
+      catch (routeError) {
+        log.error({ title: "PLD deferred batch tracking URL unavailable", details: { jobId: current.id, message: routeError.message } });
+      }
+      email.send({
+        author: Number(current.requester), recipients: Number(current.requester),
+        subject: "งานพิมพ์รอส่งขั้นรวมไฟล์ — " + current.id,
+        body: ["ยังส่งขั้นรวมไฟล์เข้าประมวลผลไม่ได้", "หมายเลขงาน: " + current.id,
+          "ระบบเก็บผลรายเอกสารไว้แล้ว กรุณาเปิดสถานะงานและกด ลองส่งขั้นรวมไฟล์อีกครั้ง เมื่อพร้อม",
+          "หากยังส่งไม่ได้ ให้แจ้งผู้ดูแลตรวจช่องประมวลผลและสิทธิ์ของบทบาท", tracking].join("\n"),
+      });
+    } catch (error) {
+      log.error({ title: "PLD deferred batch notification failed", details: { jobId: job.jobId, message: error.message } });
+    }
+  }
+
   function readPlan(job) {
     var plan = integrity.open("plan", job.durable.plan);
     if (
@@ -340,6 +367,7 @@ define([
     readPlan: readPlan,
     verifyChunk: verifyChunk,
     notify: notify,
+    notifyDeferred: notifyDeferred,
     absoluteUrl: absoluteUrl,
   };
 });
