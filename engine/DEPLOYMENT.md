@@ -225,11 +225,12 @@ SuiteScripts/
 
 ### Permission migration for #199
 
-Drain existing batch tasks before deploying schema v2. Old job files without a snapshot are
+Drain existing batch tasks before deploying schema v3. Old job files without durable identity are
 rejected with resubmission guidance; do not mix old/new worker files while tasks run. Queue jobs
 now retain the server-resolved XML and copies at enqueue. No edits to the template or default
-after submission change that job. Keep job files private and immutable to requesters; current
-shared-folder ownership is still a release blocker under `docs/PRODUCTION-READINESS.md`.
+after submission change that job. Per-job private folders are implemented, but native snapshot
+write access and role-revocation behavior still require hardening and sandbox evidence under
+`docs/PRODUCTION-READINESS.md`.
 Limits are 500 documents per job, 1,000,000 XML characters per snapshot, 8 MiB serialized job,
 8 MiB resolved XML aggregate and 20 render copies per document across immediate/queued/sample
 paths. These limits do not establish live capacity; test governance/latency before rollout.

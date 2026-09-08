@@ -5,7 +5,7 @@
  * @author Wichit Wongta
  * @since 2026-09-09
  */
-define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url'], function (record, search, runtime, file, url) {
+define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url', 'N/log'], function (record, search, runtime, file, url, log) {
   var TYPE = 'customrecord_pld_batch_job';
   var F = {};
   ['requester','role','status','folder','parent','snapshot','result','requested','printed','failed','task'].forEach(function (k) { F[k] = 'custrecord_pld_job_' + k; });
@@ -57,14 +57,22 @@ define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url'], function (recor
     var initial = { requester: u.requester, role: u.role, parent: parent, status: 'PREPARING', requested: requested, printed: 0, failed: 0 };
     Object.keys(initial).forEach(function (k) { rec.setValue({ fieldId: F[k], value: initial[k] }); });
     var jobId = id(rec.save());
-    var folder = record.create({ type: 'folder' });
-    folder.setValue({ fieldId: 'name', value: 'pld-job-' + jobId });
-    folder.setValue({ fieldId: 'parent', value: Number(parent) });
-    folder.setValue({ fieldId: 'isprivate', value: true });
-    folder.setValue({ fieldId: 'owner', value: Number(u.requester) });
-    var job = update(jobId, { folder: id(folder.save()) });
-    assertFolder(job); // No sensitive file may be created until readback passes.
-    return job;
+    try {
+      var folder = record.create({ type: 'folder' });
+      folder.setValue({ fieldId: 'name', value: 'pld-job-' + jobId });
+      folder.setValue({ fieldId: 'parent', value: Number(parent) });
+      folder.setValue({ fieldId: 'isprivate', value: true });
+      folder.setValue({ fieldId: 'owner', value: Number(u.requester) });
+      var job = update(jobId, { folder: id(folder.save()) });
+      assertFolder(job); // No sensitive file may be created until readback passes.
+      return job;
+    } catch (setupError) {
+      // The durable identity already exists, even if folder creation/readback
+      // failed. No sensitive file has been created by this function.
+      try { update(jobId, { status: 'FAILED', failed: requested }); }
+      catch (stateError) { log.error({ title: 'PLD batch setup failure persistence failed', details: { jobId: jobId, message: stateError.message } }); }
+      throw setupError;
+    }
   }
   function list() {
     var u = actor();

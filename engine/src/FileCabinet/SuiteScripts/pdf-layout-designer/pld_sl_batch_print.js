@@ -247,31 +247,27 @@ define([
     var durable = jobs.create(ids.length);
     var jobId = durable.id;
     var folder = durable.folder;
-    var jobContents = JSON.stringify({
-        schemaVersion: 3,
-        templateSnapshot: snapshot,
-        jobId: jobId,
-        rectype: recType,
-        tplid: tplId,
-        ids: ids,
-        folder: folder,
-        requester: { id: user.id, role: user.role }
-      });
-    // JSON escaping can expand XML; measure the persisted UTF-8 job, not just XML.
-    if (utf8Bytes(jobContents) > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
-    var jobFileId = file.create({
-      name: 'pld_job_' + jobId + '.json',
-      fileType: file.Type.JSON,
-      contents: jobContents,
-      encoding: file.Encoding.UTF8,
-      folder: folder,
-      isOnline: false
-    }).save();
-
-    jobs.loadFile(durable, jobFileId);
-    jobs.update(jobId, { snapshot: jobFileId, status: 'QUEUED' });
+    var jobFileId;
     var taskId;
     try {
+      var jobContents = JSON.stringify({
+        schemaVersion: 3, templateSnapshot: snapshot, jobId: jobId,
+        rectype: recType, tplid: tplId, ids: ids, folder: folder,
+        requester: { id: user.id, role: user.role }
+      });
+      if (utf8Bytes(jobContents) > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
+      var snapshotFile = file.create({
+        name: 'pld_job_' + jobId + '.json', fileType: file.Type.JSON,
+        contents: jobContents, encoding: file.Encoding.UTF8, folder: folder, isOnline: false
+      });
+      var currentJob = jobs.load(jobId);
+      if (String(currentJob.folder) !== String(durable.folder) || String(currentJob.parent) !== String(durable.parent)) {
+        throw new Error('Batch storage identity changed before snapshot save');
+      }
+      jobs.assertFolder(currentJob);
+      jobFileId = snapshotFile.save();
+      jobs.loadFile(jobs.load(jobId), jobFileId);
+      jobs.update(jobId, { snapshot: jobFileId, status: 'QUEUED' });
       taskId = task.create({
         taskType: task.TaskType.MAP_REDUCE,
         scriptId: 'customscript_pld_batch_mr',
@@ -279,16 +275,33 @@ define([
         params: { custscript_pld_mr_job: jobId }
       }).submit();
     } catch (e) {
-      try { file.delete({ id: jobFileId }); } catch (cleanupError) {
-        log.error({ title: 'PLD queue job cleanup failed', details: { jobFileId: jobFileId, message: cleanupError.message } });
+      // Only pre-acceptance failures reach this block. Keep the initiating error.
+      try { jobs.update(jobId, { status: 'FAILED', failed: ids.length }); }
+      catch (stateError) {
+        log.error({ title: 'PLD queue failure state unavailable', details: { jobId: jobId, message: stateError.message } });
       }
-      jobs.update(jobId, { status: 'FAILED', failed: ids.length });
+      if (jobFileId) {
+        try {
+          var ownFile = jobs.loadFile(jobs.load(jobId), jobFileId);
+          if (ownFile.name !== 'pld_job_' + jobId + '.json') throw new Error('Batch cleanup file name mismatch');
+          file.delete({ id: jobFileId });
+        } catch (cleanupError) {
+          log.error({ title: 'PLD queue job cleanup failed', details: { jobId: jobId, message: cleanupError.message } });
+        }
+      }
       throw e;
     }
-    jobs.update(jobId, { task: taskId });
+    var taskWarning = '';
+    try { jobs.update(jobId, { task: taskId }); }
+    catch (taskStateError) {
+      // NetSuite accepted the task: deleting its input or marking FAILED here
+      // would race the worker and invite duplicate submissions.
+      log.error({ title: 'PLD accepted task identity persistence failed', details: { jobId: jobId, taskId: taskId, message: taskStateError.message } });
+      taskWarning = 'ระบบรับงานแล้ว แต่บันทึกหมายเลขประมวลผลไม่สำเร็จ กรุณาติดตามงานเดิม ไม่ต้องส่งซ้ำ';
+    }
 
     logBatchOk(tel, { queued: ids.length, taskId: taskId, jobFileId: jobFileId });
-    writeQueuedPage(context, tel, recType, ids.length, jobId);
+    writeQueuedPage(context, tel, recType, ids.length, jobId, taskWarning);
   }
 
   function utf8Bytes(text) {
@@ -326,13 +339,20 @@ define([
       }).join('') : '<p>ยังไม่มีงานพิมพ์ในบทบาทนี้</p>')));
   }
 
-  function writeQueuedPage(context, tel, recType, count, jobId) {
+  function writeQueuedPage(context, tel, recType, count, jobId, warning) {
+    var tracking = '';
+    try { tracking = '<a href="' + esc(jobs.route(jobId)) + '">ติดตามสถานะงานนี้</a>'; }
+    catch (routeError) {
+      log.error({ title: 'PLD accepted job tracking link unavailable', details: { jobId: jobId, message: routeError.message } });
+      tracking = 'ระบบรับงานแล้ว กรุณาเปิดหน้าพิมพ์เป็นชุดเพื่อดูงานของฉันด้วยหมายเลขงานด้านบน ไม่ต้องส่งซ้ำ';
+    }
     var html = pageShell('ส่งเข้าคิวแล้ว', [
       '<h1>ส่งเข้าคิวแล้ว</h1>',
       '<p>เลือกไว้ ' + count + ' ใบ ระบบกำลังสร้างเอกสารเบื้องหลัง</p>',
       '<p>หมายเลขงาน <code>' + esc(jobId) + '</code> · รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p>',
       '<p>เมื่อเสร็จ ระบบจะส่งอีเมลแจ้งผล คุณสามารถปิดหน้านี้และกลับมาติดตามงานด้วยผู้ใช้และบทบาทเดิม</p>',
-      '<p><a href="' + esc(jobs.route(jobId)) + '">ติดตามสถานะงานนี้</a></p>',
+      warning ? '<p class="warn">' + esc(warning) + '</p>' : '',
+      '<p>' + tracking + '</p>',
       '<p><button class="primary" onclick="history.back()">กลับไปเลือกชุดถัดไป</button></p>'
     ].join('\n'));
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });

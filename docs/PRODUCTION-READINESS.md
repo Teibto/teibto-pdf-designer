@@ -17,6 +17,7 @@ Local test doubles do not execute FreeMarker/BFO or establish NetSuite role perm
 | P1 | All-role Suitelets execute as Administrator | Candidate now explicitly clears role elevation in four deployments and disables anonymous Suitelet access. SDF/readback and restricted-user role matrix remain release blockers; no claim of runtime authorization based on XML tests. |
 | P1 | Shared batch folder exposes job JSON/XML and other users' output | Local candidate adds durable requester/role/owner identity, per-job private folder readback and job-authorized download. Native record/file permissions, direct URLs, weaker-role access and retention remain release blockers; local stubs cannot establish account privacy. |
 | P1 | Batch input/merge errors skip cleanup and notification | Durable job tracking and injected failure tests implemented, including corrupt snapshots and terminal commit failure. Failed jobs retain private recovery inputs; successful commits precede cleanup. Abrupt termination/orphan recovery and retention remain open. |
+| P1 | Accepted queue task reported as rejected after metadata failure | Enqueue now separates pre-submit failure cleanup from accepted-task warnings. Once submit returns, preserve snapshot/status and show job tracking even when saving task ID or resolving the link fails. Fresh folder identity/privacy validation precedes snapshot save. Local failure injections pass; connected task/role behavior remains required. |
 | P2 | Repeated transaction reads per copy | Implemented request-local frozen snapshot; copy titles/labels remain independent. Measure real governance and latency before capacity claims. |
 | P2 | Queue reads mutable templates | Implemented server-derived XML/copy snapshot at enqueue, now schema v3 with durable job identity; workers reject legacy jobs with resubmission guidance. Bounds: 1,000,000 XML characters, 8 MiB UTF-8 job. Template record edits cannot change queued output; native snapshot tampering remains tied to account permission hardening. |
 | P2 | Unbounded batch merge | Local 500-document / 8 MiB resolved UTF-8 XML guard, plus shared 20-copy limit before render work. These are safety bounds, not capacity evidence. Chunked output/job recovery design and live measurements remain required. |
@@ -41,15 +42,12 @@ changing a deployment field alone is insufficient sign-off.
 
 ## Local verification
 
-2026-09-09 round-two candidate evidence: engine **164/164**, designer **623/623**, Chromium E2E **87/87**,
-six templates and six samples valid, lint **0 errors / 35 warnings**, both production build modes
-passed, secret scan passed. Independent agents reviewed render/batch and save/session changes;
-identified batch cleanup/link-recovery defects were fixed and regression tested. No live NetSuite
-validation, deployment or PDF inspection has run for this candidate. Installed production dependency
-audit reports zero findings after Nano ID 5.1.16; `npm ci` still reports 20 development/toolchain
-findings (8 moderate, 10 high, 2 critical), which remain to be resolved. Local final logs:
-`designer/.unit-final.log`, `designer/.e2e-final.log` (ignored from Git). First-slice CI at `60d4c28`
-passed; later commits require their own CI results.
+The candidate at `d1b4705` passed the full
+[quality gate](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34268340825), including
+secret scanning, ShellCheck, templates, engine/designer tests, provenance, all three builds and
+Chromium E2E. Independent reviews identified failure-state, notification and folder-validation
+defects that were fixed with regressions. No live NetSuite validation, deployment or PDF inspection
+has run. Later commits still require their own CI evidence.
 
 Run from repository root unless a command starts with `cd designer`:
 
@@ -79,7 +77,7 @@ Round-three local evidence: **175/175** engine tests, **631/631** designer unit 
 build-provenance tests. Full dependency audit is zero (including development dependencies).
 Storybook still exports 12 stories from the six existing story files. Current local logs include
 `designer/.unit-final.log`, `.e2e-toolchain.log` and `.build-netsuite-final.log` (ignored).
-Round-two CI at `36b96be` passed; round-three changes require their own head-specific CI result.
+The dependency findings recorded in earlier rounds were resolved; they are not current blockers.
 
 The synthetic row-mode pagination probe covers 100/1,000/10,000 Thai rows with complete,
 non-overlapping slices (4/40/400 pages) and 1,000 identical cache hits per fixture. One local Node
@@ -118,6 +116,11 @@ document/template IDs, timestamp, error IDs and redacted artifact paths.
    deployment authorization. Retain versioned rollback artifacts and account-by-account checklist.
 
 ## Agent goal assignments
+
+The next persistence, merge-phase, authentication and recovery contracts are documented in
+[Batch reliability](architecture/BATCH-RELIABILITY.md). Chunking and signing in that document
+are planned work, not shipped behavior. Latest enqueue lifecycle regressions bring local engine
+coverage to **181/181**; the last full CI evidence above predates these additions.
 
 Use these as task/objective text when assigning agents; they are not assumed CLI syntax.
 Assign non-overlapping file ownership per task, preserve other agents' work, and return exact

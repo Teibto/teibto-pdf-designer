@@ -132,7 +132,7 @@ function buildBatch({
     },
   };
   const rows = require('./helpers/batch-store').batchStore(stubs, files);
-  return { rows, suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search, files, task, folderRecords };
+  return { stubs, rows, suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search, files, task, folderRecords };
 }
 
 const DOCS = [
@@ -546,5 +546,108 @@ test('immediate and queued print reject 21 copies before render work or job crea
     assert.equal(render.calls.created, 0);
     assert.equal(files.created.length, 0);
     assert.equal(task.submitted.length, 0);
+  }
+});
+
+test('enqueue pre-submit failures persist FAILED and only clean authorized snapshots', () => {
+  for (const stage of ['create', 'save', 'readback', 'metadata']) {
+    const f = buildBatch({ templates: TEMPLATES });
+    const create = f.files.module.create;
+    const load = f.files.module.load;
+    const submit = f.stubs['N/record'].submitFields;
+    if (stage === 'create') f.files.module.create = () => { throw new Error('snapshot create failure'); };
+    if (stage === 'save') f.files.module.create = (opts) => ({ ...create(opts), save() { throw new Error('snapshot save failure'); } });
+    if (stage === 'readback') {
+      let failed = false;
+      f.files.module.load = (opts) => {
+        if (opts.id === '1000' && !failed) { failed = true; throw new Error('snapshot readback failure'); }
+        return load(opts);
+      };
+    }
+    if (stage === 'metadata') f.stubs['N/record'].submitFields = (opts) => {
+      if (opts.values.custrecord_pld_job_snapshot) throw new Error('snapshot metadata failure');
+      return submit(opts);
+    };
+    const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
+    assert.equal(f.task.submitted.length, 0, stage);
+    assert.equal(f.rows.get('501').custrecord_pld_job_status, 'FAILED', stage);
+    assert.match(ctx.response.state.body, new RegExp('snapshot ' + stage + ' failure'));
+    assert.equal(f.files.deleted.length, ['readback', 'metadata'].includes(stage) ? 1 : 0, stage);
+  }
+});
+
+test('enqueue preserves original failure when state persistence and cleanup also fail', () => {
+  const f = buildBatch({ templates: TEMPLATES });
+  const submit = f.stubs['N/record'].submitFields;
+  f.stubs['N/record'].submitFields = (opts) => {
+    if (opts.values.custrecord_pld_job_status === 'FAILED') throw new Error('state unavailable');
+    return submit(opts);
+  };
+  f.task.module.create = () => ({ submit() { throw new Error('QUEUE_FULL original'); } });
+  f.files.module.delete = () => { throw new Error('cleanup unavailable'); };
+  const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
+  assert.match(ctx.response.state.body, /QUEUE_FULL original/);
+  assert.doesNotMatch(ctx.response.state.body, /cleanup unavailable|state unavailable/);
+  assert.ok(f.log.entries.some((e) => e.title === 'PLD queue failure state unavailable'));
+  assert.ok(f.log.entries.some((e) => e.title === 'PLD queue job cleanup failed'));
+});
+
+test('accepted task with task metadata persistence failure keeps snapshot and shows tracking warning', () => {
+  const f = buildBatch({ templates: TEMPLATES });
+  const submit = f.stubs['N/record'].submitFields;
+  f.stubs['N/record'].submitFields = (opts) => {
+    if (opts.values.custrecord_pld_job_task) throw new Error('task persistence unavailable');
+    return submit(opts);
+  };
+  const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
+  assert.equal(f.task.submitted.length, 1);
+  assert.equal(f.files.deleted.length, 0);
+  assert.equal(f.rows.get('501').custrecord_pld_job_status, 'QUEUED');
+  assert.equal(f.rows.get('501').custrecord_pld_job_snapshot, '1000');
+  assert.match(ctx.response.state.body, /ส่งเข้าคิวแล้ว/);
+  assert.match(ctx.response.state.body, /ไม่ต้องส่งซ้ำ/);
+  assert.match(ctx.response.state.body, /action=status.*job=501/);
+});
+
+test('snapshot save rechecks folder privacy after file construction and cleanup rejects moved file', () => {
+  for (const move of [false, true]) {
+    const f = buildBatch({ templates: TEMPLATES });
+    const create = f.files.module.create;
+    f.files.module.create = (opts) => {
+      const out = create(opts);
+      if (!move) f.rows.get('502').isprivate = false;
+      else {
+        const save = out.save;
+        out.save = () => { const id = save(); f.files.created[0].folder = '999'; return id; };
+      }
+      return out;
+    };
+    const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
+    assert.equal(f.task.submitted.length, 0);
+    assert.equal(f.files.created.length, move ? 1 : 0);
+    assert.equal(f.files.deleted.length, 0);
+    assert.equal(f.rows.get('501').custrecord_pld_job_status, 'FAILED');
+    assert.match(ctx.response.state.body, move ? /storage mismatch/ : /privacy\/owner\/parent/);
+  }
+});
+
+test('enqueue rejects changed native folder or parent references before saving to allocated folder', () => {
+  for (const changedField of ['folder', 'parent']) {
+    const f = buildBatch({ templates: TEMPLATES });
+    const create = f.files.module.create;
+    f.files.module.create = (opts) => {
+      const snapshot = create(opts);
+      // Native metadata changed after JSON and file allocation: the alternate
+      // folder remains private and caller-owned, so privacy alone is insufficient.
+      f.rows.set('503', { owner: 9, parent: 55, isprivate: true });
+      f.rows.get('501')['custrecord_pld_job_' + changedField] = changedField === 'folder' ? '503' : '99';
+      if (changedField === 'parent') f.rows.get('502').parent = 99;
+      return snapshot;
+    };
+    const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
+    assert.equal(f.files.created.length, 0, changedField);
+    assert.equal(f.task.submitted.length, 0, changedField);
+    assert.equal(f.rows.get('501').custrecord_pld_job_status, 'FAILED');
+    assert.match(ctx.response.state.body, /storage identity changed/);
   }
 });

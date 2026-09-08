@@ -109,3 +109,19 @@ test('private folder must pass readback before create returns authority to write
   assert.throws(() => f.jobs.create(2), /privacy\/owner\/parent/);
   assert.equal(f.files.created.length, 0);
 });
+
+test('folder setup failure marks already created job FAILED, preserving original error if status write fails', () => {
+  for (const statusFails of [false, true]) {
+    const f = fixture();
+    f.rows.clear();
+    const create = f.stubs['N/record'].create;
+    f.stubs['N/record'].create = (opts) => {
+      if (opts.type === 'folder') throw new Error('folder setup failed');
+      return create(opts);
+    };
+    if (statusFails) f.stubs['N/record'].submitFields = () => { throw new Error('state write failed'); };
+    assert.throws(() => f.jobs.create(2), /folder setup failed/);
+    assert.equal(f.files.created.length, 0);
+    assert.equal(f.rows.get('501').custrecord_pld_job_status, statusFails ? 'PREPARING' : 'FAILED');
+  }
+});

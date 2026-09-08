@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Production-readiness candidate (#199; sandbox acceptance pending)
+- Preserve accepted batch tasks when recording the task ID fails; show tracking and a Thai warning against resubmission. Pre-submit failures retain their original error, mark the job failed where possible and clean only verified private snapshots.
 - Fix pagination cache returning stale pages after changes to arbitrary rows or table columns; add Thai data probes up to 10,000 rows.
 - Resolve development/build dependency advisories and migrate Storybook, Vitest and ESLint configuration; retain browser and unit coverage.
 - Seal NetSuite bundles with source/asset hashes, reject stale `--no-build` reuse, and stamp scoped engine hashes plus staged/untracked dirty state. CI now checks provenance and production builds.
