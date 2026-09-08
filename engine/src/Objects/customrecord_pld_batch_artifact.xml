@@ -1,0 +1,48 @@
+<!-- @author Wichit Wongta; @since 2026-09-09 -->
+<customrecordtype scriptid="customrecord_pld_batch_artifact">
+  <recordname>PDF Batch Artifact</recordname>
+  <accesstype>USEPERMISSIONLIST</accesstype>
+  <allowuiaccess>F</allowuiaccess>
+  <allowinlineediting>F</allowinlineediting>
+  <allowquickadd>F</allowquickadd>
+  <allowquicksearch>F</allowquicksearch>
+  <allowattachments>F</allowattachments>
+  <enableoptimisticlocking>T</enableoptimisticlocking>
+  <enablesystemnotes>T</enablesystemnotes>
+  <includename>T</includename>
+  <showowner>T</showowner>
+  <showownerallowchange>F</showownerallowchange>
+  <!-- Deny by default. Selected caller roles require owner-restricted permissions.
+       Prove native externalid uniqueness/concurrent create behavior in sandbox.
+       Seal binds deterministic externalid and native owner before atomic creation. -->
+  <customrecordcustomfields>
+    <customrecordcustomfield scriptid="custrecord_pld_art_job">
+      <label>Job</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_art_generation">
+      <label>Generation</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_art_kind">
+      <label>Kind</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_art_ordinal">
+      <label>Ordinal</label><fieldtype>INTEGER</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_art_state">
+      <label>State</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_art_payload">
+      <label>Payload</label><fieldtype>CLOBTEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_art_auth">
+      <label>Auth</label><fieldtype>CLOBTEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+  </customrecordcustomfields>
+</customrecordtype>

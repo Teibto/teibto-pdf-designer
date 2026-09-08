@@ -3,11 +3,11 @@
 <!-- @author Wichit Wongta -->
 <!-- @since 2026-09-09 -->
 
-Issue #199 remains open. Authenticated envelopes, part verification and guarded PDF-byte
-verification are implemented locally in schema v4. Chunking, automatic recovery and native-account
-security remain unverified/unimplemented as detailed below. The current worker renders one
-document per map invocation and merges all successful XML in summarize. Its 8 MiB / 500-document
-limits bound input, but do not prove enough governance remains to merge and publish the result.
+Issue #199 remains open. Schema v5 implements authenticated PART/CHUNK publication, per-document
+rendering, metadata-only planning/finalization, a separate bounded merge reduce phase and guarded
+PDF-byte downloads. Owner-triggered merge recovery verifies the prior task is terminal and claims
+the job atomically. These are local implementations, not native-account security or capacity proof.
+Render recovery, orphan adoption, bounded retention and deployment pools remain unfinished.
 
 ## Enqueue acceptance boundary
 
@@ -69,10 +69,15 @@ after dependent jobs expire or migrate.
 
 ## Durable storage contract
 
-Extend the job with schema, immutable generation, phase/run token, snapshot/plan digest,
-output-manifest reference, chunk count and diagnostic code/reference. Add one artifact record
-type with native owner, parent job, generation, kind PART/CHUNK, ordinal, state, attempt token,
-intended filename, file ID, byte count, digest and bounded metadata.
+The current job stores the immutable snapshot digest, phase, signed chunk plan, merge task and
+signed output manifest. The artifact record binds native owner, logical external ID, parent job,
+snapshot generation, kind PART/CHUNK, ordinal, COMMITTED state and signed bounded payload. Payloads
+include file identity, byte count, digest and producer proof. A single create/save publishes the
+complete signed ledger row; no unsigned intermediate record is treated as success.
+
+Attempt tokens, pre-save WRITING rows and orphan adoption described below are still a future
+extension. A file saved before a failed ledger commit is retained as uncommitted work and cannot
+be inferred successful from its filename. Current recovery reuses committed artifacts only.
 
 PART metadata identifies the request sequence, transaction and render time. Sequence is the
 identity: repeated occurrences of one transaction must remain distinct. CHUNK metadata contains
@@ -80,8 +85,8 @@ ordered committed part references and their authenticated digests. Validate uniq
 `(job, generation, kind, ordinal)` keys in sandbox before relying on them. Parent authorization
 precedes every artifact access; permissions start deny-by-default.
 
-Initialize missing part rows in worker input preparation rather than spending Suitelet governance
-on up to 500 record creations. For competing recovery claims, use load/check/change/`record.save()`
+Any future initialization of pending part rows belongs in worker input preparation rather than
+spending Suitelet governance on up to 500 record creations. For competing recovery claims, use load/check/change/`record.save()`
 with optimistic-lock conflict handling, not separate load and `submitFields()` as a pretend
 compare-and-set. Generation tokens fence stale workers for ordinary crash recovery; editable
 tokens are not protection against malicious rollback.
@@ -113,7 +118,7 @@ On-demand workers inherit the submitting identity and role; prove that for both 
 target account. Use a distinct merge deployment and reconcile its returned task ID.
 [On-demand submission](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
 
-Persist an attempt's intended filename/hash before saving. After a crash between file save and
+Future orphan adoption must persist an attempt's intended filename/hash before saving. After a crash between file save and
 record commit, search only the authorized job folder and reuse a file only if the expected
 identity/size/digest matches. After artifact commit, reuse the committed artifact even when
 `context.write()` was lost. Resume incomplete chunks after planning/publication interruptions;
@@ -154,3 +159,10 @@ outputs, authorizes phase boundaries and performs every connected action.
 Do not run simultaneous writers against the shared batch library. Schema migration must drain
 old tasks and reject incompatible envelopes explicitly. New phases are not enabled on an account
 until secret/permission setup, deployment identity and recovery/negative tests are verified there.
+
+Current local evidence includes 51 documents split 25/25/1, Thai byte-boundary chunking, 500-row
+planning without XML reads, finalization without PDF reads, lost PART/CHUNK output callbacks,
+reused committed chunks, rejected PDF substitutions, complete/partial accounting and concurrent
+submission/finalization claims. Publication validates signed metadata; guarded downloads verify
+actual current PDF bytes. Retention deliberately runs in neither summarize phase until a bounded
+cleanup implementation is available.

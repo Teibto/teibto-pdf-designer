@@ -225,14 +225,14 @@ SuiteScripts/
 
 ### Permission migration for #199
 
-Drain existing batch tasks before deploying schema v4. Old jobs without authenticated identity are
+Drain existing batch tasks before deploying schema v5. Old jobs without authenticated identity are
 rejected with resubmission guidance; do not mix old/new worker files while tasks run. Queue jobs
 now retain the server-resolved XML and copies at enqueue. No edits to the template or default
 after submission change that job. Per-job private folders and authenticated snapshots are implemented,
 but secret restrictions, native historical access and role-revocation behavior require sandbox evidence under
 `docs/PRODUCTION-READINESS.md`.
 Limits are 500 documents per job, 1,000,000 XML characters per snapshot, 8 MiB serialized job,
-8 MiB resolved XML aggregate and 20 render copies per document across immediate/queued/sample
+8 MiB framed XML per merge chunk (at most 25 documents), and 20 render copies per document across immediate/queued/sample
 paths. These limits do not establish live capacity; test governance/latency before rollout.
 
 If save reports that content was saved but default reconciliation failed, keep the returned
@@ -382,7 +382,7 @@ Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Admini
 | Name | PLD - Batch Print (Map/Reduce) |
 | ID | `customscript_pld_batch_mr` |
 | Script File | `pld_mr_batch_print.js` |
-| Parameter | `custscript_pld_mr_job` — ID ของ `customrecord_pld_batch_job` (schema v4; หน้าจอเขียนให้เอง) |
+| Parameter | `custscript_pld_mr_job` — ID ของ `customrecord_pld_batch_job` (schema v5; หน้าจอเขียนให้เอง) |
 
 **Deploy:**
 
@@ -392,7 +392,7 @@ Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Admini
 | ID | `customdeploy_pld_batch_mr` |
 | Status | Not Scheduled (สั่งงานผ่าน `N/task` จากหน้าจอเท่านั้น) |
 
-Candidate #199 requires `customrecord_pld_batch_job`. Its `USEPERMISSIONLIST` starts with no
+Candidate #199 requires `customrecord_pld_batch_job` and `customrecord_pld_batch_artifact`. Their `USEPERMISSIONLIST` starts with no
 account-specific grants. Configure selected caller roles with EDIT and VIEWANDEDIT restrictions
 on the record/role permission lists, plus the minimum File Cabinet and scheduling permissions.
 Native VIEWANDEDIT includes creator/subordinates; application checks also require exact job
@@ -405,7 +405,7 @@ The file list now lists the caller's jobs. Status/download routes accept `job=<I
 ownership; download requires a committed result in that private folder, with `isOnline=false`.
 Notifications link to authenticated Suitelet routes, not raw File Cabinet URLs.
 
-Drain existing tasks before deploying schema v4; the parameter requires an authenticated job record ID.
+Drain existing tasks before deploying schema v5; the parameter requires an authenticated job record ID.
 Test two users, supervisors, subsidiaries, a weaker role of the same user, direct Cabinet/native
 API access and Company-Wide Usage before enabling callers. Folder owners/admins retain native
 access; same-user role revocation and snapshot integrity are not established by route checks.
@@ -413,12 +413,13 @@ Failed merge/commit retains private inputs for operator recovery. Automatic orph
 retention, a deployment pool and chunked outputs are still pending; this remains a sandbox
 candidate, not a validated production queue.
 
-#### Required batch signing secret (schema v4)
+#### Required batch signing secret (schema v5)
 
 Before enabling queue access, an authorized account administrator must provision the account-local
 API secret `custsecret_pld_batch_v1` with a new independent high-entropy value. No value belongs in
 source control, script parameters, logs or deployment artifacts. Configure approved employees and
-restrict script use to `customscript_pld_batch` and `customscript_pld_batch_mr`; do not allow all
+restrict script use to `customscript_pld_batch`, `customscript_pld_batch_mr` and
+`customscript_pld_batch_merge`; do not allow all
 scripts. Protect those scripts and their libraries from caller edits. Keep management access with
 trusted administrators. Restrict domains for crypto-only use according to Oracle's setup guidance.
 [Secret access](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_160337298977.html),
@@ -428,9 +429,9 @@ The new `custrecord_pld_job_auth` and `custrecord_pld_job_resultseal` fields hol
 envelopes, not secret values. Job writes use optimistic record saves and bounded conflict retries.
 Snapshots, part XML and result metadata are authenticated against account/environment and domain;
 downloads verify PDF bytes and stream an unsaved copy of the verified contents. The final PDF must
-fit the 10 MiB authenticated read limit; larger output fails explicitly until chunking is available.
+fit the 10 MiB authenticated read limit per chunk; larger individual output fails explicitly.
 
-Unsigned v3 jobs and earlier outputs are deliberately unsupported by the guarded routes. Preserve
+V4 jobs and earlier outputs do not have the schema v5 ledger/state contract. Preserve
 their private artifacts under the approved retention policy and finish/drain them with the prior
 deployment before migration; never add an unsigned fallback or sign arbitrary old native fields.
 An unsigned inert row can remain if initial secret access fails. Operators must reconcile such
@@ -441,6 +442,32 @@ Test unauthorized scripts/employees, swapped account/role/job identity, altered 
 and concurrent status/task-ID writes. Retain the prior deployment for rollback while draining the
 matching schema. Signing detects forgery but does not revoke native owner access or stop replay of
 old valid signed state; exactly-once publication and historical-access policy remain release gates.
+
+#### Merge deployment and recovery (schema v5)
+
+Deploy `pld_mr_batch_merge.js` as `customscript_pld_batch_merge` /
+`customdeploy_pld_batch_merge`, Not Scheduled, Current Role. Parameter
+`custscript_pld_merge_job` contains the authenticated job record ID. Render workers publish PART
+records before MR output; merge reduce publishes one CHUNK record per bounded invocation.
+Exact `(job, snapshot digest, kind, ordinal)` external IDs provide logical uniqueness, which must
+be verified under concurrent native saves in sandbox. No unsigned intermediate ledger row is used.
+
+The signed plan accounts for every selected sequence, including failed documents. Finalization
+checks ledger metadata and publishes one signed ordered manifest; each download separately
+rechecks the actual PDF bytes. Tests do not prove that unchanged File Cabinet content is available
+at publication time. A modified/deleted result fails guarded download and needs operator review.
+
+The caller can POST `action=recover&job=<ID>` only for MERGE_FAILED jobs with a stored merge task
+that `task.checkStatus` reports COMPLETE or FAILED. An optimistic claim prevents concurrent
+requests from both submitting. The old task ID is cleared before submission. Missing/unknown
+submission outcomes remain MERGE_SUBMIT_UNKNOWN for operator reconciliation; timestamps never
+authorize a blind resubmit. [Task status API](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4345805891.html).
+
+Private snapshots, XML parts and unused candidate PDFs remain retained after this phase, including
+successful jobs, to avoid exceeding summarize governance with hundreds of deletions. Bounded
+retention, adoption of files saved before ledger commit, render-stage recovery and deployment pools
+are still pending. Size limits are safety bounds; measure actual BFO usage, output size and Thai
+layout before setting release capacity.
 
 ---
 

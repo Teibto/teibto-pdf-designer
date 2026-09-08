@@ -4,7 +4,7 @@
  */
 'use strict';
 const { loadAmd } = require('./amd');
-const JOB_FIELDS = ['requester','role','status','folder','parent','snapshot','result','resultseal','requested','printed','failed','task'];
+const JOB_FIELDS = ['requester','role','status','folder','parent','snapshot','result','resultseal','requested','printed','failed','task','snapshotdigest','phase','plan','mergetask','outputs'];
 function signJob(stubs, id, row) {
   const value = { id: String(id), owner: String(row.owner ?? '') };
   JOB_FIELDS.forEach(k => { value[k] = String(row['custrecord_pld_job_' + k] ?? ''); });
@@ -61,7 +61,7 @@ function batchStore(stubs, files, seed) {
     },
   });
   stubs['N/url'] = { HostType: { APPLICATION: 'APPLICATION' }, resolveDomain: () => 'acct.app.netsuite.com',
-    resolveScript: ({ params }) => '/app/site/hosting/scriptlet.nl?script=123&deploy=1&action=' + params.action + '&job=' + params.job };
+    resolveScript: ({ params }) => '/app/site/hosting/scriptlet.nl?script=123&deploy=1&action=' + params.action + '&job=' + params.job + (params.chunk === undefined ? '' : '&chunk=' + params.chunk) };
   return rows;
 }
 module.exports = { batchStore, signJob };

@@ -67,7 +67,11 @@ define([
       if (request.method === 'POST' && request.parameters.action === 'queue') {
         return queueBatch(context, tel);
       }
-      if (request.parameters.action === 'download') return context.response.writeFile({ file: jobs.download(request.parameters.job), isInline: false });
+      if (request.parameters.action === 'recover') {
+        if (request.method !== 'POST') throw new Error('Recovery requires POST');
+        return recoverMerge(context, tel);
+      }
+      if (request.parameters.action === 'download') return context.response.writeFile({ file: jobs.download(request.parameters.job, request.parameters.chunk), isInline: false });
       if (request.parameters.action === 'status') return writeJobStatus(context);
       if (request.parameters.action === 'files') {
         return writeFilesPage(context, tel);
@@ -251,7 +255,7 @@ define([
     var taskId;
     try {
       var jobContents = integrity.seal('snapshot', {
-        schemaVersion: 4, templateSnapshot: snapshot, jobId: jobId,
+        schemaVersion: 5, templateSnapshot: snapshot, jobId: jobId,
         rectype: recType, tplid: tplId, ids: ids, folder: folder,
         requester: { id: user.id, role: user.role }
       });
@@ -267,7 +271,7 @@ define([
       jobs.assertFolder(currentJob);
       jobFileId = snapshotFile.save();
       jobs.loadFile(jobs.load(jobId), jobFileId);
-      jobs.update(jobId, { snapshot: jobFileId, status: 'QUEUED' });
+      jobs.update(jobId, { snapshot: jobFileId, snapshotdigest: integrity.digest(jobContents), status: 'QUEUED', phase: 'RENDER_QUEUED' });
       taskId = task.create({
         taskType: task.TaskType.MAP_REDUCE,
         scriptId: 'customscript_pld_batch_mr',
@@ -317,11 +321,64 @@ define([
     return bytes;
   }
 
+  function recoverMerge(context, tel) {
+    var job = jobs.load(context.request.parameters.job);
+    if (job.status !== 'FAILED' || job.phase !== 'MERGE_FAILED' || !job.mergetask || !job.plan) {
+      throw new Error('งานนี้ยังไม่พร้อมให้ทำขั้นรวมไฟล์ต่อ — กรุณาตรวจสอบกับผู้ดูแล');
+    }
+    var plan = integrity.open('plan', job.plan);
+    if (!plan || plan.jobId !== job.id || plan.snapshotDigest !== job.snapshotdigest || !Array.isArray(plan.chunks) || !plan.chunks.length) {
+      throw new Error('Invalid authenticated recovery plan');
+    }
+    var checked = task.checkStatus({ taskId: job.mergetask });
+    if (!checked || (checked.status !== task.TaskStatus.COMPLETE && checked.status !== task.TaskStatus.FAILED)) {
+      throw new Error('งานประมวลผลเดิมยังไม่สิ้นสุดหรือยังตรวจสอบไม่ได้ — ไม่ต้องส่งซ้ำ');
+    }
+    jobs.update(job.id, { status: 'RUNNING', phase: 'MERGE_SUBMITTING', mergetask: '' },
+      { status: 'FAILED', phase: 'MERGE_FAILED', mergetask: job.mergetask });
+    var taskId;
+    try {
+      taskId = task.create({ taskType: task.TaskType.MAP_REDUCE, scriptId: 'customscript_pld_batch_merge',
+        deploymentId: 'customdeploy_pld_batch_merge', params: { custscript_pld_merge_job: job.id } }).submit();
+      if (!taskId) throw new Error('Missing merge task identity');
+    } catch (submitError) {
+      try { jobs.update(job.id, { phase: 'MERGE_SUBMIT_UNKNOWN' }); } catch (stateError) {
+        log.error({ title: 'PLD recovery outcome persistence failed', details: { jobId: job.id, message: stateError.message } });
+      }
+      log.error({ title: 'PLD recovery submission unknown', details: { jobId: job.id, message: submitError.message } });
+      throw new Error('ยังยืนยันผลการส่งงานไม่ได้ — แจ้งผู้ดูแลพร้อมหมายเลขงาน ' + job.id + ' และไม่ต้องส่งซ้ำ');
+    }
+    var warning = '';
+    try { jobs.update(job.id, { mergetask: taskId }); }
+    catch (stateError) {
+      log.error({ title: 'PLD accepted recovery task persistence failed', details: { jobId: job.id, taskId: taskId, message: stateError.message } });
+      warning = 'ระบบรับงานแล้ว แต่บันทึกหมายเลขประมวลผลไม่สำเร็จ กรุณาติดตามงานเดิม ไม่ต้องส่งซ้ำ';
+    }
+    writeQueuedPage(context, tel, '', Number(job.requested), job.id, warning);
+  }
+
   function jobSummary(job) {
-    var text = '<p>Job ' + esc(job.id) + ' · ' + esc(job.status) + '</p>' +
+    var statuses = { PREPARING: 'เตรียมงาน', QUEUED: 'รอประมวลผล', RUNNING: 'กำลังประมวลผล',
+      COMPLETE: 'สำเร็จครบ', PARTIAL: 'สำเร็จบางส่วน', FAILED: 'ไม่สำเร็จ' };
+    var text = '<p>งาน ' + esc(job.id) + ' · ' + esc(statuses[job.status] || job.status) + '</p>' +
       '<p>เลือก ' + esc(job.requested) + ' ใบ · สำเร็จ ' + esc(job.printed) + ' ใบ · ล้มเหลว ' + esc(job.failed) + ' ใบ</p>';
     if (job.status === 'PARTIAL') text += '<p class="warn">ไฟล์นี้ไม่ครบทุกใบ กรุณาตรวจสอบรายการที่ล้มเหลวก่อนใช้งาน</p>';
-    if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.result) text += '<a href="' + esc(jobs.route(job.id, 'download')) + '">ดาวน์โหลด PDF</a>';
+    if (job.status === 'FAILED' && job.phase === 'MERGE_FAILED' && job.mergetask) {
+      text += '<form method="POST" action="' + esc(jobs.route(job.id, 'recover')) + '">' +
+        '<input type="hidden" name="action" value="recover"><input type="hidden" name="job" value="' + esc(job.id) + '">' +
+        '<button type="submit">ทำขั้นรวมไฟล์ต่อ</button><p>ใช้ผลรายเอกสารและไฟล์ส่วนที่ตรวจสอบแล้ว ไม่สร้างงานพิมพ์ใหม่</p></form>';
+    }
+    if (job.phase === 'MERGE_SUBMIT_UNKNOWN') text += '<p class="warn">ยังยืนยันการส่งขั้นรวมไฟล์ไม่ได้ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงานและไม่ต้องส่งซ้ำ</p>';
+    if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.outputs) {
+      var outputs = jobs.results(job.id);
+      text += outputs.map(function (output) {
+        return '<p><a href="' + esc(jobs.route(job.id, 'download', output.ordinal)) + '">ไฟล์ ' +
+          (output.ordinal + 1) + ' จาก ' + outputs.length + '</a> · ลำดับเอกสาร ' +
+          output.sequences.map(function (seq) { return seq + 1; }).join(', ') + '</p>';
+      }).join('');
+      if (job.status === 'PARTIAL') text += '<p class="warn">ลำดับเอกสารที่ไม่สำเร็จ: ' +
+        jobs.failedSequences(job.id).map(function (seq) { return seq + 1; }).join(', ') + '</p>';
+    } else if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.result) text += '<a href="' + esc(jobs.route(job.id, 'download')) + '">ดาวน์โหลด PDF</a>';
     return text;
   }
   function writeJobStatus(context) {

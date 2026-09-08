@@ -16,6 +16,26 @@
        mirrored on those roles. Native restrictions include subordinates; application
        checks also require exact requester and role. -->
   <customrecordcustomfields>
+    <customrecordcustomfield scriptid="custrecord_pld_job_snapshotdigest">
+      <label>Snapshot Digest</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_phase">
+      <label>Processing Phase</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_plan">
+      <label>Authenticated Chunk Plan</label><fieldtype>CLOBTEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_mergetask">
+      <label>Merge Task</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_outputs">
+      <label>Authenticated Output Manifest</label><fieldtype>CLOBTEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
     <customrecordcustomfield scriptid="custrecord_pld_job_requester">
       <label>Requester</label><fieldtype>TEXT</fieldtype>
       <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>

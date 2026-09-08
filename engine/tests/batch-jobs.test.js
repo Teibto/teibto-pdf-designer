@@ -263,3 +263,104 @@ test('missing signing secret leaves newly created identity unsigned with no fold
   assert.equal(f.files.created.length, 0);
   assert.throws(() => f.jobs.load('501'));
 });
+
+function publishChunks(f, groups, requested = 4) {
+  const snapshotDigest = 'a'.repeat(64);
+  const printed = groups.flat().length;
+  const outputs = groups.map((sequences, ordinal) => ({ ordinal, fileId:'901',
+    proof:f.integrity.seal('result', {jobId:'501',snapshotDigest,ordinal,folder:'77',fileId:'901',
+      name:'batch_invoice_1_501.pdf',contentsHash:f.integrity.digestPdf(Buffer.from('%PDF-1.4 synthetic QA').toString('base64')),
+      size:21,printed:sequences.length,failed:0,sequences,partRefs:[]}) }));
+  Object.assign(f.job,{custrecord_pld_job_snapshotdigest:snapshotDigest,custrecord_pld_job_requested:requested,
+    custrecord_pld_job_printed:printed,custrecord_pld_job_failed:requested-printed,
+    custrecord_pld_job_status:printed===requested?'COMPLETE':'PARTIAL',
+    custrecord_pld_job_outputs:f.integrity.seal('manifest',{jobId:'501',snapshotDigest,folder:'77',requested,
+      printed,failed:requested-printed,outputs})});
+  signJob(f.stubs,'501',f.job);
+}
+
+test('multiple published chunks require explicit ordinal and status shows ordered ranges plus missing sequences', () => {
+  const f=fixture(); publishChunks(f,[[0,1],[3]]);
+  assert.throws(()=>f.jobs.download('501'),/หมายเลขไฟล์/);
+  assert.equal(f.jobs.download('501','1').getContents(),Buffer.from('%PDF-1.4 synthetic QA').toString('base64'));
+  assert.throws(()=>f.jobs.download('501','2'),/หมายเลขไฟล์/);
+  assert.throws(()=>f.jobs.download('501','../901'),/หมายเลขไฟล์/);
+  assert.deepEqual(Array.from(f.jobs.failedSequences('501')),[2]);
+  const sl=loadAmd('./pld_sl_batch_print',f.stubs),ctx=contextStub({parameters:{action:'status',job:'501'}});
+  sl.onRequest(ctx.context);
+  assert.match(ctx.response.state.body,/ไฟล์ 1 จาก 2/);
+  assert.match(ctx.response.state.body,/chunk=1/);
+  assert.match(ctx.response.state.body,/ลำดับเอกสารที่ไม่สำเร็จ: 3/);
+  assert.doesNotMatch(ctx.response.state.body,/media.nl/);
+});
+
+test('signed but inconsistent output manifests cannot publish duplicate, unordered or missing accounting', () => {
+  for(const groups of [[[0,1],[1]],[[2],[0]],[[0],[4]]]) {
+    const f=fixture(); publishChunks(f,groups);
+    assert.throws(()=>f.jobs.results('501'),/sequence/);
+    assert.throws(()=>f.jobs.download('501','0'),/sequence/);
+  }
+  const f=fixture(); publishChunks(f,[[0],[1]]);
+  f.job.custrecord_pld_job_status='RUNNING'; signJob(f.stubs,'501',f.job);
+  assert.throws(()=>f.jobs.download('501','0'),/not committed/);
+});
+
+function recoveryFixture(status = 'FAILED') {
+  const f=fixture(), submitted=[], checked=[];
+  Object.assign(f.job,{custrecord_pld_job_status:'FAILED',custrecord_pld_job_phase:'MERGE_FAILED',
+    custrecord_pld_job_mergetask:'OLD_MERGE_TASK',custrecord_pld_job_snapshotdigest:'a'.repeat(64),
+    custrecord_pld_job_plan:f.integrity.seal('plan',{jobId:'501',snapshotDigest:'a'.repeat(64),chunks:[{ordinal:0,sequences:[0]}]})});
+  signJob(f.stubs,'501',f.job);
+  f.stubs['N/task']={TaskType:{MAP_REDUCE:'MAP_REDUCE'},TaskStatus:{COMPLETE:'COMPLETE',FAILED:'FAILED'},
+    checkStatus(opts){checked.push(opts.taskId);return{status};},
+    create(opts){return{submit(){submitted.push(opts);return'NEW_MERGE_TASK';}};}};
+  f.sl=loadAmd('./pld_sl_batch_print',f.stubs);
+  f.request=(method='POST')=>{const ctx=contextStub({method,parameters:{action:'recover',job:'501'}});f.sl.onRequest(ctx.context);return ctx.response.state;};
+  return{...f,submitted,checked};
+}
+
+test('merge recovery requires POST, authoritative terminal task and a single atomic claim', () => {
+  for(const status of ['COMPLETE','FAILED']) {
+    const f=recoveryFixture(status);
+    assert.match(f.request('GET').body,/requires POST/);
+    assert.equal(f.checked.length,0);
+    assert.match(f.request().body,/ส่งเข้าคิวแล้ว/);
+    assert.deepEqual(f.checked,['OLD_MERGE_TASK']);
+    assert.equal(f.submitted.length,1);
+    assert.equal(f.submitted[0].scriptId,'customscript_pld_batch_merge');
+    assert.equal(f.submitted[0].params.custscript_pld_merge_job,'501');
+    assert.equal(f.jobs.load('501').mergetask,'NEW_MERGE_TASK');
+    f.request();assert.equal(f.submitted.length,1,'double submission must not acquire a second claim');
+  }
+  for(const status of ['PROCESSING','PENDING',null]) {
+    const f=recoveryFixture(status);f.request();
+    assert.equal(f.submitted.length,0);
+    assert.equal(f.jobs.load('501').phase,'MERGE_FAILED');
+  }
+});
+
+test('merge recovery rejects changed claims and unknown submission is never retried automatically', () => {
+  const raced=recoveryFixture();
+  raced.stubs['N/task'].checkStatus=()=>{
+    raced.jobs.update('501',{status:'RUNNING',phase:'MERGE_SUBMITTING',mergetask:''});return{status:'COMPLETE'};
+  };
+  assert.match(raced.request().body,/changed/);assert.equal(raced.submitted.length,0);
+  const unknown=recoveryFixture();let attempts=0;
+  unknown.stubs['N/task'].create=()=>({submit(){attempts++;throw new Error('uncertain submission');}});
+  assert.match(unknown.request().body,/ไม่ต้องส่งซ้ำ/);
+  assert.equal(unknown.jobs.load('501').phase,'MERGE_SUBMIT_UNKNOWN');
+  assert.equal(unknown.jobs.load('501').mergetask,'');
+  unknown.request();assert.equal(attempts,1);
+});
+
+test('accepted recovery with task metadata failure never retains old task identity for a later retry', () => {
+  const f=recoveryFixture(),submit=f.stubs['N/record'].submitFields;
+  f.stubs['N/record'].submitFields=opts=>{
+    if(opts.values.custrecord_pld_job_mergetask==='NEW_MERGE_TASK')throw new Error('metadata unavailable');
+    return submit(opts);
+  };
+  assert.match(f.request().body,/ระบบรับงานแล้ว/);
+  assert.equal(f.submitted.length,1);
+  assert.equal(f.jobs.load('501').mergetask,'');
+  assert.equal(f.jobs.load('501').status,'RUNNING');
+});

@@ -496,7 +496,7 @@ test('queue freezes server-resolved XML and copies, ignoring request snapshot fi
   });
   suitelet.onRequest(context);
   const job = openSnapshot(files.created.find((f) => /^pld_job_/.test(f.name)).contents);
-  assert.equal(job.schemaVersion, 4);
+  assert.equal(job.schemaVersion, 5);
   assert.equal(job.templateSnapshot.xml, TPL_XML);
   assert.deepEqual(job.templateSnapshot.copies, JSON.parse(TWO_COPIES).copies);
 });
@@ -657,7 +657,7 @@ test('queued snapshot is authenticated and in-place XML tampering invalidates it
   const f = buildBatch({ templates: TEMPLATES });
   f.suitelet.onRequest(queueRequest(['11']).context);
   const saved = f.files.created[0].contents;
-  assert.equal(f.openSnapshot(saved).schemaVersion, 4);
+  assert.equal(f.openSnapshot(saved).schemaVersion, 5);
   const altered = saved.replace('<body>ok</body>', '<body>injected</body>');
   assert.notEqual(saved, altered);
   assert.throws(() => f.openSnapshot(altered), /integrity|authentication/i);
