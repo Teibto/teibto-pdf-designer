@@ -63,6 +63,8 @@ function buildMr({ job = JOB, failIds = [], emailFails = false } = {}) {
     files: job
       ? {
           900: {
+            name: "pld_job_501.json",
+            get size() { return Buffer.byteLength(signedSnapshot || ""); },
             folder: "77",
             isOnline: false,
             getContents: () => signedSnapshot,
@@ -415,6 +417,43 @@ for (const kind of ["PART", "CHUNK"]) {
     assert.equal(f.files.deleted.length, 0);
   });
 }
+
+test("failure details use the original ordered selection for partial and all-failed jobs without rendering", () => {
+  for (const allFailed of [false, true]) {
+    const f = buildMr({ job: { ...JOB, ids: ["11", "12", "12"] }, failIds: allFailed ? ["11", "12"] : ["12"] });
+    runRender(f);
+    if (!allFailed) runMerge(f);
+    const helpers = require("./helpers/ns-stubs"); f.stubs["N/xml"] = helpers.xmlStub;
+    const sl = loadAmd("./pld_sl_batch_print", f.stubs);
+    const status = helpers.contextStub({ parameters: { action: "status", job: "501" } }); sl.onRequest(status.context);
+    assert.match(status.response.state.body, /action=failures/);
+    const before = JSON.stringify([...f.rows]), renders = f.render.calls.renderedAsString, tasks = f.tasks.length;
+    const details = helpers.contextStub({ parameters: { action: "failures", job: "501", ids: "99", file: "999" } });
+    sl.onRequest(details.context);
+    const html = details.response.state.body;
+    assert.match(html, /รายการที่ไม่สำเร็จ/);
+    assert.match(html, /<td>2<\/td><td>12<\/td><td>สร้างเอกสารไม่สำเร็จ/);
+    assert.match(html, /<td>3<\/td><td>12<\/td><td>สร้างเอกสารไม่สำเร็จ/);
+    assert.equal(html.includes('<td>1</td><td>11</td>'), allFailed);
+    assert.match(html, /action=status/);
+    assert.equal(html.includes('กลับไปดูสถานะงานและไฟล์ PDF ที่สร้างสำเร็จ'), !allFailed);
+    assert.doesNotMatch(html, /media\.nl|<td>99<\/td>|<form/);
+    assert.equal(JSON.stringify([...f.rows]), before);
+    assert.equal(f.render.calls.renderedAsString, renders); assert.equal(f.tasks.length, tasks);
+  }
+});
+
+test("failure details reject changed snapshot identity without leaking source selections", () => {
+  const f = buildMr({ failIds: ["12"] }); runRender(f); runMerge(f);
+  f.stubs["N/xml"] = require("./helpers/ns-stubs").xmlStub;
+  const load = f.files.module.load;
+  f.files.module.load = opts => String(opts.id) === "900" ? { ...load(opts), isOnline: true } : load(opts);
+  const sl = loadAmd("./pld_sl_batch_print", f.stubs);
+  const details = require("./helpers/ns-stubs").contextStub({ parameters: { action: "failures", job: "501" } });
+  sl.onRequest(details.context);
+  assert.doesNotMatch(details.response.state.body, /<td>12<\/td>|<caption>/);
+  assert.match(details.response.state.body, /ไม่สำเร็จ|ข้อผิดพลาด/);
+});
 
 test("render recovery reuses committed parts and the immutable snapshot after an input-stage failure", () => {
   const f = buildMr();

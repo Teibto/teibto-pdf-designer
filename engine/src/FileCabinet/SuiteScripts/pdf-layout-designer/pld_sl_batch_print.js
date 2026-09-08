@@ -32,8 +32,8 @@ define([
   'N/record',
   'N/task',
   './pld_lib_render',
-  './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity', './pld_lib_batch_cleanup'
-], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs, integrity, cleanup) {
+  './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity', './pld_lib_batch_cleanup', './pld_lib_batch_selection'
+], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs, integrity, cleanup, selection) {
 
   /** หน่วย governance ที่กันไว้ให้ขั้นตอนรวมไฟล์ + ส่ง response ตอนท้าย */
   var RESERVE_UNITS = 100;
@@ -77,6 +77,7 @@ define([
       }
       if (request.parameters.action === 'download') return context.response.writeFile({ file: jobs.download(request.parameters.job, request.parameters.chunk), isInline: false });
       if (request.parameters.action === 'status') return writeJobStatus(context);
+      if (request.parameters.action === 'failures') return writeFailureDetails(context);
       if (request.parameters.action === 'files') {
         return writeFilesPage(context, tel);
       }
@@ -463,7 +464,30 @@ define([
       if (job.status === 'PARTIAL') text += '<p class="warn">ลำดับเอกสารที่ไม่สำเร็จ: ' +
         jobs.failedSequences(job.id).map(function (seq) { return seq + 1; }).join(', ') + '</p>';
     } else if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.result) text += '<a href="' + esc(jobs.route(job.id, 'download')) + '">ดาวน์โหลด PDF</a>';
+    if ((job.status === 'PARTIAL' || (job.status === 'FAILED' && job.phase === 'DONE')) && job.plan) {
+      text += '<p><a href="' + esc(jobs.route(job.id, 'failures')) + '">ดูรายละเอียดรายการที่ไม่สำเร็จ</a></p>';
+    }
     return text;
+  }
+  function writeFailureDetails(context) {
+    var source = selection.read(context.request.parameters.job);
+    var reasons = {
+      RENDER_FAILED: 'สร้างเอกสารไม่สำเร็จ',
+      NO_COMMITTED_PART: 'ยังไม่มีไฟล์เอกสารที่ยืนยันผลสำเร็จ',
+    };
+    var rows = source.failures.map(function (failure) {
+      return '<tr><td>' + (failure.seq + 1) + '</td><td>' + esc(failure.recid) + '</td><td>' + esc(reasons[failure.code]) + '</td></tr>';
+    }).join('');
+    var html = '<h1>รายการที่ไม่สำเร็จ</h1><p>งาน ' + esc(source.job.id) + ' · ไม่สำเร็จ ' + source.failures.length +
+      ' จาก ' + esc(source.job.requested) + ' ใบ</p>' +
+      '<p>ลำดับอ้างอิงรายการที่เลือกในงานเดิม รายการเดียวกันที่เลือกหลายครั้งจะแสดงแยกตามลำดับ</p>' +
+      '<table><caption>เอกสารที่ยังไม่มีในผลพิมพ์ของงานนี้</caption><thead><tr><th scope="col">ลำดับในงานเดิม</th>' +
+      '<th scope="col">รหัสรายการ (Internal ID)</th><th scope="col">ผลการสร้างเอกสาร</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<p>แจ้งผู้ดูแลพร้อมหมายเลขงานและลำดับที่ไม่สำเร็จเพื่อตรวจสอบสาเหตุ</p>' +
+      '<p><a href="' + esc(jobs.route(source.job.id)) + '">' +
+      (Number(source.job.printed) > 0 ? 'กลับไปดูสถานะงานและไฟล์ PDF ที่สร้างสำเร็จ' : 'กลับไปดูสถานะงาน') + '</a></p>';
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('รายการที่ไม่สำเร็จ', html));
   }
   function writeJobStatus(context) {
     var job = jobs.load(context.request.parameters.job);

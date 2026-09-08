@@ -188,6 +188,15 @@ native search visibility, file types, conflict behavior and stage governance sti
 Drain older workers before rollout: older code does not understand WRITING rows or hashed PART
 names. Unreserved legacy orphans, stale-intent files and surplus matching files remain retained.
 
+Failure-selection verification: **291/291** engine tests pass, including nine new selection tests
+and 44 worker integration tests. The Thai failure-details page validates the original snapshot,
+exact plan/manifest partition, owner/role and terminal state; duplicate record IDs retain their
+original positions. Tampered storage, inconsistent partitions and mid-read state changes fail
+closed. Opening details performs no render or task submission. This read-only foundation does not
+close linked retry after a sealed plan: child identity and interrupted provisioning must become
+recoverable before that action is enabled. The preceding `09f78a3` orphan candidate passed
+[full CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34279116442).
+
 Use these as task/objective text when assigning agents; they are not assumed CLI syntax.
 Assign non-overlapping file ownership per task, preserve other agents' work, and return exact
 tests/evidence plus unresolved risks. Primary owns generated integration and every connected action.

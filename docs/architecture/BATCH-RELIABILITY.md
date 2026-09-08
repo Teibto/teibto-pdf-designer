@@ -231,6 +231,30 @@ reused committed chunks, rejected PDF substitutions, complete/partial accounting
 submission/finalization claims. Publication validates signed metadata; guarded downloads verify
 actual current PDF bytes. Cleanup deliberately runs in neither summarize phase.
 
+## Failed-selection verification and linked-retry boundary
+
+`pld_lib_batch_selection.read(jobId)` is read-only. It authorizes the original user/role, checks
+the private bounded snapshot and its exact digest, validates the immutable XML/copy labels, and
+checks the complete ordered plan partition. PARTIAL/DONE requires an exact match between planned
+chunks and published manifest sequences. FAILED/DONE requires an all-failed plan with no results.
+Failures must match original snapshot IDs and supported producer codes. Duplicate transaction IDs
+remain separate sequence occurrences. A final authenticated job reread rejects concurrent changes.
+
+The status page links to Thai failure details for these jobs. Details expose the original position,
+record ID and bounded reason label; request parameters cannot choose IDs or files. No transactions
+or PDF bytes are read, no current template is resolved and no work is submitted by this page.
+Snapshot/plan integrity failures stop the details view without changing the original result.
+
+Linked child-job retry remains unfinished. It must preserve the original job/PDFs and reuse the
+original template/copies while explaining that missing documents read current transaction data.
+One deterministic child identity per source failure set must survive duplicate POSTs, ambiguous
+record saves and provisioning interruptions. Current job creation saves an ID before sealing and
+creating its folder: adding a lookup or parent pointer alone does not close those crash windows.
+Implement an authenticated creation reservation and recoverable folder/snapshot provisioning
+before enabling a retry button. Submission must still use guarded WAITING/UNKNOWN transitions;
+existing-child lookup must never itself resubmit. Bind source state, sequence selection and lineage
+to action tokens and child snapshots without invalidating existing authenticated job envelopes.
+
 ## Bounded cleanup of published inputs
 
 The status page issues an action-specific signed token for an explicit owner POST. The same
