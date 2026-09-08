@@ -81,7 +81,7 @@ define([
     )
       throw new Error("Invalid batch map entry");
     var ctx = pipeline.artifactContext(job);
-    var part = artifacts.get(ctx, "PART", entry.seq);
+    var part = artifacts.get(ctx, "PART", entry.seq) || artifacts.recover(ctx, "PART", entry.seq);
     if (part) {
       pipeline.verifyPart(job, part);
       context.write({
@@ -102,11 +102,28 @@ define([
       throw new Error("Document did not resolve to <pdf>");
     var bytes = pipeline.utf8Bytes(contents);
     pipeline.assertXmlBudget(bytes + pipeline.framingBytes);
+    var hash = integrity.digest(contents);
+    var prepared = artifacts.prepare(ctx, "PART", entry.seq, {
+      jobId: job.jobId,
+      snapshotDigest: job.snapshotDigest,
+      folder: String(job.folder),
+      seq: entry.seq,
+      recid: String(entry.recid),
+      tranId: String(rendered.tranId || entry.recid),
+      name: artifacts.name(ctx, "PART", entry.seq, hash),
+      bytes: bytes,
+      contentsHash: hash,
+    });
+    if (prepared.committed) {
+      pipeline.verifyPart(job, prepared.committed);
+      context.write({ key: pipeline.sortKey(entry.seq), value: JSON.stringify(prepared.committed) });
+      return;
+    }
     jobs.assertFolder(job.durable);
     var partId = String(
       file
         .create({
-          name: pipeline.partName(job.jobId, entry.seq),
+          name: prepared.intent.name,
           fileType: file.Type.PLAINTEXT,
           contents: contents,
           encoding: file.Encoding.UTF8,
@@ -121,21 +138,10 @@ define([
       tranId: String(rendered.tranId || entry.recid),
       key: pipeline.sortKey(entry.seq),
     };
-    part.proof = integrity.seal("part", {
-      jobId: job.jobId,
-      snapshotDigest: job.snapshotDigest,
-      seq: entry.seq,
-      recid: part.recid,
-      tranId: part.tranId,
-      partId: partId,
-      folder: String(job.folder),
-      name: pipeline.partName(job.jobId, entry.seq),
-      bytes: bytes,
-      contentsHash: integrity.digest(contents),
-    });
+    part.proof = integrity.seal("part", Object.assign({}, prepared.intent, { partId: partId }));
     pipeline.verifyPart(job, part);
     // The unique durable ledger is authoritative even if context.write is lost.
-    part = artifacts.commit(ctx, "PART", entry.seq, part);
+    part = artifacts.commit(ctx, "PART", entry.seq, part, prepared.token);
     pipeline.verifyPart(job, part);
     context.write({
       key: pipeline.sortKey(entry.seq),

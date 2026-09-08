@@ -415,9 +415,9 @@ Drain existing tasks before deploying schema v5; the parameter requires an authe
 Test two users, supervisors, subsidiaries, a weaker role of the same user, direct Cabinet/native
 API access and Company-Wide Usage before enabling callers. Folder owners/admins retain native
 access; same-user role revocation and snapshot integrity are not established by route checks.
-Failed merge/commit retains private inputs for operator recovery. Automatic orphan recovery,
-retention, a deployment pool and chunked outputs are still pending; this remains a sandbox
-candidate, not a validated production queue.
+Failed merge/commit retains private inputs for recovery. Bounded orphan adoption, native deployment
+selection and chunked outputs are implemented locally. Age-based retention and native account QA
+remain pending; this remains a sandbox candidate, not a validated production queue.
 
 #### Required batch signing secret (schema v5)
 
@@ -458,6 +458,16 @@ programmatically with the caller's role. Parameter
 records before MR output; merge reduce publishes one CHUNK record per bounded invocation.
 Exact `(job, snapshot digest, kind, ordinal)` external IDs provide logical uniqueness, which must
 be verified under concurrent native saves in sandbox. No unsigned intermediate ledger row is used.
+
+Workers now reserve authenticated WRITING rows before saving PART/CHUNK files. Retried keys search
+only their private folder and exact full-hash filename, verify at most three candidate files, and
+commit the same row with a revision-bound token. Overflow or corrupt/unreadable candidates stop
+visibly. Signed CHUNK reservations also bind the current plan. Existing committed rows remain
+readable, but older workers reject WRITING rows and hashed PART names: drain tasks before this
+rollout or rollback. Do not downgrade while new reservations remain recoverable. No new SDF field
+is required; the existing state/payload fields carry the reservation. Unreserved old orphan files
+are not adopted. Validate native file search visibility, file types, save interruption, optimistic
+conflicts, both worker stages and restricted-role governance with synthetic data in sandbox.
 
 The signed plan accounts for every selected sequence, including failed documents. Finalization
 checks ledger metadata and publishes one signed ordered manifest; each download separately
@@ -515,7 +525,7 @@ users/roles and unrelated account workloads. Before rolling back to pinned deplo
 new submissions, finish/reconcile jobs using both secondary slots and disable the secondary
 deployments; do not remove an active deployment or its inputs.
 
-Age-based retention, adoption of files saved before ledger commit, recovery after a sealed plan and
+Age-based retention, recovery after a sealed plan and
 pool saturation/capacity QA remain pending. Size limits are safety bounds; measure actual BFO usage, output
 size and Thai layout before setting release capacity.
 

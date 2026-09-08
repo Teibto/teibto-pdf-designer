@@ -23,8 +23,8 @@ define([
   function sortKey(seq) {
     return ("00000" + seq).slice(-6);
   }
-  function partName(jobId, seq) {
-    return "pld_part_" + jobId + "_" + sortKey(seq) + ".txt";
+  function partName(jobId, seq, contentsHash) {
+    return "pld_part_" + jobId + "_" + sortKey(seq) + (contentsHash ? "_" + contentsHash : "") + ".txt";
   }
   function artifactContext(job) {
     return {
@@ -126,7 +126,8 @@ define([
       proof.recid !== String(part.recid) ||
       proof.partId !== String(part.partId) ||
       proof.folder !== String(job.folder) ||
-      proof.name !== partName(job.jobId, seq)
+      (proof.name !== partName(job.jobId, seq) &&
+        (!/^[a-f0-9]{64}$/.test(proof.contentsHash) || proof.name !== partName(job.jobId, seq, proof.contentsHash)))
     )
       throw new Error("Invalid authenticated batch part identity");
     var stored = jobs.loadFile(job.durable, part.partId);

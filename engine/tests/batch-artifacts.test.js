@@ -173,3 +173,155 @@ test('signed metadata list does not reread part file contents during planning', 
   };
   assert.deepEqual(plain(f.ledger.list(f.ctx, 'PART')), [p]);
 });
+
+
+function intentFixture(kind = 'PART') {
+  const f = fixture();
+  f.jobs.get('501').custrecord_pld_job_status = 'RUNNING';
+  f.jobs.get('501').custrecord_pld_job_phase = kind === 'PART' ? 'RENDERING' : 'MERGING';
+  if (kind === 'CHUNK') f.jobs.get('501').custrecord_pld_job_plan = f.integrity.seal('plan',{synthetic:true});
+  signJob(f.stubs, '501', f.jobs.get('501'));
+  const load = f.files.module.load;
+  f.files.module.load = opts => Object.assign(load(opts), {fileType: f.files.created.find(row => row.id === String(opts.id))?.fileType});
+  const search = f.stubs['N/search'].create;
+  f.stubs['N/search'].create = opts => {
+    if (opts.type !== 'file') return search(opts);
+    assert.deepEqual(plain(opts.filters), [['folder','anyof','77'],'AND',['name','is',f.searchName]]);
+    return {run:()=>({getRange:({start,end})=>f.files.created.filter(row=>String(row.folder)==='77' && row.name===f.searchName).slice(start,end)})};
+  };
+  f.makeIntent = (contents = '<pdf>synthetic recovery</pdf>') => {
+    const raw = kind === 'PART' ? contents : Buffer.from(contents).toString('base64');
+    const contentsHash = kind === 'PART' ? f.integrity.digest(raw) : f.integrity.digestPdf(raw);
+    const name = f.ledger.name(f.ctx,kind,0,contentsHash); f.searchName = name;
+    const intent = kind === 'PART' ? {jobId:'501',snapshotDigest:f.ctx.snapshotDigest,folder:'77',seq:0,recid:'11',tranId:'SYNTHETIC',name,bytes:Buffer.byteLength(contents),contentsHash}
+      : {jobId:'501',snapshotDigest:f.ctx.snapshotDigest,folder:'77',ordinal:0,sequences:[0],partRefs:[{seq:0,partId:'2000',contentsHash:f.integrity.digest('part')}],name,size:Buffer.byteLength(contents),printed:1,failed:0,contentsHash};
+    const save = () => {
+      const id = f.files.module.create({name,contents:raw,folder:'77',isOnline:false,fileType:kind==='PART'?'PLAINTEXT':'PDF',size:Buffer.byteLength(contents)}).save();
+      const proof = {...intent,[kind==='PART'?'partId':'fileId']:id};
+      return kind==='PART' ? {partId:id,recid:'11',tranId:'SYNTHETIC',key:'000000',proof:f.integrity.seal('part',proof)} : {fileId:id,proof:f.integrity.seal('result',proof)};
+    };
+    return {intent,save};
+  };
+  return f;
+}
+
+test('WRITING reservation is authenticated before save, invisible to list, and commits the same row',()=>{
+  for(const kind of ['PART','CHUNK']) {
+    const f=intentFixture(kind), producer=f.makeIntent();
+    const reservation=f.ledger.prepare(f.ctx,kind,0,producer.intent);
+    const id=[...f.rows.keys()][0];
+    assert.equal(f.integrity.open('artifact',f.rows.get(id).custrecord_pld_art_auth).state,'WRITING');
+    assert.equal(f.ledger.get(f.ctx,kind,0),null);assert.deepEqual(plain(f.ledger.list(f.ctx,kind)),[]);
+    assert.equal(f.ledger.recover(f.ctx,kind,0),null);
+    const payload=producer.save();
+    assert.deepEqual(plain(f.ledger.commit(f.ctx,kind,0,payload,reservation.token)),payload);
+    assert.equal(f.rows.size,1);assert.equal([...f.rows.keys()][0],id);
+    assert.equal(f.rows.get(id).custrecord_pld_art_state,'COMMITTED');
+    assert.deepEqual(plain(f.ledger.prepare(f.ctx,kind,0,producer.intent).committed),payload);
+  }
+});
+
+test('saved orphan recovery validates actual bytes and deterministically adopts the lowest identical candidate',()=>{
+  for(const kind of ['PART','CHUNK']) {
+    const f=intentFixture(kind), producer=f.makeIntent();
+    f.ledger.prepare(f.ctx,kind,0,producer.intent);
+    const first=producer.save();producer.save();
+    f.files.created.reverse();
+    assert.deepEqual(plain(f.ledger.recover(f.ctx,kind,0)),first);
+    assert.equal(f.files.deleted.length,0);assert.equal(f.rows.size,1);
+  }
+});
+
+test('intent rotation fences an older writer and metadata substitution cannot publish',()=>{
+  const f=intentFixture(), first=f.makeIntent('<pdf>first</pdf>');
+  const old=f.ledger.prepare(f.ctx,'PART',0,first.intent), payload=first.save();
+  const second=f.makeIntent('<pdf>second</pdf>'), next=f.ledger.prepare(f.ctx,'PART',0,second.intent);
+  assert.notEqual(old.token,next.token);
+  assert.throws(()=>f.ledger.commit(f.ctx,'PART',0,payload,old.token),/stale intent/);
+  assert.throws(()=>f.ledger.commit(f.ctx,'PART',0,payload,next.token),/intent metadata/);
+  assert.throws(()=>f.ledger.commit(f.ctx,'PART',0,payload),/stale intent/);
+  assert.equal(f.ledger.get(f.ctx,'PART',0),null);
+  const winner=second.save();assert.deepEqual(plain(f.ledger.recover(f.ctx,'PART',0)),winner);
+});
+
+test('WRITING edits, wrong actor, terminal parent, and malformed intent fail closed',()=>{
+  for(const mode of ['native','actor','terminal','intent']) {
+    const f=intentFixture(), producer=f.makeIntent();
+    f.ledger.prepare(f.ctx,'PART',0,producer.intent);producer.save();
+    if(mode==='native')f.rows.values().next().value.custrecord_pld_art_payload='{}';
+    if(mode==='actor')f.user.role=4;
+    if(mode==='terminal') {f.jobs.get('501').custrecord_pld_job_status='COMPLETE';signJob(f.stubs,'501',f.jobs.get('501'));}
+    if(mode==='intent') {
+      assert.throws(()=>f.ledger.prepare(f.ctx,'PART',0,{...producer.intent,extra:'untrusted'}),/intent schema/);
+      assert.throws(()=>f.ledger.prepare(f.ctx,'PART',0,{...producer.intent,name:'pld_part_501_000000.txt'}),/intent name/);
+    } else assert.throws(()=>f.ledger.recover(f.ctx,'PART',0),/integrity|unavailable|stage/);
+    assert.equal(f.files.deleted.length,0);
+  }
+});
+
+test('orphan candidates require exact type, size, hash and privacy, with bounded overflow',()=>{
+  for(const mode of ['type','size','hash','privacy','overflow']) {
+    const f=intentFixture(), producer=f.makeIntent();f.ledger.prepare(f.ctx,'PART',0,producer.intent);
+    const payload=producer.save(), row=f.files.created[0];
+    if(mode==='type')row.fileType='PDF';
+    if(mode==='size')row.size++;
+    if(mode==='hash')f.files.contents[payload.partId]='x'.repeat(row.size);
+    if(mode==='privacy')row.isOnline=true;
+    if(mode==='overflow')for(let i=0;i<3;i++)producer.save();
+    assert.throws(()=>f.ledger.recover(f.ctx,'PART',0),/type|metadata|contents|private|candidate|online|unavailable|storage/);
+    assert.equal(f.ledger.get(f.ctx,'PART',0),null);assert.equal(f.files.deleted.length,0);
+  }
+});
+
+test('rotation racing a commit fences the stale loaded record and committed winner survives lost acknowledgment',()=>{
+  const f=intentFixture(), first=f.makeIntent('first'), second=f.makeIntent('second');
+  const initial=f.ledger.prepare(f.ctx,'PART',0,first.intent), payload=first.save();let raced=false;
+  f.rows.beforeSave=({fields})=>{if(!raced && fields.custrecord_pld_art_state==='COMMITTED'){raced=true;f.ledger.prepare(f.ctx,'PART',0,second.intent);}};
+  assert.throws(()=>f.ledger.commit(f.ctx,'PART',0,payload,initial.token),/stale intent/);
+  f.rows.beforeSave=null;
+  const reservation=f.ledger.prepare(f.ctx,'PART',0,second.intent), winner=second.save();
+  const record=f.stubs['N/record'].load;
+  f.stubs['N/record'].load=opts=>{const rec=record(opts);if(opts.type==='customrecord_pld_batch_artifact'){const save=rec.save;rec.save=()=>{save();throw new Error('acknowledgment lost');};}return rec;};
+  assert.deepEqual(plain(f.ledger.commit(f.ctx,'PART',0,winner,reservation.token)),winner);
+});
+
+
+test('A to B to A reservations reject the original token and bind CHUNK intent to its signed plan',()=>{
+  const f=intentFixture(), a=f.makeIntent('A'), b=f.makeIntent('B');
+  const first=f.ledger.prepare(f.ctx,'PART',0,a.intent), payload=a.save();
+  f.ledger.prepare(f.ctx,'PART',0,b.intent);
+  const last=f.ledger.prepare(f.ctx,'PART',0,a.intent);
+  assert.notEqual(first.token,last.token);
+  assert.throws(()=>f.ledger.commit(f.ctx,'PART',0,payload,first.token),/stale intent/);
+  assert.equal(JSON.parse(f.rows.values().next().value.custrecord_pld_art_payload).revision,3);
+  assert.deepEqual(plain(f.ledger.commit(f.ctx,'PART',0,payload,last.token)),payload);
+  const chunk=intentFixture('CHUNK'), producer=chunk.makeIntent();
+  const reservation=chunk.ledger.prepare(chunk.ctx,'CHUNK',0,producer.intent), saved=producer.save();
+  chunk.jobs.get('501').custrecord_pld_job_plan=chunk.integrity.seal('plan',{different:true});
+  signJob(chunk.stubs,'501',chunk.jobs.get('501'));
+  for(const action of [()=>chunk.ledger.prepare(chunk.ctx,'CHUNK',0,producer.intent),()=>chunk.ledger.recover(chunk.ctx,'CHUNK',0),()=>chunk.ledger.commit(chunk.ctx,'CHUNK',0,saved,reservation.token)]) assert.throws(action,/writing plan mismatch/);
+});
+
+
+test('recovery compares long numeric candidate identities without rounding',()=>{
+  const f=intentFixture(), producer=f.makeIntent();f.ledger.prepare(f.ctx,'PART',0,producer.intent);
+  for(const id of ['9007199254740993','9007199254740992']) {
+    const payload=producer.save(), row=f.files.created.at(-1);
+    f.files.contents[id]=f.files.contents[payload.partId];row.id=id;
+  }
+  assert.equal(f.ledger.recover(f.ctx,'PART',0).partId,'9007199254740992');
+});
+
+test('concurrent initial reservations preserve one row and reject unbounded revision rotation',()=>{
+  const f=intentFixture(), producer=f.makeIntent();let raced=false;
+  f.rows.beforeSave=()=>{if(!raced){raced=true;f.ledger.prepare(f.ctx,'PART',0,producer.intent);}};
+  const reservation=f.ledger.prepare(f.ctx,'PART',0,producer.intent);
+  assert.equal(f.rows.size,1);assert.equal(f.ledger.prepare(f.ctx,'PART',0,producer.intent).token,reservation.token);
+  f.rows.beforeSave=null;
+  const row=f.rows.values().next().value, state=f.integrity.open('artifact',row.custrecord_pld_art_auth);
+  const wrapper=JSON.parse(state.payload);wrapper.revision=Number.MAX_SAFE_INTEGER;
+  state.payload=JSON.stringify(wrapper);row.custrecord_pld_art_payload=state.payload;row.custrecord_pld_art_auth=f.integrity.seal('artifact',state);
+  assert.throws(()=>f.ledger.prepare(f.ctx,'PART',0,f.makeIntent('changed').intent),/revision limit/);
+  row.custrecord_pld_art_payload='{}';
+  assert.throws(()=>f.ledger.list(f.ctx,'PART'),/integrity/);
+});

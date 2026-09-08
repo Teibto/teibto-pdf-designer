@@ -335,6 +335,87 @@ test("lost render context.write preserves committed PART and replay does not rer
   assert.equal(Number(f.jobs.load("501").printed), 1);
 });
 
+for (const kind of ["PART", "CHUNK"]) {
+  for (const interruption of ["save acknowledgement", "ledger commit"]) {
+    test(kind + " retry adopts a saved file after lost " + interruption + " without rendering again", () => {
+      const f = buildMr();
+      let invoke;
+      if (kind === "PART") {
+        const entry = f.mr.getInputData()[0];
+        invoke = () => f.mr.map(mapContext(entry).context);
+      } else {
+        runRender(f);
+        const chunk = f.merge.getInputData()[0];
+        invoke = () => f.merge.reduce(chunkContext(chunk));
+      }
+      if (interruption === "ledger commit") {
+        f.artifactRows.beforeSave = ({ fields }) => {
+          if (fields.custrecord_pld_art_kind === kind && fields.custrecord_pld_art_state === "COMMITTED") {
+            f.artifactRows.beforeSave = null;
+            throw new Error("synthetic interruption after file save");
+          }
+        };
+      } else {
+        const module = kind === "PART" ? f.files.module : f.stubs["N/render"];
+        const method = kind === "PART" ? "create" : "xmlToPdf";
+        const original = module[method];
+        module[method] = opts => {
+          const file = original(opts), save = file.save;
+          file.save = function () {
+            save.call(this);
+            module[method] = original;
+            throw new Error("synthetic interruption after file save");
+          };
+          return file;
+        };
+      }
+      assert.throws(invoke, /synthetic interruption/);
+      assert.equal(f.artifacts.get(ctx(f), kind, 0), null);
+      assert.equal(f.artifacts.list(ctx(f), kind).length, 0);
+      const renders = f.render.calls.renderedAsString, merges = f.render.calls.xmlToPdf.length;
+      const files = f.files.created.length, savedPdfs = f.render.calls.savedFiles.length;
+      invoke();
+      assert.ok(f.artifacts.get(ctx(f), kind, 0));
+      assert.equal(f.render.calls.renderedAsString, renders);
+      assert.equal(f.render.calls.xmlToPdf.length, merges);
+      assert.equal(f.files.created.length, files);
+      assert.equal(f.render.calls.savedFiles.length, savedPdfs);
+      if (kind === "PART") runRender(f);
+      runMerge(f);
+      assert.equal(f.jobs.load("501").status, "COMPLETE");
+      assert.ok(f.jobs.download("501", 0).getContents());
+      assert.equal(f.files.deleted.length, 0);
+    });
+  }
+  test(kind + " retry rejects changed orphan bytes before rendering or publication", () => {
+    const f = buildMr();
+    let invoke;
+    if (kind === "PART") {
+      const entry = f.mr.getInputData()[0]; invoke = () => f.mr.map(mapContext(entry).context);
+    } else {
+      runRender(f); const chunk = f.merge.getInputData()[0]; invoke = () => f.merge.reduce(chunkContext(chunk));
+    }
+    f.artifactRows.beforeSave = ({ fields }) => {
+      if (fields.custrecord_pld_art_kind === kind && fields.custrecord_pld_art_state === "COMMITTED") {
+        f.artifactRows.beforeSave = null;
+        const payload = JSON.parse(fields.custrecord_pld_art_payload);
+        const id = payload.partId || payload.fileId;
+        const body = f.files.contents[id];
+        f.files.contents[id] = (body[0] === "A" ? "B" : "A") + body.slice(1);
+        throw new Error("synthetic interrupted commit");
+      }
+    };
+    assert.throws(invoke, /interrupted commit/);
+    const renders = f.render.calls.renderedAsString, merges = f.render.calls.xmlToPdf.length;
+    assert.throws(invoke, /contents mismatch/);
+    assert.equal(f.artifacts.get(ctx(f), kind, 0), null);
+    assert.equal(f.render.calls.renderedAsString, renders);
+    assert.equal(f.render.calls.xmlToPdf.length, merges);
+    assert.equal(f.jobs.load("501").outputs, "");
+    assert.equal(f.files.deleted.length, 0);
+  });
+}
+
 test("render recovery reuses committed parts and the immutable snapshot after an input-stage failure", () => {
   const f = buildMr();
   const entries = f.mr.getInputData();

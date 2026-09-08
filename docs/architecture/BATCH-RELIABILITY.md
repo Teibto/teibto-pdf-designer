@@ -8,7 +8,8 @@ rendering, metadata-only planning/finalization, a separate bounded merge reduce 
 PDF-byte downloads. Owner-triggered merge recovery verifies the prior task is terminal and claims
 the job atomically. These are local implementations, not native-account security or capacity proof.
 Owner-triggered render recovery before plan publication is implemented locally. Recovery after
-an immutable render plan is sealed, orphan adoption, age-based retention and native capacity QA remain unfinished.
+an immutable render plan is sealed, age-based retention and native capacity QA remain unfinished.
+Bounded orphan adoption is implemented locally for PART and CHUNK retries.
 Owner-triggered cleanup of published XML inputs is bounded and implemented locally.
 
 ## Enqueue acceptance boundary
@@ -74,13 +75,18 @@ after dependent jobs expire or migrate.
 
 The current job stores the immutable snapshot digest, phase, signed chunk plan, merge task and
 signed output manifest. The artifact record binds native owner, logical external ID, parent job,
-snapshot generation, kind PART/CHUNK, ordinal, COMMITTED state and signed bounded payload. Payloads
-include file identity, byte count, digest and producer proof. A single create/save publishes the
-complete signed ledger row; no unsigned intermediate record is treated as success.
+snapshot generation, kind PART/CHUNK, ordinal, state and signed bounded payload. Workers reserve a
+signed WRITING row before saving a file, then transition that same row to COMMITTED with native
+optimistic locking. Only authenticated COMMITTED payloads count toward planning/finalization.
+Reads authenticate incomplete rows before excluding them; no unsigned intermediate row is success.
+Existing committed payloads and legacy PART filenames remain readable.
 
-Attempt tokens, pre-save WRITING rows and orphan adoption described below are still a future
-extension. A file saved before a failed ledger commit is retained as uncommitted work and cannot
-be inferred successful from its filename. Current recovery reuses committed artifacts only.
+The WRITING payload binds intended producer metadata and a positive revision; CHUNK also binds
+the current signed plan digest. Changed intent increments the revision, including A-to-B-to-A
+rotations. The commit token binds the complete authenticated reservation. A stale token cannot
+publish over a newer reservation; a committed winner is preserved. Physical files are verified
+before commit. The artifact CAS is atomic on its own row, not across the parent job and file;
+parent plan/output publication retains its separate guarded transition.
 
 PART metadata identifies the request sequence, transaction and render time. Sequence is the
 identity: repeated occurrences of one transaction must remain distinct. CHUNK metadata contains
@@ -88,8 +94,7 @@ ordered committed part references and their authenticated digests. Validate uniq
 `(job, generation, kind, ordinal)` keys in sandbox before relying on them. Parent authorization
 precedes every artifact access; permissions start deny-by-default.
 
-Any future initialization of pending part rows belongs in worker input preparation rather than
-spending Suitelet governance on up to 500 record creations. For competing recovery claims, use load/check/change/`record.save()`
+Reservations are created per map/reduce key, avoiding up to 500 record creations in the Suitelet. For competing recovery claims, use load/check/change/`record.save()`
 with optimistic-lock conflict handling, not separate load and `submitFields()` as a pretend
 compare-and-set. Generation tokens fence stale workers for ordinary crash recovery; editable
 tokens are not protection against malicious rollback.
@@ -121,9 +126,16 @@ On-demand workers inherit the submitting identity and role; prove that for both 
 target account. Use a distinct merge deployment and reconcile its returned task ID.
 [On-demand submission](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
 
-Future orphan adoption must persist an attempt's intended filename/hash before saving. After a crash between file save and
-record commit, search only the authorized job folder and reuse a file only if the expected
-identity/size/digest matches. After artifact commit, reuse the committed artifact even when
+Orphan adoption searches only the authorized private folder and exact intended filename. New
+PART/CHUNK names include the full content hash, so late writes with different bytes use different
+names. Fetch at most four candidates to detect overflow above three; overflow, unreadable files,
+or any metadata/content mismatch fails visibly. Validate actual folder, offline state, file type,
+name, size and hash for every candidate before selecting the lowest numeric internal ID and
+committing with the reservation token. No candidate means unfinished work may render again; a
+filename alone is never evidence of success. No orphan files are deleted. The file search uses
+NetSuite folder/name filters and verification uses the native file type property.
+[File search fields](https://www.netsuite.com/help/helpcenter/en_US/srbrowser/Browser2017_1/script/record/file.html),
+[N/file properties](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4205693274.html). After artifact commit, reuse the committed artifact even when
 `context.write()` was lost. Resume incomplete chunks after planning/publication interruptions;
 do not downgrade a terminal job. Preserve a RECOVERY_REQUIRED state for ambiguous infrastructure
 outcomes rather than resubmitting because a timer expired. Map/Reduce restarts do not roll back

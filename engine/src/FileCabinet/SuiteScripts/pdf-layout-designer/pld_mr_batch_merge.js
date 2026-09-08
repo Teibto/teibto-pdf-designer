@@ -101,7 +101,7 @@ define([
     )
       throw new Error("Invalid merge chunk input");
     var ctx = pipeline.artifactContext(job);
-    var existing = artifacts.get(ctx, "CHUNK", ordinal);
+    var existing = artifacts.get(ctx, "CHUNK", ordinal) || artifacts.recover(ctx, "CHUNK", ordinal);
     var source = partRefs(job, chunk, ctx, !existing);
     if (existing) {
       verifyCommitted(job, chunk, existing, source.refs);
@@ -109,14 +109,6 @@ define([
       return;
     }
     var pdf = pldRender.combinePdfDocs(source.docs);
-    pdf.name =
-      "batch_" +
-      job.rectype +
-      "_" +
-      job.jobId +
-      "_chunk_" +
-      pipeline.sortKey(ordinal) +
-      ".pdf";
     pdf.folder = job.folder;
     pdf.isOnline = false;
     if (
@@ -127,7 +119,26 @@ define([
       throw new Error("PDF exceeds authenticated download size limit");
     var hash = integrity.digestPdf(pdf.getContents());
     var size = pdf.size;
-    var name = pdf.name;
+    var prepared = artifacts.prepare(ctx, "CHUNK", ordinal, {
+      jobId: job.jobId,
+      snapshotDigest: job.snapshotDigest,
+      ordinal: ordinal,
+      sequences: chunk.sequences,
+      partRefs: source.refs,
+      folder: String(job.folder),
+      name: artifacts.name(ctx, "CHUNK", ordinal, hash),
+      contentsHash: hash,
+      size: size,
+      printed: chunk.sequences.length,
+      failed: 0,
+    });
+    if (prepared.committed) {
+      verifyCommitted(job, chunk, prepared.committed, source.refs);
+      context.write({ key: String(ordinal), value: JSON.stringify(prepared.committed) });
+      return;
+    }
+    var name = prepared.intent.name;
+    pdf.name = name;
     jobs.assertFolder(job.durable);
     var fileId = String(pdf.save());
     var saved = jobs.loadFile(job.durable, fileId);
@@ -139,22 +150,9 @@ define([
       throw new Error("PDF integrity mismatch after save");
     var payload = {
       fileId: fileId,
-      proof: integrity.seal("result", {
-        jobId: job.jobId,
-        snapshotDigest: job.snapshotDigest,
-        ordinal: ordinal,
-        sequences: chunk.sequences,
-        partRefs: source.refs,
-        folder: String(job.folder),
-        fileId: fileId,
-        name: name,
-        contentsHash: hash,
-        size: size,
-        printed: chunk.sequences.length,
-        failed: 0,
-      }),
+      proof: integrity.seal("result", Object.assign({}, prepared.intent, { fileId: fileId })),
     };
-    payload = artifacts.commit(ctx, "CHUNK", ordinal, payload);
+    payload = artifacts.commit(ctx, "CHUNK", ordinal, payload, prepared.token);
     verifyCommitted(job, chunk, payload, source.refs);
     // Lost output after this point is recoverable from the durable CHUNK row.
     context.write({ key: String(ordinal), value: JSON.stringify(payload) });

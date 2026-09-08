@@ -219,6 +219,7 @@ test('ไม่มี job parameter = ล้มตั้งแต่ต้น �
 
 test("map เขียน XML ของใบตัวเองเป็นไฟล์ชั่วคราว แล้วส่งต่อแค่ file id", () => {
   const { mr, files } = buildMr();
+  mr.getInputData();
   const { written, context } = mapContext({
     seq: 2,
     recid: "13",
@@ -231,7 +232,7 @@ test("map เขียน XML ของใบตัวเองเป็นไ�
   mr.map(context);
 
   const part = files.created[0];
-  assert.match(part.name, /^pld_part_501_000002\.txt$/);
+  assert.match(part.name, /^pld_part_501_000002_[a-f0-9]{64}\.txt$/);
   assert.equal(part.folder, "77");
   assert.equal(
     part.encoding,
