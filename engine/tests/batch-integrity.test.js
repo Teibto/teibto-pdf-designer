@@ -22,7 +22,7 @@ function wire(value) {
 test('all domains round-trip deterministic canonical JSON without changing Thai, Unicode, or whitespace', () => {
   const { api } = fixture();
   const data = { z: ['ใบกำกับภาษี\r\n กำ กํา 😀', null, true, 12.5], a: { y: 2, x: 1 } };
-  for (const domain of ['job', 'snapshot', 'part', 'result', 'artifact', 'plan', 'manifest']) {
+  for (const domain of ['job', 'snapshot', 'part', 'result', 'artifact', 'plan', 'manifest', 'cleanup']) {
     const sealed = api.seal(domain, data);
     assert.equal(sealed, api.seal(domain, { a: { x: 1, y: 2 }, z: data.z }));
     assert.deepEqual(JSON.parse(JSON.stringify(api.open(domain, sealed))), data);
@@ -30,7 +30,7 @@ test('all domains round-trip deterministic canonical JSON without changing Thai,
     const mac = envelope.mac;
     delete envelope.mac;
     assert.equal(mac, crypto.createHmac('sha256', 'synthetic-batch-test-key-never-use-in-an-account').update(wire(envelope), 'utf8').digest('hex'));
-    for (const other of ['artifact','plan','manifest']) if (other !== domain) assert.throws(() => api.open(other,sealed), /integrity/);
+    for (const other of ['artifact','plan','manifest','cleanup']) if (other !== domain) assert.throws(() => api.open(other,sealed), /integrity/);
   }
 });
 

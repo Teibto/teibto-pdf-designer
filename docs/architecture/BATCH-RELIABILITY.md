@@ -7,7 +7,8 @@ Issue #199 remains open. Schema v5 implements authenticated PART/CHUNK publicati
 rendering, metadata-only planning/finalization, a separate bounded merge reduce phase and guarded
 PDF-byte downloads. Owner-triggered merge recovery verifies the prior task is terminal and claims
 the job atomically. These are local implementations, not native-account security or capacity proof.
-Render recovery, orphan adoption, bounded retention and deployment pools remain unfinished.
+Render recovery, orphan adoption, age-based retention and deployment pools remain unfinished.
+Owner-triggered cleanup of published XML inputs is bounded and implemented locally.
 
 ## Enqueue acceptance boundary
 
@@ -164,5 +165,27 @@ Current local evidence includes 51 documents split 25/25/1, Thai byte-boundary c
 planning without XML reads, finalization without PDF reads, lost PART/CHUNK output callbacks,
 reused committed chunks, rejected PDF substitutions, complete/partial accounting and concurrent
 submission/finalization claims. Publication validates signed metadata; guarded downloads verify
-actual current PDF bytes. Retention deliberately runs in neither summarize phase until a bounded
-cleanup implementation is available.
+actual current PDF bytes. Cleanup deliberately runs in neither summarize phase.
+
+## Bounded cleanup of published inputs
+
+The status page issues an action-specific signed token for an explicit owner POST. The same
+user and role must authorize every continuation, bound to the job, snapshot and output manifest.
+Both recorded worker task IDs must be present and report COMPLETE or FAILED. Each request examines
+at most three sequence positions, checks a 250-unit reserve and a cooperative 20-second deadline
+from request processing entry, and returns a signed next position. The page continues automatically
+after the initial click; stopping or losing the response permits a fresh scan safely.
+
+Only committed PART XML referenced by published chunks is eligible. Cleanup verifies exact
+sequence/part-ID/hash references, actual PDF bytes once per affected chunk per request, private
+folder, plaintext type, filename, size and part hash. Snapshot and published result IDs are excluded.
+Authenticated state and folder are rechecked immediately before deletion. The same request never
+loads all 500 documents or all PDFs into memory. Native API calls cannot be interrupted mid-call,
+so the deadline is cooperative, not a hard execution-time guarantee.
+
+Search absence (including a concurrent cleanup) is reported as unavailable, never counted as a
+successful delete. Permission/integrity failures stop visibly. Audit entries record each successful
+delete without document contents. Counts are per request, not durable cumulative receipts.
+Snapshot, ledger rows, unpublished inputs, orphan files and PDFs remain retained. Age-based
+retention still needs a policy and separate implementation. Native file checks and deletion are
+not atomic; concurrent Cabinet edits and account permissions require sandbox validation.

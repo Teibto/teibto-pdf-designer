@@ -32,8 +32,8 @@ define([
   'N/record',
   'N/task',
   './pld_lib_render',
-  './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity'
-], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs, integrity) {
+  './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity', './pld_lib_batch_cleanup'
+], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs, integrity, cleanup) {
 
   /** หน่วย governance ที่กันไว้ให้ขั้นตอนรวมไฟล์ + ส่ง response ตอนท้าย */
   var RESERVE_UNITS = 100;
@@ -71,6 +71,10 @@ define([
         if (request.method !== 'POST') throw new Error('Recovery requires POST');
         return recoverMerge(context, tel);
       }
+      if (request.parameters.action === 'cleanup') {
+        if (request.method !== 'POST') throw new Error('Cleanup requires POST');
+        return cleanJobInputs(context, tel);
+      }
       if (request.parameters.action === 'download') return context.response.writeFile({ file: jobs.download(request.parameters.job, request.parameters.chunk), isInline: false });
       if (request.parameters.action === 'status') return writeJobStatus(context);
       if (request.parameters.action === 'files') {
@@ -79,6 +83,7 @@ define([
       return writeFormPage(context, tel);
     } catch (e) {
       logBatchError(tel, e);
+      if (request.parameters.action === 'cleanup') return writeCleanupError(context, tel, e);
       writeErrorPage(context.response, tel, e);
     }
   }
@@ -383,8 +388,44 @@ define([
   }
   function writeJobStatus(context) {
     var job = jobs.load(context.request.parameters.job);
+    var clean = '';
+    if (['COMPLETE', 'PARTIAL'].indexOf(job.status) >= 0 && job.outputs) {
+      clean = '<h2>จัดการไฟล์ชั่วคราว</h2><p>ล้างไฟล์ต้นทางของเอกสารที่รวมเป็น PDF สำเร็จแล้ว เพื่อลดพื้นที่จัดเก็บ ' +
+        'ไฟล์ PDF และรายละเอียดงานยังคงอยู่ เปิดหน้านี้ไว้จนล้างเสร็จ</p>' + cleanupForm(job.id, cleanup.token(job.id), 'ล้างไฟล์ชั่วคราว');
+    }
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
-    context.response.write(pageShell('สถานะงานพิมพ์', '<h1>สถานะงานพิมพ์</h1>' + jobSummary(job)));
+    context.response.write(pageShell('สถานะงานพิมพ์', '<h1>สถานะงานพิมพ์</h1>' + jobSummary(job) + clean));
+  }
+  function cleanupForm(jobId, token, label) {
+    return '<form id="pld-cleanup" method="POST" action="' + esc(jobs.route(jobId, 'cleanup')) + '">' +
+      '<input type="hidden" name="action" value="cleanup"><input type="hidden" name="job" value="' + esc(jobId) + '">' +
+      '<input type="hidden" name="token" value="' + esc(token) + '"><button type="submit">' + esc(label) + '</button></form>';
+  }
+  function cleanJobInputs(context, tel) {
+    tel.stage = 'cleanup';
+    var jobId = context.request.parameters.job;
+    var result = cleanup.run(jobId, context.request.parameters.token);
+    var html = '<h1>' + (result.token ? 'กำลังล้างไฟล์ชั่วคราว' : 'ตรวจล้างไฟล์ชั่วคราวครบแล้ว') + '</h1>' +
+      '<p>ตรวจแล้ว ' + result.next + ' จาก ' + result.total + ' ลำดับเอกสาร</p>' +
+      '<p>รอบนี้ลบ ' + result.deleted + ' ไฟล์ · ไม่พบหรือเข้าถึงไม่ได้ ' + result.unavailable +
+      ' ไฟล์ · เก็บต้นทางของเอกสารที่ไม่มี PDF สำเร็จไว้ ' + result.retained + ' ลำดับ</p>';
+    if (result.token) html += cleanupForm(jobId, result.token, 'ทำส่วนถัดไป') +
+      '<p>ระบบจะทำส่วนถัดไปอัตโนมัติ หากหยุดไว้สามารถกลับมาเริ่มตรวจล้างใหม่ได้</p>' +
+      '<script>setTimeout(function(){document.getElementById("pld-cleanup").submit();},1000);</script>';
+    html += '<p><a href="' + esc(jobs.route(jobId)) + '">' + (result.token ? 'หยุดและกลับไปดูงาน' : 'กลับไปดูงานและดาวน์โหลด PDF') + '</a></p>';
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ล้างไฟล์ชั่วคราว', html));
+  }
+  function writeCleanupError(context, tel, error) {
+    var back = '<button type="button" onclick="history.back()">กลับหน้าก่อนหน้า</button>';
+    try {
+      var job = jobs.load(context.request.parameters.job);
+      back = '<a href="' + esc(jobs.route(job.id)) + '">กลับไปดูสถานะงานและดาวน์โหลด PDF</a>';
+    } catch (unavailable) { /* Do not expose a job outside the caller's scope. */ }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('หยุดล้างไฟล์ชั่วคราว', '<h1>หยุดล้างไฟล์ชั่วคราว</h1>' +
+      '<p>การล้างยังไม่ครบ กรุณาตรวจสถานะงานแล้วเริ่มตรวจล้างใหม่ได้ ระบบจะตรวจไฟล์ที่เหลืออีกครั้ง</p>' +
+      '<p>' + esc(error.message || String(error)) + '</p><p>รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p><p>' + back + '</p>'));
   }
   function writeFilesPage(context, tel) {
     tel.stage = 'files';

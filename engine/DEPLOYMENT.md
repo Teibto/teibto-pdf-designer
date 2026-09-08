@@ -463,11 +463,20 @@ requests from both submitting. The old task ID is cleared before submission. Mis
 submission outcomes remain MERGE_SUBMIT_UNKNOWN for operator reconciliation; timestamps never
 authorize a blind resubmit. [Task status API](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4345805891.html).
 
-Private snapshots, XML parts and unused candidate PDFs remain retained after this phase, including
-successful jobs, to avoid exceeding summarize governance with hundreds of deletions. Bounded
-retention, adoption of files saved before ledger commit, render-stage recovery and deployment pools
-are still pending. Size limits are safety bounds; measure actual BFO usage, output size and Thai
-layout before setting release capacity.
+Worker summarize phases retain inputs. The status page offers an explicit owner-triggered cleanup
+of committed XML parts already referenced by published PDFs. Both worker task IDs must be known
+and terminal. Signed POST continuations examine at most three sequence positions, reserve 250 units,
+and stop cooperatively after 20 seconds. Each affected PDF and each deletable part is verified before
+deletion; snapshot, ledger, unpublished inputs, orphan files and PDFs are retained. Missing files are
+reported as unavailable; permission/integrity failures stop the sweep. Verify File Cabinet search,
+PLAINTEXT metadata, delete permission and concurrent cleanup under the intended caller role in
+sandbox. [N/file deletion and governance](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157072844224.html)
+is part of this budget; native check/delete is not atomic. No scheduled cleanup or retention age is
+enabled by this change.
+
+Age-based retention, adoption of files saved before ledger commit, render-stage recovery and
+deployment pools remain pending. Size limits are safety bounds; measure actual BFO usage, output
+size and Thai layout before setting release capacity.
 
 ---
 

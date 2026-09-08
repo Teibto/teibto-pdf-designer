@@ -5,7 +5,8 @@
 ## [Unreleased]
 
 ### Production-readiness candidate (#199; sandbox acceptance pending)
-- Schema v5 adds an authenticated PART/CHUNK ledger and a separate current-role merge phase, bounded to 25 documents / 8 MiB XML per chunk. Ordered downloads show missing sequences; explicit merge recovery requires a verified terminal task and an atomic claim. Inputs remain private pending bounded retention cleanup; new artifact permissions and merge-script secret access require sandbox validation.
+- Schema v5 adds an authenticated PART/CHUNK ledger and a separate current-role merge phase, bounded to 25 documents / 8 MiB XML per chunk. Ordered downloads show missing sequences; explicit merge recovery requires a verified terminal task and an atomic claim. New artifact permissions and merge-script secret access require sandbox validation.
+- Add owner-triggered cleanup of published XML inputs with signed POST continuations, terminal-task checks, verified PDF/part bytes and three-sequence request bounds. Preserve PDFs, snapshots, unpublished inputs and orphans; interrupted scans are safely repeatable. Native delete permissions/concurrency and age-based retention remain unverified/open.
 - Authenticate queued job state, schema v4 snapshots, XML parts and PDF results with an account-restricted HMAC key. Verify guarded download bytes before streaming; reject unsigned/tampered inputs and oversized results. Requires API-secret setup, draining legacy jobs and sandbox permission tests; native historical access and replay remain separate gates.
 - Preserve accepted batch tasks when recording the task ID fails; show tracking and a Thai warning against resubmission. Pre-submit failures retain their original error, mark the job failed where possible and clean only verified private snapshots.
 - Fix pagination cache returning stale pages after changes to arbitrary rows or table columns; add Thai data probes up to 10,000 rows.
