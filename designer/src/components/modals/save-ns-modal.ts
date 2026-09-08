@@ -11,7 +11,7 @@
  * @author Wichit Wongta
  * @since 2026-07-24
  */
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
@@ -33,13 +33,15 @@ export class PldSaveNsModal extends LitElement {
   // should use (#70). The Print button loads the rectype default (no tplid).
   @state() private setAsDefault = true;
   @state() private saving = false;
+  @state() private saveError = "";
 
-  connectedCallback() {
-    super.connectedCallback();
-    // Default to the record the designer was opened from (?rectype=… on the
-    // Suitelet URL), so a save from an invoice is saved as an invoice template.
-    const ctxRectype = getNsContext()?.recordType;
-    if (ctxRectype) this.recordType = ctxRectype;
+  protected willUpdate(changed: PropertyValues) {
+    if (changed.has('open') && this.open) {
+      this.saveError = '';
+      const metadata = this.store?.state.template.nsMetadata;
+      this.recordType = metadata?.rectype || getNsContext()?.recordType || DEFAULT_RECORD_TYPE;
+      this.setAsDefault = metadata?.isDefault ?? !this.store?.state.template.id;
+    }
   }
 
   static styles = css`
@@ -91,12 +93,13 @@ export class PldSaveNsModal extends LitElement {
     return html`
       <pld-modal .open=${this.open} modalTitle="💾 บันทึกเข้า NetSuite" size="md" @close=${this._close}>
         <div slot="body">
+          ${this.saveError ? html`<p class="denied-hint" role="alert">${this.saveError}</p>` : nothing}
           ${canEditNsTemplates() ? nothing : html`
             <div class="denied-hint">🔒 ${READ_ONLY_REASON}</div>
           `}
           <div class="field">
             <label>ประเภทเอกสาร (NetSuite Record Type)</label>
-            <select @change=${(e: Event) => { this.recordType = (e.target as HTMLSelectElement).value; }}>
+            <select aria-label="ประเภทเอกสาร" ?disabled=${this.saving} @change=${(e: Event) => { this.recordType = (e.target as HTMLSelectElement).value; }}>
               ${recordTypeOptions(this.recordType).map((rt) => html`
                 <option value=${rt.value} ?selected=${rt.value === this.recordType}>${rt.label}</option>
               `)}
@@ -108,7 +111,7 @@ export class PldSaveNsModal extends LitElement {
           </div>
           <div class="field">
             <label class="check-item">
-              <input type="checkbox" .checked=${this.setAsDefault}
+              <input type="checkbox" ?disabled=${this.saving} .checked=${this.setAsDefault}
                 @change=${(e: Event) => { this.setAsDefault = (e.target as HTMLInputElement).checked; }} />
               ตั้งเป็น default template ของ record type นี้
             </label>
@@ -138,24 +141,32 @@ export class PldSaveNsModal extends LitElement {
   }
 
   private async _save() {
+    if (this.saving) return;
+    this.saveError = "";
     this.saving = true;
     try {
-      const { id } = await saveTemplateToNetSuite(this.store, {
+      const { id, warning } = await saveTemplateToNetSuite(this.store, {
         rectype: this.recordType,
         isDefault: this.setAsDefault,
       });
+      if (warning) {
+        this.saveError = `บันทึกแล้ว (ID: ${id}) — ${warning}`;
+        return;
+      }
       const defNote = this.setAsDefault ? ` — default ของ ${this.recordType}` : '';
       showToast(`บันทึกเข้า NetSuite แล้ว (ID: ${id})${defNote}`, 'success');
+      this.saving = false;
       this._close();
     } catch (err) {
       // Surface the failure — never mask it with a silent local write (R4).
-      showToast(`บันทึกเข้า NetSuite ไม่สำเร็จ: ${(err as Error).message}`, 'error');
+      this.saveError = `บันทึกเข้า NetSuite ไม่สำเร็จ: ${(err as Error).message}`;
     } finally {
       this.saving = false;
     }
   }
 
   private _close() {
+    if (this.saving) return;
     this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
   }
 }

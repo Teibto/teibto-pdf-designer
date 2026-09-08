@@ -323,22 +323,22 @@ export async function saveNsTemplate(opts: {
   xml: string;     // BFO XML output
   rectype?: string;
   isDefault?: boolean;
-}): Promise<{ id: string; success: boolean; version?: number }> {
+}): Promise<{ id: string; success: boolean; version?: number; warning?: string }> {
   const baseUrl = getRendererUrl() || getDesignerUrl();
   const result = await suiteletFetch(baseUrl, 'save', {}, 'POST', {
     id: opts.id || null,
     name: opts.name,
     data: opts.data,
     xml: opts.xml,
-    rectype: opts.rectype || '',
-    isDefault: opts.isDefault || false,
+    ...(opts.rectype !== undefined ? { rectype: opts.rectype } : {}),
+    ...(opts.isDefault !== undefined ? { isDefault: opts.isDefault } : {}),
   });
-  return unwrap<{ id: string; success: boolean; version?: number }>(result);
+  return unwrap<{ id: string; success: boolean; version?: number; warning?: string }>(result);
 }
 
 export async function getNsTemplate(
   tplId: string,
-): Promise<{ id: string; name: string; data: string; xml: string; rectype: string }> {
+): Promise<{ id: string; name: string; data: string; xml: string; rectype: string; isDefault: boolean }> {
   const baseUrl = getRendererUrl() || getDesignerUrl();
   const result = await suiteletFetch(baseUrl, 'get', { tplid: tplId });
   return unwrap(result);
@@ -400,6 +400,7 @@ export async function duplicateNsTemplate(
     data: src.data,
     xml: src.xml,
     rectype: src.rectype || undefined,
+    isDefault: false,
   });
   return { id: result.id, name };
 }

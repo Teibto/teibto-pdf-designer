@@ -14,15 +14,15 @@ Local test doubles do not execute FreeMarker/BFO or establish NetSuite role perm
 | P1 | Save race, duplicate POST retries, nested-input keyboard shortcuts | Implemented locally; deferred-response, double-save and editable/IME regressions. Preserve new edits and document identity, including a new template saved while editing. |
 | P1 | Download differs from current preview; stale responses after reopen | Implemented locally; download displayed blob and discard superseded responses. Three component regressions. Live save/reload/print parity still required. |
 | P1 | Wrong subsidiary config and unusable Thai fonts silently print | Implemented locally; require matching/global config and valid File Cabinet fonts for render, retain setup inspection. Live missing-font and subsidiary tests required. |
-| P1 | All-role Suitelets execute as Administrator | Open release blocker. Establish caller transaction/subsidiary permissions for render, record data, live preview and batch. Do not assume an editor role check protects reads. |
+| P1 | All-role Suitelets execute as Administrator | Candidate now explicitly clears role elevation in four deployments and disables anonymous Suitelet access. SDF/readback and restricted-user role matrix remain release blockers; no claim of runtime authorization based on XML tests. |
 | P1 | Shared batch folder exposes job JSON/XML and other users' output | Open release blocker. Persistent requester ownership, private staging, authorized download and retention cleanup required. Test two users and direct URLs. |
-| P1 | Batch input/merge errors skip cleanup and notification | Local hardening underway; inject input, part-load, merge, save and notification failures. Abrupt termination/orphan recovery remains open. |
+| P1 | Batch input/merge errors skip cleanup and notification | Local injected failure tests pass, including task submission cleanup. Abrupt termination/orphan recovery and durable job tracking remain open. |
 | P2 | Repeated transaction reads per copy | Implemented request-local frozen snapshot; copy titles/labels remain independent. Measure real governance and latency before capacity claims. |
-| P2 | Queue reads mutable templates | Open. Freeze XML/copy configuration at enqueue; changing default/template during processing must not mix versions. |
-| P2 | Unbounded batch merge | Local 500-document / 8 MiB resolved UTF-8 XML rejection guard. This is a safety bound, not evidence 500 documents fit or complete. Chunked output/job recovery design and live capacity evidence remain required. |
-| P2 | Modal accessibility / keyboard-only workflows | Open. Dialog semantics, focus trap/restore, nested Escape handling; validate Thai input and keyboard navigation in a browser. |
-| P2 | Save dialog metadata/draft consistency | Open. Quick-save coerces omitted default flag to false; dialog save bypasses app-shell draft cleanup. Preserve default/record type on quick-save and share session-aware draft acknowledgement across save entrypoints. |
-| P2 | Dependency security | Open. Initial npm audit: 20 total findings; production-only audit: one high nanoid finding. Triage exact installed versions, call paths and supported fixes. |
+| P2 | Queue reads mutable templates | Implemented server-derived XML/copy snapshot at enqueue, schema v2; workers reject legacy jobs with resubmission guidance. Bounds: 1,000,000 XML characters, 8 MiB UTF-8 job. Template edits cannot change queued output; protecting job files from edits remains tied to private staging permissions. |
+| P2 | Unbounded batch merge | Local 500-document / 8 MiB resolved UTF-8 XML guard, plus shared 20-copy limit before render work. These are safety bounds, not capacity evidence. Chunked output/job recovery design and live measurements remain required. |
+| P2 | Modal accessibility / keyboard-only workflows | Native named dialog implemented with background inertness, browser focus containment/restoration, topmost Escape, local cheatsheet toggle and inline save errors. Real Chromium regressions cover slotted/shadow inputs and narrow screen. Remaining dialog-specific errors/toasts and live Thai UX need QA. |
+| P2 | Save dialog metadata/draft consistency | Implemented omitted metadata preservation, explicit false default removal and atomic session-owned draft acknowledgement across saves. Corrected original review: server previously ignored false rather than unsetting on quick-save. Durable content/default-cleanup warning retains ID/version; conflicting defaults now block print. Cross-record default updates still require live permission/concurrency QA. |
+| P2 | Dependency security | Direct nanoid patched from 5.1.6 to 5.1.16; production lockfile audit now reports zero findings. Development/build tool advisories remain open; audit counts differ by installed versus lockfile scope, so use explicit scope in evidence. |
 | P2 | Build / deployment provenance | Removed obsolete jsPDF manual chunk that broke normal build. Open: CI production builds, artifact manifest/hash, dirty staged/untracked detection and safe --no-build reuse. Coordinate existing CI PR #198. |
 | P2 | Startup size and large-designer interaction | NetSuite bundle baseline approximately 1.235 MB / 335 KB gzip. Profile startup, large tables, drag/edit/undo and pagination before choosing an optimization. |
 
@@ -41,11 +41,15 @@ changing a deployment field alone is insufficient sign-off.
 
 ## Local verification
 
-2026-09-09 candidate evidence: engine **145/145**, designer **614/614**, Chromium E2E **83/83**,
+2026-09-09 round-two candidate evidence: engine **164/164**, designer **623/623**, Chromium E2E **87/87**,
 six templates and six samples valid, lint **0 errors / 35 warnings**, both production build modes
 passed, secret scan passed. Independent agents reviewed render/batch and save/session changes;
 identified batch cleanup/link-recovery defects were fixed and regression tested. No live NetSuite
-validation, deployment or PDF inspection has run for this candidate.
+validation, deployment or PDF inspection has run for this candidate. Installed production dependency
+audit reports zero findings after Nano ID 5.1.16; `npm ci` still reports 20 development/toolchain
+findings (8 moderate, 10 high, 2 critical), which remain to be resolved. Local final logs:
+`designer/.unit-final.log`, `designer/.e2e-final.log` (ignored from Git). First-slice CI at `60d4c28`
+passed; later commits require their own CI results.
 
 Run from repository root unless a command starts with `cd designer`:
 

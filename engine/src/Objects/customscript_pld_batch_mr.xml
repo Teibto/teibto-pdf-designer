@@ -20,7 +20,7 @@
     <scriptdeployment scriptid="customdeploy_pld_batch_mr">
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
-      <runasrole>ADMINISTRATOR</runasrole>
+      <runasrole></runasrole>
       <status>NOTSCHEDULED</status>
       <title>PLD Batch Print MR</title>
     </scriptdeployment>

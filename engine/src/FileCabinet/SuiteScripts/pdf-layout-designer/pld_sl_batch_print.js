@@ -236,37 +236,71 @@ define([
 
     // ล้มตั้งแต่ตอนนี้ถ้า template ใช้ไม่ได้ — ดีกว่าปล่อยให้ทุก map พังทีละใบ
     tel.stage = 'load-template';
-    pldRender.resolveTemplate(tplId, recType);
+    var resolved = pldRender.resolveTemplate(tplId, recType);
+    var snapshot = { xml: resolved.xml, copies: pldRender.resolveCopies(resolved.copies, recType) };
+    // Bound the persisted snapshot, independent of transaction count.
+    if (typeof snapshot.xml !== 'string' || !snapshot.xml.trim() || snapshot.xml.length > 1000000 ||
+      !Array.isArray(snapshot.copies) || !snapshot.copies.length ||
+      snapshot.copies.some(function (c) {
+        return !c || (c.th !== undefined && typeof c.th !== 'string') || (c.en !== undefined && typeof c.en !== 'string') ||
+          (!c.th && !c.en);
+      })) throw new Error('Template snapshot ไม่ถูกต้อง: XML ไม่เกิน 1000000 ตัวอักษรและป้ายสำเนาต้องมีอย่างน้อยหนึ่งภาษา');
 
     tel.stage = 'queue';
     var user = runtime.getCurrentUser();
     var jobId = tel.errorId.replace(/^PLD-/, '');
     var folder = outputFolderId();
-    var jobFileId = file.create({
-      name: 'pld_job_' + jobId + '.json',
-      fileType: file.Type.JSON,
-      contents: JSON.stringify({
+    var jobContents = JSON.stringify({
+        schemaVersion: 2,
+        templateSnapshot: snapshot,
         jobId: jobId,
         rectype: recType,
         tplid: tplId,
         ids: ids,
         folder: folder,
         requester: { id: user.id, name: user.name, email: user.email }
-      }),
+      });
+    // JSON escaping can expand XML; measure the persisted UTF-8 job, not just XML.
+    if (utf8Bytes(jobContents) > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
+    var jobFileId = file.create({
+      name: 'pld_job_' + jobId + '.json',
+      fileType: file.Type.JSON,
+      contents: jobContents,
       encoding: file.Encoding.UTF8,
       folder: folder,
       isOnline: false
     }).save();
 
-    var taskId = task.create({
-      taskType: task.TaskType.MAP_REDUCE,
-      scriptId: 'customscript_pld_batch_mr',
-      deploymentId: 'customdeploy_pld_batch_mr',
-      params: { custscript_pld_mr_job: jobFileId }
-    }).submit();
+    var taskId;
+    try {
+      taskId = task.create({
+        taskType: task.TaskType.MAP_REDUCE,
+        scriptId: 'customscript_pld_batch_mr',
+        deploymentId: 'customdeploy_pld_batch_mr',
+        params: { custscript_pld_mr_job: jobFileId }
+      }).submit();
+    } catch (e) {
+      try { file.delete({ id: jobFileId }); } catch (cleanupError) {
+        log.error({ title: 'PLD queue job cleanup failed', details: { jobFileId: jobFileId, message: cleanupError.message } });
+      }
+      throw e;
+    }
 
     logBatchOk(tel, { queued: ids.length, taskId: taskId, jobFileId: jobFileId });
     writeQueuedPage(context, tel, recType, ids.length, taskId);
+  }
+
+  function utf8Bytes(text) {
+    var bytes = 0;
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      if (c < 128) bytes++;
+      else if (c < 2048) bytes += 2;
+      else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < text.length &&
+        text.charCodeAt(i + 1) >= 0xDC00 && text.charCodeAt(i + 1) <= 0xDFFF) { bytes += 4; i++; }
+      else bytes += 3;
+    }
+    return bytes;
   }
 
   /**

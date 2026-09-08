@@ -74,13 +74,35 @@ define([
       throw new Error('ไม่ได้ระบุ job file (script parameter ' + JOB_PARAM + ') — ' +
         'สั่งงานนี้จากหน้าจอพิมพ์เป็นชุดเท่านั้น');
     }
-    var job = JSON.parse(file.load({ id: fileId }).getContents());
+    var jobFile = file.load({ id: fileId });
+    if (jobFile.size > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
+    var contents = jobFile.getContents();
+    if (utf8Bytes(contents) > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
+    var job = JSON.parse(contents);
     if (!job || typeof job !== 'object') throw new Error('Invalid batch job');
     if (!skipValidation && (!job.rectype || !Array.isArray(job.ids) || job.ids.length === 0)) {
       throw new Error('job file ' + fileId + ' ไม่มี rectype หรือรายการเอกสาร');
     }
     if (!skipValidation && job.ids.length > MAX_DOCS) {
       throw new Error('พิมพ์เป็นชุดได้ไม่เกิน ' + MAX_DOCS + ' ใบ');
+    }
+    if (!skipValidation) {
+      var snapshot = job.templateSnapshot;
+      if (job.schemaVersion !== 2 || !snapshot) {
+        throw new Error('งานคิวรุ่นเก่าไม่มี template snapshot — ส่งงานใหม่จากหน้าพิมพ์เป็นชุด');
+      }
+      if (typeof snapshot.xml !== 'string' || !snapshot.xml.trim() || snapshot.xml.length > 1000000 ||
+        !Array.isArray(snapshot.copies) || !snapshot.copies.length ||
+        snapshot.copies.some(function (c) {
+          return !c || (c.th !== undefined && typeof c.th !== 'string') || (c.en !== undefined && typeof c.en !== 'string') ||
+            (!c.th && !c.en);
+        })) throw new Error('Invalid template snapshot (XML/copy bounds)');
+      pldRender.resolveCopies(snapshot.copies, job.rectype);
+      if (!/^[a-z][a-z0-9_]{0,79}$/.test(job.rectype) ||
+        !/^[a-zA-Z0-9_-]{1,100}$/.test(job.jobId) || !/^[1-9][0-9]*$/.test(String(job.folder)) ||
+        job.ids.some(function (id) { return !/^[1-9][0-9]*$/.test(String(id)); })) {
+        throw new Error('Invalid batch job metadata');
+      }
     }
     job.jobFileId = fileId;
     return job;
@@ -93,9 +115,14 @@ define([
   function map(context) {
     var entry = JSON.parse(context.value);
 
-    var tpl = pldRender.resolveTemplate(entry.tplid, entry.rectype);
-    var copies = pldRender.resolveCopies(tpl.copies, entry.rectype);
-    var out = pldRender.renderDocumentXml(tpl.xml, entry.rectype, entry.recid, copies, null);
+    // Read the persisted enqueue-time snapshot, never the mutable template record.
+    var job = loadJob();
+    if (!Number.isInteger(entry.seq) || entry.seq < 0 || entry.seq >= job.ids.length ||
+      String(entry.recid) !== String(job.ids[entry.seq])) throw new Error('Invalid batch map entry');
+    entry.jobId = job.jobId;
+    entry.rectype = job.rectype;
+    entry.folder = job.folder;
+    var out = pldRender.renderDocumentXml(job.templateSnapshot.xml, job.rectype, entry.recid, job.templateSnapshot.copies, null);
 
     // ตรวจว่า XML ที่ resolve แล้วอ่านได้จริงตั้งแต่ตอนนี้ ไม่ใช่ไปพังตอนรวมไฟล์
     // ซึ่งจะทำให้ทั้งชุดล่มโดยไม่รู้ว่าใบไหนเป็นต้นเหตุ (อาการเดียวกับ #184)

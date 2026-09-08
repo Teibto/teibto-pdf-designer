@@ -500,3 +500,65 @@ test('ปุ่มส่งเข้าคิวอยู่บนหน้า�
     'ปลายทางต้องมาจาก field เดียว — field ชื่อซ้ำส่งถึง Suitelet แค่ค่าแรก');
   assert.match(body, /act\.value="queue"/);
 });
+
+
+test('queue freezes server-resolved XML and copies, ignoring request snapshot fields', () => {
+  const { suitelet, files } = buildBatch({ templates: TEMPLATES });
+  const { context } = queueRequest(['11'], {
+    templateSnapshot: JSON.stringify({ xml: '<pdf>injected</pdf>', copies: [] }),
+    xml: '<pdf>injected</pdf>', copies: '[]', schemaVersion: '1',
+  });
+  suitelet.onRequest(context);
+  const job = JSON.parse(files.created.find((f) => /^pld_job_/.test(f.name)).contents);
+  assert.equal(job.schemaVersion, 2);
+  assert.equal(job.templateSnapshot.xml, TPL_XML);
+  assert.deepEqual(job.templateSnapshot.copies, JSON.parse(TWO_COPIES).copies);
+});
+
+test('task submission failure deletes job spec and reports the failure', () => {
+  const { suitelet, files, task } = buildBatch({ templates: TEMPLATES });
+  task.module.create = () => ({ submit() { throw new Error('QUEUE_FULL'); } });
+  const { context, response } = queueRequest(['11']);
+  suitelet.onRequest(context);
+  const job = files.created.find((f) => /^pld_job_/.test(f.name));
+  assert.ok(files.deleted.includes(job.id));
+  assert.match(response.state.body, /QUEUE_FULL/);
+  assert.doesNotMatch(response.state.body, /ส่งเข้าคิวแล้ว/);
+});
+
+test('oversized resolved template is rejected before queue file creation', () => {
+  const oversized = [{ id: '7', values: { custrecord_pld_tpl_xml: 'x'.repeat(1000001), custrecord_pld_tpl_data: TWO_COPIES } }];
+  const { suitelet, files, task } = buildBatch({ templates: oversized });
+  const { context, response } = queueRequest(['11']);
+  suitelet.onRequest(context);
+  assert.equal(files.created.length, 0);
+  assert.equal(task.submitted.length, 0);
+  assert.match(response.state.body, /1000000/);
+});
+
+
+test('queue accepts a valid saved template larger than the former snapshot cap', () => {
+  const largeXml = '<pdf><body>' + 'ก'.repeat(989900) + '</body></pdf>';
+  const templates = [{ id: '7', values: { custrecord_pld_tpl_xml: largeXml, custrecord_pld_tpl_data: JSON.stringify({ copies: [{ th: 'สำเนา', en: '' }] }) } }];
+  const { suitelet, files, task } = buildBatch({ templates });
+  suitelet.onRequest(queueRequest(['11']).context);
+  const job = JSON.parse(files.created.find((f) => /^pld_job_/.test(f.name)).contents);
+  assert.equal(job.templateSnapshot.xml, largeXml);
+  assert.equal(job.templateSnapshot.copies[0].th, 'สำเนา');
+  assert.equal(task.submitted.length, 1);
+});
+
+
+test('immediate and queued print reject 21 copies before render work or job creation', () => {
+  const templates = [{ id: '7', values: { custrecord_pld_tpl_xml: TPL_XML, custrecord_pld_tpl_data: JSON.stringify({ copies: Array(21).fill({ th: 'สำเนา' }) }) } }];
+  for (const request of [printRequest, queueRequest]) {
+    const { suitelet, files, render, task } = buildBatch({ templates });
+    const { context, response } = request(['11']);
+    suitelet.onRequest(context);
+    assert.match(response.state.body, /20/);
+    assert.match(response.state.body, /render execution limit/);
+    assert.equal(render.calls.created, 0);
+    assert.equal(files.created.length, 0);
+    assert.equal(task.submitted.length, 0);
+  }
+});

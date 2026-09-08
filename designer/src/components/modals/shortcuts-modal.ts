@@ -9,7 +9,7 @@
  * @since 2026-07-24
  */
 import { LitElement, html, css } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, eventOptions, property } from 'lit/decorators.js';
 import '../shared/modal';
 
 /** Modifier label per platform — the handlers accept metaKey||ctrlKey. */
@@ -131,6 +131,7 @@ export class PldShortcutsModal extends LitElement {
         modalTitle="⌨ คีย์ลัด (Keyboard Shortcuts)"
         size="lg"
         @close=${this._close}
+        @keydown=${this._onKeydown}
       >
         <div slot="body">
           <div class="grid">
@@ -164,6 +165,18 @@ export class PldShortcutsModal extends LitElement {
 
   private _close() {
     this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
+  }
+
+  // Handle this dialog's own toggle before the shared dialog isolates keyboard
+  // events from the editor. No global listener or exception for other modals.
+  @eventOptions({ capture: true })
+  private _onKeydown(event: KeyboardEvent) {
+    if (this.open && event.key === '?' && !event.isComposing && !event.repeat
+      && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      this._close();
+    }
   }
 }
 

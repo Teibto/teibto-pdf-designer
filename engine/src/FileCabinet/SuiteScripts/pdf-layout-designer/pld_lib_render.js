@@ -82,8 +82,12 @@ define([
         [TPL.IS_DEFAULT, 'is', 'T']
       ],
       columns: [TPL.XML, TPL.DATA]
-    }).run().getRange({ start: 0, end: 1 });
+    }).run().getRange({ start: 0, end: 2 });
 
+    if (results.length > 1) {
+      throw new Error('พบ default template มากกว่าหนึ่งรายการสำหรับ ' + recType +
+        ' — ให้ผู้ดูแลแก้ไขให้เหลือ default ที่ใช้งานอยู่หนึ่งรายการก่อนพิมพ์');
+    }
     if (results.length === 0) return null;
 
     var xmlContent = results[0].getValue(TPL.XML);
@@ -110,6 +114,8 @@ define([
 
   // Thai statutory copy set (#15) — default for invoices when the template
   // doesn't define its own copy set (#92).
+  // Bound render passes before work begins: each copy consumes N/render governance.
+  var MAX_COPIES = 20;
   var INVOICE_COPIES = [
     { th: 'ต้นฉบับ', en: 'Original' },
     { th: 'สำเนา', en: 'Copy' }
@@ -134,7 +140,15 @@ define([
   /** Copies for a render (#92): template-defined set, else invoice default,
    *  else single original. */
   function resolveCopies(tplCopies, recType) {
-    return tplCopies || (recType === 'invoice' ? INVOICE_COPIES : [{ th: 'ต้นฉบับ', en: 'Original' }]);
+    var copies = tplCopies || (recType === 'invoice' ? INVOICE_COPIES : [{ th: 'ต้นฉบับ', en: 'Original' }]);
+    assertCopyCount(copies);
+    return copies;
+  }
+
+  function assertCopyCount(copies) {
+    if (!Array.isArray(copies) || copies.length === 0 || copies.length > MAX_COPIES) {
+      throw new Error('พิมพ์ได้ 1–' + MAX_COPIES + ' สำเนาต่อเอกสาร (render execution limit)');
+    }
   }
 
   /** Copy data source shape (#159) — keys a template may bind under ${copy.*}. */
@@ -246,6 +260,7 @@ define([
    * @returns {{docs: string[], tranId: string, rec: Object|null}}
    */
   function renderDocumentXml(tplXml, recType, recId, copies, tel) {
+    assertCopyCount(copies);
     var curatedType = invoiceData.isSupportedType(recType);
 
     var rec = null;
@@ -326,6 +341,7 @@ define([
    * @returns {{pdfFile: Object, tranId: string, rec: Object|null}}
    */
   function renderDocument(tplXml, recType, recId, copies, tel) {
+    assertCopyCount(copies);
     if (copies.length === 1) {
       var only = copies[0];
       var singleData = invoiceData.isSupportedType(recType)
@@ -357,6 +373,7 @@ define([
    * @returns {{pdfFile: Object}}
    */
   function renderSampleDocument(tplXml, recType, copies, tel) {
+    assertCopyCount(copies);
     if (tel) tel.stage = 'render';
 
     if (copies.length === 1) {
@@ -376,6 +393,7 @@ define([
   return {
     TPL: TPL,
     INVOICE_COPIES: INVOICE_COPIES,
+    MAX_COPIES: MAX_COPIES,
     loadTemplate: loadTemplate,
     findDefaultTemplate: findDefaultTemplate,
     resolveTemplate: resolveTemplate,

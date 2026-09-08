@@ -553,6 +553,13 @@ define([
     }
 
     var body = JSON.parse(context.request.body);
+    if (Object.prototype.hasOwnProperty.call(body, 'isDefault') && typeof body.isDefault !== 'boolean') {
+      throw new Error('isDefault must be a boolean when supplied');
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'rectype') &&
+        (typeof body.rectype !== 'string' || !body.rectype.trim())) {
+      throw new Error('rectype must be a non-empty record type when supplied');
+    }
 
     // XML is mandatory on every save — the engine has no generator of its own,
     // so a template without XML can never render (#6, R4: no silent fallback).
@@ -572,8 +579,13 @@ define([
 
     // Built-in name is mandatory (custom record includeName=T) — set it too,
     // not only the custom label field, or save fails with "Please enter value(s) for: Name".
-    rec.setValue({ fieldId: 'name', value: body.name || 'Untitled' });
-    rec.setValue({ fieldId: TPL_FLD_NAME, value: body.name || 'Untitled' });
+    var name = body.name || rec.getValue({ fieldId: TPL_FLD_NAME }) || 'Untitled';
+    var recType = body.rectype || rec.getValue({ fieldId: TPL_FLD_REC_TYPE }) || '';
+    var isDefault = typeof body.isDefault === 'boolean' ? body.isDefault :
+      rec.getValue({ fieldId: TPL_FLD_IS_DEFAULT }) === true;
+    if (isDefault && !recType) throw new Error('A default template requires a record type');
+    rec.setValue({ fieldId: 'name', value: name });
+    rec.setValue({ fieldId: TPL_FLD_NAME, value: name });
 
     if (body.data) {
       rec.setValue({ fieldId: TPL_FLD_DATA, value: body.data });
@@ -582,33 +594,45 @@ define([
     if (body.rectype) {
       rec.setValue({ fieldId: TPL_FLD_REC_TYPE, value: body.rectype });
     }
-    if (body.isDefault === true) {
-      // Unset other defaults for this rectype first
-      clearDefaultForRecType(body.rectype, tplId);
-      rec.setValue({ fieldId: TPL_FLD_IS_DEFAULT, value: true });
-    }
+    rec.setValue({ fieldId: TPL_FLD_IS_DEFAULT, value: isDefault });
 
     var savedId = rec.save();
 
     var snap = tplAudit.snapshot({
       tplId: savedId,
       action: tplId ? 'update' : 'create',
-      name: body.name || 'Untitled',
-      rectype: body.rectype || '',
+      name: name,
+      rectype: recType,
       xml: body.xml,
-      data: body.data || '',
+      data: rec.getValue({ fieldId: TPL_FLD_DATA }) || '',
       note: body.note || ''
     });
 
     tplAudit.auditWrite(tplId ? 'update' : 'create', {
       tplid: String(savedId),
-      rectype: body.rectype || '',
-      name: body.name || 'Untitled',
-      isDefault: body.isDefault === true,
+      rectype: recType,
+      name: name,
+      isDefault: isDefault,
       version: snap.versionNo
     });
 
-    sendJson(context, { id: savedId, success: true, version: snap.versionNo });
+    // Content and version are durable before touching other records. Default
+    // selection spans records, so permission/concurrency failure must be visible
+    // without losing the new ID or pretending the template was never saved.
+    var warning = '';
+    if (isDefault) {
+      try { clearDefaultForRecType(recType, savedId); }
+      catch (e) {
+        warning = 'บันทึกเนื้อหาแล้ว (template ' + savedId + ', version ' + snap.versionNo +
+          ') แต่ตั้งค่า default ไม่ครบ — อาจมีหลาย default สำหรับ ' + recType +
+          '. ให้ผู้ดูแลตรวจสิทธิ์และเลือก default ให้เหลือหนึ่งรายการก่อนพิมพ์';
+        log.error({ title: 'PLD saved template default reconciliation failed', details: {
+          tplid: String(savedId), rectype: recType, version: snap.versionNo,
+          message: (e && e.message) || String(e)
+        } });
+      }
+    }
+    sendJson(context, { id: savedId, success: true, version: snap.versionNo, warning: warning });
   }
 
   /**

@@ -83,7 +83,10 @@ export class AppStore extends EventTarget {
 
   get documentSession(): number { return this._documentSession; }
 
-  beginDocumentSession(): void { this._documentSession++; }
+  beginDocumentSession(): void {
+    this._documentSession++;
+    this.dispatch((d) => { delete d.template.nsMetadata; });
+  }
 
   constructor() {
     super();

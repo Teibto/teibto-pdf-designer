@@ -5,7 +5,7 @@
  *
  * @author Wichit Wongta
  */
-import { get, set, del, keys } from 'idb-keyval';
+import { get, set, del, keys, update } from 'idb-keyval';
 import { nanoid } from 'nanoid';
 import type { DocumentTemplate, TemplateCopy, PaginationConfig } from '../models/template';
 import type { AppStore } from '../state/store';
@@ -82,7 +82,7 @@ async function withSaveLock<T>(store: AppStore, save: () => Promise<T>): Promise
 }
 
 /** Attach the saved identity only to its editing session; preserve newer edits. */
-function acknowledgeSave(store: AppStore, saved: AppStore['state'], session: number, id: string): void {
+async function acknowledgeSave(store: AppStore, saved: AppStore['state'], session: number, id: string): Promise<void> {
   const current = store.state;
   if (store.documentSession !== session || current.template.id !== saved.template.id) return;
   const unchanged = current.template.name === saved.template.name &&
@@ -93,6 +93,12 @@ function acknowledgeSave(store: AppStore, saved: AppStore['state'], session: num
     d.template.id = id;
     d.template.isDirty = !unchanged;
   });
+  if (unchanged) {
+    const owner = draftOwner(store, session);
+    try {
+      await update<TemplateDraft | undefined>(DRAFT_KEY, (draft) => draft?.owner === owner && store.documentSession === session && !store.state.template.isDirty ? undefined : draft);
+    } catch (err) { console.warn('Failed to clear saved draft:', err); }
+  }
 }
 
 /** Save current state as a template */
@@ -123,7 +129,7 @@ async function persistTemplate(store: AppStore): Promise<DocumentTemplate> {
 
   await set(`${TEMPLATE_PREFIX}${template.id}`, template);
 
-  acknowledgeSave(store, state, session, template.id);
+  await acknowledgeSave(store, state, session, template.id);
 
   return template;
 }
@@ -145,14 +151,14 @@ async function persistTemplate(store: AppStore): Promise<DocumentTemplate> {
 export async function saveTemplateToNetSuite(
   store: AppStore,
   opts: { rectype?: string; isDefault?: boolean } = {},
-): Promise<{ id: string }> {
+): Promise<{ id: string; warning?: string }> {
   return withSaveLock(store, () => persistTemplateToNetSuite(store, opts));
 }
 
 async function persistTemplateToNetSuite(
   store: AppStore,
   opts: { rectype?: string; isDefault?: boolean },
-): Promise<{ id: string }> {
+): Promise<{ id: string; warning?: string }> {
   const state = store.state;
   const session = store.documentSession;
   const ctx = getNsContext();
@@ -200,13 +206,20 @@ async function persistTemplateToNetSuite(
     name: state.template.name || 'Untitled Template',
     data: designerJson,
     xml,
-    rectype: opts.rectype ?? ctx?.recordType ?? undefined,
+    rectype: opts.rectype ?? (state.template.id ? undefined : ctx?.recordType ?? undefined),
     isDefault: opts.isDefault,
   });
 
-  acknowledgeSave(store, state, session, result.id);
+  await acknowledgeSave(store, state, session, result.id);
+  if (store.documentSession === session && store.state.template.id === result.id) {
+    const rectype = opts.rectype ?? state.template.nsMetadata?.rectype ?? (!state.template.id ? ctx?.recordType : undefined);
+    const isDefault = opts.isDefault ?? state.template.nsMetadata?.isDefault;
+    if (rectype && isDefault !== undefined) store.dispatch((d) => {
+      d.template.nsMetadata = { rectype, isDefault };
+    });
+  }
 
-  return { id: result.id };
+  return { id: result.id, ...(result.warning ? { warning: result.warning } : {}) };
 }
 
 // ═══════════════════════════════════════
@@ -429,6 +442,8 @@ export const DRAFT_KEY = 'pld-draft-current';
 /** Shape of an autosaved draft — enough to fully restore an in-progress edit
  *  after a crash, session timeout, or accidental tab close (#140). */
 export interface TemplateDraft {
+  owner?: string;
+  nsMetadata?: { rectype: string; isDefault: boolean };
   templateId: string | null;
   templateName: string;
   page: PageConfig;
@@ -449,10 +464,22 @@ export interface TemplateDraft {
  * new Date() inside this function) so saveDraft stays pure and deterministic
  * for unit tests.
  */
+const draftOwners = new WeakMap<AppStore, { session: number; owner: string }>();
+function draftOwner(store: AppStore, session: number): string {
+  let entry = draftOwners.get(store);
+  if (!entry || entry.session !== session) {
+    entry = { session, owner: nanoid() };
+    draftOwners.set(store, entry);
+  }
+  return entry.owner;
+}
+
 export async function saveDraft(store: AppStore, now: string): Promise<void> {
   const state = store.state;
 
   const draft: TemplateDraft = {
+    owner: draftOwner(store, store.documentSession),
+    nsMetadata: state.template.nsMetadata,
     templateId: state.template.id,
     templateName: state.template.name,
     page: structuredClone(state.page),
@@ -471,6 +498,21 @@ export async function saveDraft(store: AppStore, now: string): Promise<void> {
 export async function getDraft(): Promise<TemplateDraft | null> {
   const draft = await get<TemplateDraft>(DRAFT_KEY);
   return draft ?? null;
+}
+
+/** Claim restored recovery data without replacing a newer draft from another editor. */
+export async function claimDraft(store: AppStore, expected: TemplateDraft): Promise<void> {
+  const owner = draftOwner(store, store.documentSession);
+  const snapshot = JSON.stringify(expected);
+  await update<TemplateDraft | undefined>(DRAFT_KEY, (draft) =>
+    JSON.stringify(draft) === snapshot ? { ...expected, owner } : draft);
+}
+
+/** Discard only the recovery entry the user actually reviewed. */
+export async function dismissDraft(expected: TemplateDraft): Promise<void> {
+  const snapshot = JSON.stringify(expected);
+  await update<TemplateDraft | undefined>(DRAFT_KEY, (draft) =>
+    JSON.stringify(draft) === snapshot ? undefined : draft);
 }
 
 /** Delete the autosaved draft — call after a successful save, a restore, or a

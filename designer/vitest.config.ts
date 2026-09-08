@@ -8,6 +8,7 @@ export default defineConfig({
     },
   },
   test: {
+    setupFiles: ['./tests/setup-dialog.ts'],
     include: ['tests/**/*.test.ts'],
     environment: 'node',
     globals: false,

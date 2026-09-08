@@ -13,6 +13,7 @@ vi.mock('idb-keyval', () => {
   const mem = new Map<string, unknown>();
   return {
     get: async (k: string) => mem.get(k),
+    update: async (k: string, fn: (v: unknown) => unknown) => { mem.set(k, fn(mem.get(k))); },
     set: vi.fn(async (k: string, v: unknown) => { mem.set(k, v); }),
     del: async (k: string) => { mem.delete(k); },
     keys: async () => [...mem.keys()],
@@ -22,7 +23,7 @@ vi.mock('idb-keyval', () => {
 import { AppStore } from '../../src/state/store';
 import { addElementToNewBand } from '../../src/state/actions';
 import { set } from 'idb-keyval';
-import { saveTemplate, saveTemplateToNetSuite } from '../../src/services/template.service';
+import { saveDraft, getDraft, saveTemplate, saveTemplateToNetSuite } from '../../src/services/template.service';
 
 const savedBodies: Record<string, unknown>[] = [];
 const originalWindow = (globalThis as { window?: unknown }).window;
@@ -166,6 +167,57 @@ describe('saveTemplateToNetSuite (#137)', () => {
     const data = JSON.parse(body.data);
     expect(data.bands).toBeTruthy();
     expect(data.elements).toHaveLength(1);
+  });
+
+  it('retains the durable saved ID and propagates server warnings', async () => {
+    const store = storeWithContent();
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: '42', success: true, warning: 'Default conflict' }), { status: 200 }));
+    const result = await saveTemplateToNetSuite(store, { isDefault: true });
+    expect(result).toEqual({ id: '42', warning: 'Default conflict' });
+    expect(store.state.template.id).toBe('42');
+    expect(store.state.template.isDirty).toBe(false);
+  });
+
+  it('quick-save preserves existing server metadata even when launched from another record type', async () => {
+    const store = storeWithContent();
+    store.dispatch((d) => {
+      d.template.id = '42';
+      d.template.nsMetadata = { rectype: 'purchaseorder', isDefault: true };
+    });
+    await saveTemplateToNetSuite(store);
+    expect(savedBodies[0]).not.toHaveProperty('rectype');
+    expect(savedBodies[0]).not.toHaveProperty('isDefault');
+  });
+
+  it('dialog service save clears only its own saved-session draft', async () => {
+    const store = storeWithContent();
+    await saveDraft(store, '2026-09-09T00:00:00Z');
+    await saveTemplateToNetSuite(store, { rectype: 'purchaseorder', isDefault: false });
+    expect(await getDraft()).toBeNull();
+    expect(store.state.template.nsMetadata).toEqual({ rectype: 'purchaseorder', isDefault: false });
+  });
+
+  it('preserves a newer draft while the NetSuite save request is in flight', async () => {
+    const store = storeWithContent();
+    await saveDraft(store, '2026-09-09T00:00:00Z');
+    let complete!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store, { isDefault: false });
+    store.dispatch((d) => { d.template.name = 'Newer work'; d.template.isDirty = true; });
+    await saveDraft(store, '2026-09-09T00:00:01Z');
+    complete(new Response(JSON.stringify({ id: '42', success: true }), { status: 200 }));
+    await pending;
+    expect((await getDraft())?.templateName).toBe('Newer work');
+    expect(store.state.template.isDirty).toBe(true);
+  });
+
+  it('saving one editor preserves another editor recovery draft', async () => {
+    const store = storeWithContent();
+    const other = storeWithContent();
+    other.dispatch((d) => { d.template.name = 'Other editor'; });
+    await saveDraft(other, '2026-09-09T00:00:00Z');
+    await saveTemplateToNetSuite(store);
+    expect((await getDraft())?.templateName).toBe('Other editor');
   });
 
   it('defaults rectype to the record the designer was opened from', async () => {

@@ -12,8 +12,9 @@
  *   </pld-modal>
  *
  * @author Wichit Wongta
+ * @since 2026-09-09
  */
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, type PropertyValues } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
 @customElement('pld-modal')
@@ -30,14 +31,27 @@ export class PldModal extends LitElement {
     .backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.65);
-      z-index: 500;
+      background: transparent;
+      border: 0;
+      padding: 16px;
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+      box-sizing: border-box;
       display: flex;
       align-items: center;
       justify-content: center;
       animation: backdropIn 0.2s ease;
+    }
+
+    .backdrop::backdrop {
+      background: rgba(0, 0, 0, 0.65);
       backdrop-filter: blur(4px);
     }
+
+    .backdrop:not([open]) { display: none; }
 
     @keyframes backdropIn {
       from { opacity: 0; }
@@ -54,6 +68,7 @@ export class PldModal extends LitElement {
       max-height: 90vh;
       animation: cardIn 0.25s ease;
       overflow: hidden;
+      max-width: 100%;
     }
 
     @keyframes cardIn {
@@ -134,12 +149,13 @@ export class PldModal extends LitElement {
     if (!this.open) return nothing;
 
     return html`
-      <div class="backdrop" @click=${this._onBackdropClick}>
+      <dialog class="backdrop" aria-labelledby="modal-heading" aria-modal="true"
+        @cancel=${this._onCancel} @keydown=${this._onKeydown} @click=${this._onBackdropClick}>
         <div class="card ${this.size}" @click=${(e: Event) => e.stopPropagation()}>
           <!-- Header -->
           <div class="header">
-            <h2>${this.modalTitle}</h2>
-            <button class="close-btn" @click=${this._close}>✕</button>
+            <h2 id="modal-heading">${this.modalTitle || this.title || 'กล่องโต้ตอบ'}</h2>
+            <button class="close-btn" type="button" aria-label="ปิด / Close" @click=${this._close}>✕</button>
           </div>
 
           <!-- Body -->
@@ -152,7 +168,7 @@ export class PldModal extends LitElement {
             <slot name="footer"></slot>
           </div>
         </div>
-      </div>
+      </dialog>
     `;
   }
 
@@ -164,25 +180,43 @@ export class PldModal extends LitElement {
     this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
   }
 
-  /** Close on Escape key */
-  connectedCallback() {
-    super.connectedCallback();
-    this._keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.open) {
-        this._close();
-      }
-    };
-    window.addEventListener('keydown', this._keyHandler);
+  // Native modal dialogs make the rest of the document inert, including across
+  // shadow roots. The browser also handles slotted focus order and nested dialogs.
+  protected willUpdate(changed: PropertyValues<this>) {
+    if (changed.has('open') && !this.open) this._dialog?.close();
   }
 
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    if (this._keyHandler) {
-      window.removeEventListener('keydown', this._keyHandler);
+  protected updated() {
+    if (this.open && this.isConnected && this._dialog && !this._dialog.open) {
+      this._dialog.showModal();
     }
   }
 
-  private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private get _dialog() {
+    return this.shadowRoot?.querySelector('dialog');
+  }
+
+  private _onCancel(event: Event) {
+    // Preserve the controlled .open API: a caller may refuse close while saving.
+    event.preventDefault();
+    event.stopPropagation();
+    this._close();
+  }
+
+  private _onKeydown(event: KeyboardEvent) {
+    // Modal input must not trigger editor shortcuts on window/document.
+    event.stopPropagation();
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  disconnectedCallback() {
+    this._dialog?.close();
+    super.disconnectedCallback();
+  }
 }
 
 declare global {

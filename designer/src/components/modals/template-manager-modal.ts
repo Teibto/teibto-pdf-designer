@@ -733,6 +733,7 @@ export class PldTemplateManagerModal extends LitElement {
         draft.copies = data.copies ?? null;
         if (data.page) draft.page = { ...data.page };
         if (data.pagination) draft.pagination = { ...draft.pagination, ...data.pagination };
+        draft.template.nsMetadata = { rectype: src.rectype, isDefault: src.isDefault };
         draft.template.id = src.id;
         draft.template.name = src.name;
         draft.template.isDirty = false;

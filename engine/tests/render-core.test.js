@@ -193,3 +193,38 @@ test('only the core builds render data sources — no second render path', () =>
 
   assert.deepEqual(owners, ['pld_lib_render.js']);
 });
+
+
+test('copy work limit rejects 21 copies before loading transactions or creating renderers', () => {
+  const { core, render, curatedCalls } = buildCore({ curated: true });
+  const copies = Array(21).fill({ th: 'สำเนา', en: 'Copy' });
+  assert.throws(() => core.resolveCopies(copies, 'invoice'), /20.*render execution limit/);
+  assert.throws(() => core.renderDocumentXml(TPL_XML, 'invoice', '42', copies, {}), /20/);
+  assert.throws(() => core.renderDocument(TPL_XML, 'invoice', '42', copies, {}), /20/);
+  assert.throws(() => core.renderSampleDocument(TPL_XML, 'invoice', copies, {}), /20/);
+  assert.equal(render.calls.created, 0);
+  assert.equal(curatedCalls.length, 0);
+  assert.equal(core.resolveCopies(null, 'invoice').length, 2);
+  assert.equal(core.resolveCopies(Array(20).fill({ th: 'สำเนา' }), 'invoice').length, 20);
+});
+
+
+test('duplicate active defaults fail visibly before rendering rather than choosing arbitrary XML', () => {
+  const templates = [
+    { id: '7', values: { custrecord_pld_tpl_xml: '<pdf><body>first</body></pdf>' } },
+    { id: '8', values: { custrecord_pld_tpl_xml: '<pdf><body>second</body></pdf>' } },
+  ];
+  const { core, render, search } = buildCore({ templates });
+  const requestedRanges = [];
+  const create = search.module.create;
+  search.module.create = (options) => {
+    const query = create(options);
+    return { run() {
+      const results = query.run().getRange({ start: 0, end: 2 });
+      return { getRange(range) { requestedRanges.push(range); return results.slice(range.start, range.end); } };
+    } };
+  };
+  assert.throws(() => core.resolveTemplate('', 'invoice'), /default template มากกว่าหนึ่ง.*invoice.*ผู้ดูแล/);
+  assert.equal(requestedRanges[0].end, 2, 'the server must request enough rows to detect ambiguity');
+  assert.equal(render.calls.created, 0);
+});

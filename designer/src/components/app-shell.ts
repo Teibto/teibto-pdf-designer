@@ -18,7 +18,8 @@ import {
   saveTemplateToNetSuite,
   saveDraft,
   getDraft,
-  clearDraft,
+  claimDraft,
+  dismissDraft,
   type TemplateDraft,
 } from '../services/template.service';
 import { showToast } from './shared/toast-notification';
@@ -63,6 +64,7 @@ export class PldAppShell extends LitElement {
   // Autosave (#140): debounced draft write, cleaned up like the other listeners.
   private _autosaveHandler: (() => void) | null = null;
   private _autosaveDebounced: (() => void) & { cancel(): void } = debounce(() => {
+    if (!this.store.state.template.isDirty) return;
     saveDraft(this.store, new Date().toISOString()).catch((err) => {
       console.warn('Autosave draft failed:', err);
     });
@@ -210,6 +212,8 @@ export class PldAppShell extends LitElement {
     this._autosaveHandler = () => {
       if (this.store.state.template.isDirty) {
         this._autosaveDebounced();
+      } else {
+        this._autosaveDebounced.cancel();
       }
     };
     this.store.addEventListener('state-changed', this._autosaveHandler);
@@ -370,13 +374,12 @@ export class PldAppShell extends LitElement {
   // ═══════════════════════════════════════
 
   private async _saveTemplate() {
-    const session = this.store.documentSession;
     // Inside NetSuite the 💾 button (and Ctrl+S) must persist to the customrecord.
     // Saving only to IndexedDB looked successful but never reached the account (#137).
     if (isNetSuiteEnv()) {
       try {
-        const { id } = await saveTemplateToNetSuite(this.store);
-        showToast(`บันทึกเข้า NetSuite แล้ว (ID: ${id})`, 'success');
+        const { id, warning } = await saveTemplateToNetSuite(this.store);
+        showToast(warning ? `บันทึกแล้ว (ID: ${id}) — ${warning}` : `บันทึกเข้า NetSuite แล้ว (ID: ${id})`, warning ? 'warning' : 'success');
         // #156: the XML binds ${company.fontRegular}, so an account with no Thai
         // font in its config prints every template with the Thai glyphs dropped —
         // and BFO stays silent about it. Say so right after the save.
@@ -386,8 +389,7 @@ export class PldAppShell extends LitElement {
             'warning',
           );
         }
-        // A real save landed — the autosave draft is now stale (#140).
-        this._clearSavedDraft(id, session);
+
       } catch (err) {
         // No IndexedDB fallback — a failed NetSuite save must be visible, not
         // masked by a silent local write (R4: no silent fallback).
@@ -398,20 +400,12 @@ export class PldAppShell extends LitElement {
     // Local (non-NetSuite) mode — persist to this browser and say so plainly so
     // the user does not mistake it for a NetSuite save.
     try {
-      const saved = await saveTemplate(this.store);
+      await saveTemplate(this.store);
       showToast('บันทึกในเครื่องนี้เท่านั้น (ยังไม่เข้า NetSuite)', 'info');
-      // A real save landed — the autosave draft is now stale (#140).
-      this._clearSavedDraft(saved.id, session);
+
     } catch (err) {
       showToast(`บันทึกไม่สำเร็จ: ${err}`, 'error');
     }
-  }
-
-  private _clearSavedDraft(id: string, session: number) {
-    if (this.store.documentSession !== session ||
-        this.store.state.template.id !== id || this.store.state.template.isDirty) return;
-    this._autosaveDebounced.cancel();
-    clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
   }
 
   /** Restore the pending autosave draft into the store (#140). */
@@ -429,6 +423,7 @@ export class PldAppShell extends LitElement {
       d.pagination = { ...createDefaultPagination(), ...draft.pagination };
       d.jsonData = draft.jsonData ?? null;
       d.jsonKeys = draft.jsonData ? extractJsonKeys(draft.jsonData) : [];
+      d.template.nsMetadata = draft.nsMetadata;
       d.template.id = draft.templateId;
       d.template.name = draft.templateName;
       // Restored content never matches what's saved on disk — mark dirty so
@@ -441,15 +436,16 @@ export class PldAppShell extends LitElement {
 
     this._pendingDraft = null;
     this.showDraftBanner = false;
-    clearDraft().catch((err) => console.warn('Failed to clear draft after restore:', err));
+    claimDraft(this.store, draft).catch((err) => console.warn('Failed to claim restored draft:', err));
     showToast('กู้คืนงานที่บันทึกอัตโนมัติแล้ว', 'success');
   }
 
   /** Discard the pending autosave draft without restoring it (#140). */
   private _discardDraft() {
+    const draft = this._pendingDraft;
     this._pendingDraft = null;
     this.showDraftBanner = false;
-    clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
+    if (draft) dismissDraft(draft).catch((err) => console.warn('Failed to dismiss draft:', err));
   }
 
   private _exportJson() {

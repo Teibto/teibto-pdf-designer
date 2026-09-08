@@ -210,6 +210,47 @@ SuiteScripts/
 
 ## Company Config (customrecord_pld_config) — จุดตั้งค่า per-account จุดเดียว
 
+### Permission migration for #199
+
+Drain existing batch tasks before deploying schema v2. Old job files without a snapshot are
+rejected with resubmission guidance; do not mix old/new worker files while tasks run. Queue jobs
+now retain the server-resolved XML and copies at enqueue. No edits to the template or default
+after submission change that job. Keep job files private and immutable to requesters; current
+shared-folder ownership is still a release blocker under `docs/PRODUCTION-READINESS.md`.
+Limits are 500 documents per job, 1,000,000 XML characters per snapshot, 8 MiB serialized job,
+8 MiB resolved XML aggregate and 20 render copies per document across immediate/queued/sample
+paths. These limits do not establish live capacity; test governance/latency before rollout.
+
+If save reports that content was saved but default reconciliation failed, keep the returned
+template ID/version and repair permissions/default selection before printing. Multiple active
+defaults for the same record type now cause an explicit error; the renderer does not pick one
+arbitrarily. The new content and version remain available even if changing another record fails.
+
+The candidate clears `runasrole` explicitly on all four deployments and sets Suitelets
+`isonline=F`. Intended behavior is **Current Role**: transaction loads/searches/rendering respect
+the caller's record, employee and subsidiary restrictions. Do not restore Administrator execution
+to work around a missing permission. An empty optional field is used instead of omitting it so an
+upgrade clears the old assignment; SDF validation and deployment readback must verify the actual
+Execute as Role value before release. Local XML tests only prevent packaging elevation.
+
+Prepare a minimum-permission role matrix per account: transaction View for required document
+types; View for template/company config and font files; editor roles additionally need template
+and version write permissions plus the configured editor allowlist. Restrict config changes to
+administrators. Batch submitters need SuiteScript and SuiteScript Scheduling, and appropriate
+private batch folder permissions; test direct file access separately from Suitelet access.
+
+On-demand Map/Reduce runs with the calling script's identity and permissions according to
+[Oracle's submission documentation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
+Manual UI submission runs as System with administrator permissions, so production jobs must be
+submitted through the authorized batch flow. Required scheduling permissions are documented by
+[MapReduceScriptTask.submit](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_453639770507.html).
+
+Before sign-off, read back all deployment settings and test two restricted users in different
+subsidiaries: render, preview-live, load-record, list/search, batch queue and file download. A
+known forbidden record ID must remain forbidden on every route. Test template read-only versus
+editor roles and administrator setup. File ownership/isolation remains a separate release blocker;
+clearing role elevation does not establish per-requester batch privacy.
+
 ค่าที่ template กลางอ้างผ่าน `${company.*}` ทั้งหมดมาจาก custom record **PDF Layout Config**
 (SDF deploy ให้อัตโนมัติ) — สร้าง 1 record ต่อ account แล้ว template ทุกใบใช้ได้ทันที
 โดยไม่ต้องแก้ template XML (#9). เมื่อพิมพ์ transaction ระบบเลือก config ของ subsidiary นั้น

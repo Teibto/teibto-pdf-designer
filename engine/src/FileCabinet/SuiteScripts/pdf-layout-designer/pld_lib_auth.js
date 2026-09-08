@@ -4,11 +4,10 @@
  *
  * PDF Layout Designer — สิทธิ์แก้ไข template (#189)
  *
- * ทั้ง 3 Suitelet ของ product นี้ deploy ด้วย `allroles=T` + `runasrole=ADMINISTRATOR`
- * เพราะการ **พิมพ์** ต้องอ่าน transaction/ฟอนต์/config ข้าม subsidiary ได้ — ผลข้างเคียงคือ
- * สิทธิ์ระดับ record ของ NetSuite ไม่ได้กันอะไรไว้เลย ใครที่ login ได้ก็ยิง `?action=save`
- * ทับ template ที่ทั้ง account ใช้ออกใบกำกับภาษีได้ ไฟล์นี้จึงเป็น**ด่านเดียว**ที่แยก
- * "คนพิมพ์เอกสาร" (ทุกคน) ออกจาก "คนแก้ template" (เฉพาะ role ที่ระบุไว้).
+ * Suitelet ต้องใช้ Current Role เพื่อให้ NetSuite บังคับสิทธิ์ transaction/subsidiary
+ * ของผู้เรียก (#199). ฟอนต์/config/template ต้องให้สิทธิ์ขั้นต่ำแก่ role ที่ใช้งานจริง
+ * ไม่ยกระดับทั้ง request เป็น Administrator. ไฟล์นี้เป็นด่านสิทธิ์แก้ template เพิ่มเติม
+ * ไม่ใช่ตัวแทนของ NetSuite record permissions. ตรวจ Execute as Role หลัง deploy ทุกครั้ง.
  *
  * กติกา:
  * - allowlist มาจาก field `custrecord_pld_cfg_editor_roles` บน config record —
@@ -21,8 +20,8 @@
  *   ผิดพลาดแล้วต้องเห็น ไม่ใช่เงียบแล้วปล่อยผ่าน)
  *
  * ข้อจำกัดที่ unit test พิสูจน์ไม่ได้ (บทเรียนเดียวกับ #174): ค่าที่ใช้ตัดสินคือ
- * `runtime.getCurrentUser().role` ซึ่ง **ต้องยืนยันสดบน account** ว่าเป็น role ของผู้ใช้จริง
- * ไม่ใช่ role ที่ deployment ตั้ง run-as ไว้ — ทุกการตัดสินจึงเขียน roleId ลง log.audit
+ * `runtime.getCurrentUser().role` ซึ่ง **ต้องยืนยันสดบน account** พร้อมทดสอบ role จำกัดสิทธิ์
+ * และห้ามมี deployment drift กลับเป็น Administrator — ทุกการตัดสินเขียน roleId ลง log.audit
  * ให้ตรวจได้จาก Script Execution Log ตรง ๆ (ดู docs/RUNBOOK.md)
  *
  * @author Wichit Wongta

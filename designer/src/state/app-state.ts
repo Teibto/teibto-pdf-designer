@@ -72,6 +72,7 @@ export interface AppState {
     id: string | null;
     name: string;
     isDirty: boolean;
+    nsMetadata?: { rectype: string; isDefault: boolean };
   };
 
   // ─── UI State ───

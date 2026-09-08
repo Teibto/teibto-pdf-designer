@@ -25,6 +25,8 @@ const TPL_XML = '<pdf><body>ok</body></pdf>';
 const TWO_COPIES = JSON.stringify({ copies: [{ th: 'ต้นฉบับ', en: 'Original' }, { th: 'สำเนา', en: 'Copy' }] });
 
 const JOB = {
+  schemaVersion: 2,
+  templateSnapshot: { xml: TPL_XML, copies: JSON.parse(TWO_COPIES).copies },
   jobId: 'j1',
   rectype: 'itemfulfillment',
   tplid: '7',
@@ -325,4 +327,75 @@ test('saved PDF survives failed URL lookup with file ID reported for recovery', 
   assert.match(emails[0].body, /สร้างสำเร็จ: 1 ใบ/);
   assert.ok(emails[0].body.includes('file ID: ' + audit.details.pdfId));
   assert.ok(log.entries.some((e) => e.title === 'PLD batch PDF link unavailable'));
+});
+
+
+test('legacy queued jobs fail visibly without resolving a mutable template', () => {
+  const { schemaVersion, templateSnapshot, ...legacy } = JOB;
+  const { mr, files, emails } = buildMr({ job: legacy });
+  assert.throws(() => mr.getInputData(), /template snapshot/);
+  const summary = summaryStub();
+  summary.inputSummary = { error: 'งานคิวรุ่นเก่าไม่มี template snapshot — ส่งงานใหม่' };
+  assert.throws(() => mr.summarize(summary), /template snapshot/);
+  assert.match(emails[0].body, /ส่งงานใหม่/);
+  assert.ok(files.deleted.includes('900'));
+});
+
+test('workers use frozen enqueue XML and copy labels even when template is unavailable', () => {
+  const frozen = { xml: '<pdf><body>Frozen</body></pdf>', copies: [{ th: 'สำเนาคงที่', en: 'Frozen copy' }] };
+  const { mr, render, files } = buildMr({ job: { ...JOB, templateSnapshot: frozen }, failIds: ['7'] });
+  const originalCreate = render.module.create;
+  const boundXml = [];
+  render.module.create = () => {
+    const renderer = originalCreate();
+    renderer.renderAsString = function () { boundXml.push(this.templateContent); return this.templateContent; };
+    return renderer;
+  };
+  const entries = mr.getInputData();
+  mr.map(mapContext(entries[0]).context);
+  mr.map(mapContext(entries[1]).context);
+  assert.deepEqual(boundXml, [frozen.xml, frozen.xml]);
+  assert.deepEqual(render.calls.dataSources.filter((s) => s.alias === 'copy').map((s) => s.data.th), ['สำเนาคงที่', 'สำเนาคงที่']);
+  assert.equal(files.created.length, 2);
+});
+
+test('snapshot and job metadata bounds are validated before scheduling maps', () => {
+  const invalid = [
+    { templateSnapshot: { ...JOB.templateSnapshot, xml: 'x'.repeat(1000001) } },
+    { templateSnapshot: { ...JOB.templateSnapshot, copies: [] } },
+    { templateSnapshot: { ...JOB.templateSnapshot, copies: [{ th: '', en: '' }] } },
+    { templateSnapshot: { ...JOB.templateSnapshot, copies: [{ th: 123, en: 'A' }] } },
+    { ids: ['invalid'] }, { folder: '-1' }, { jobId: '../other' },
+  ];
+  for (const change of invalid) {
+    const { mr } = buildMr({ job: { ...JOB, ...change } });
+    assert.throws(() => mr.getInputData(), /Invalid/);
+  }
+});
+
+
+test('snapshot accepts established XML size and one-language copy labels', () => {
+  const xml = '<pdf><body>' + 'ก'.repeat(989900) + '</body></pdf>';
+  for (const copy of [{ th: 'สำเนา', en: '' }, { th: '', en: 'Copy' }, { en: 'Copy' }]) {
+    const { mr, render } = buildMr({ job: { ...JOB, templateSnapshot: { xml, copies: [copy] } } });
+    const entries = mr.getInputData();
+    mr.map(mapContext(entries[0]).context);
+    assert.equal(render.calls.renderedAsString, 1);
+  }
+});
+
+test('serialized job UTF-8 budget accepts escaped XML and rejects oversize copy payload', () => {
+  const xml = '<pdf>' + '\t'.repeat(989900) + '</pdf>';
+  const accepted = buildMr({ job: { ...JOB, templateSnapshot: { xml, copies: [{ th: 'A' }] } } });
+  assert.equal(accepted.mr.getInputData().length, 3);
+  const oversized = buildMr({ job: { ...JOB, templateSnapshot: { xml: TPL_XML, copies: [{ th: 'ก'.repeat(2800000) }] } } });
+  assert.throws(() => oversized.mr.getInputData(), /8 MiB/);
+});
+
+
+test('persisted excessive copies are rejected before scheduling or rendering', () => {
+  const { mr, render } = buildMr({ job: { ...JOB, templateSnapshot: { xml: TPL_XML, copies: Array(21).fill({ en: 'Copy' }) } } });
+  assert.throws(() => mr.getInputData(), /20.*render execution limit/);
+  assert.throws(() => mr.map(mapContext({ seq: 0, recid: '11' }).context), /20.*render execution limit/);
+  assert.equal(render.calls.created, 0);
 });
