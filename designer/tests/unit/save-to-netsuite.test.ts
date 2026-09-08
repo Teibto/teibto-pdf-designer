@@ -13,7 +13,7 @@ vi.mock('idb-keyval', () => {
   const mem = new Map<string, unknown>();
   return {
     get: async (k: string) => mem.get(k),
-    set: async (k: string, v: unknown) => { mem.set(k, v); },
+    set: vi.fn(async (k: string, v: unknown) => { mem.set(k, v); }),
     del: async (k: string) => { mem.delete(k); },
     keys: async () => [...mem.keys()],
   };
@@ -21,7 +21,8 @@ vi.mock('idb-keyval', () => {
 
 import { AppStore } from '../../src/state/store';
 import { addElementToNewBand } from '../../src/state/actions';
-import { saveTemplateToNetSuite } from '../../src/services/template.service';
+import { set } from 'idb-keyval';
+import { saveTemplate, saveTemplateToNetSuite } from '../../src/services/template.service';
 
 const savedBodies: Record<string, unknown>[] = [];
 const originalWindow = (globalThis as { window?: unknown }).window;
@@ -59,6 +60,97 @@ describe('saveTemplateToNetSuite (#137)', () => {
     store.dispatch((d) => { d.template.name = 'My Template'; });
     return store;
   }
+
+  it('does not mark a newer local edit clean when IndexedDB finishes', async () => {
+    let complete!: () => void;
+    vi.mocked(set).mockImplementationOnce(() => new Promise<void>((resolve) => { complete = resolve; }));
+    const store = storeWithContent();
+    const pending = saveTemplate(store);
+    store.dispatch((d) => { d.template.name = 'Newer draft'; });
+    complete();
+    await pending;
+    expect(store.state.template).toMatchObject({ name: 'Newer draft', isDirty: true });
+  });
+
+  it('prevents concurrent create requests and releases the lock after failure', async () => {
+    let reject!: (reason: Error) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((_, fail) => { reject = fail; }));
+    const store = storeWithContent();
+    const first = saveTemplateToNetSuite(store);
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow('กำลังบันทึก');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    reject(new Error('failed'));
+    await expect(first).rejects.toThrow('failed');
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ id: '42', success: true })));
+    await expect(saveTemplateToNetSuite(store)).resolves.toEqual({ id: '42' });
+  });
+
+  it.each(['edit', 'switch', 'reset'] as const)('preserves unsaved state after %s during save', async (change) => {
+    const store = storeWithContent();
+    let complete!: (value: Response) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store);
+    if (change === 'edit') store.dispatch((d) => { d.elements[0].x += 1; });
+    if (change === 'switch') store.dispatch((d) => { d.template.id = 'other'; });
+    if (change === 'reset') store.reset();
+    const current = store.state;
+    complete(new Response(JSON.stringify({ id: '42', success: true })));
+    await pending;
+    if (change === 'edit') {
+      expect(store.state.template).toMatchObject({ id: '42', isDirty: true });
+      expect(store.state.elements).toBe(current.elements);
+    } else expect(store.state).toBe(current);
+  });
+
+  it('updates the created record on the next save after editing during creation', async () => {
+    const store = storeWithContent();
+    let complete!: (value: Response) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store);
+    store.dispatch((d) => { d.template.name = 'Edited while creating'; });
+    complete(new Response(JSON.stringify({ id: '42', success: true })));
+    await pending;
+    expect(store.state.template).toMatchObject({ id: '42', isDirty: true });
+    globalThis.fetch = vi.fn(async (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({ id: '42', name: 'Edited while creating' });
+      return new Response(JSON.stringify({ id: '42', success: true }));
+    });
+    await saveTemplateToNetSuite(store);
+    expect(store.state.template.isDirty).toBe(false);
+  });
+
+  it('does not acknowledge a reloaded session even with identical template ID and content', async () => {
+    const store = storeWithContent();
+    let complete!: (value: Response) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store);
+    store.beginDocumentSession();
+    const current = store.state;
+    complete(new Response(JSON.stringify({ id: '42', success: true })));
+    await pending;
+    expect(store.state).toBe(current);
+  });
+
+  it('still acknowledges a save when only selection or zoom changes', async () => {
+    const store = storeWithContent();
+    let complete!: (value: Response) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store);
+    store.dispatch((d) => { d.zoom = 150; d.selectedId = null; });
+    complete(new Response(JSON.stringify({ id: '42', success: true })));
+    await pending;
+    expect(store.state.template).toMatchObject({ id: '42', isDirty: false });
+  });
+
+  it.each([503, 'network', 'timeout'] as const)('never retries ambiguous save failure %s', async (failure) => {
+    globalThis.fetch = vi.fn(async () => {
+      if (failure === 'network') throw new TypeError('connection lost');
+      if (failure === 'timeout') throw new DOMException('aborted', 'AbortError');
+      return new Response('', { status: failure });
+    });
+    await expect(saveTemplateToNetSuite(storeWithContent())).rejects.toThrow();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
 
   it('POSTs designer JSON + generated BFO XML to the save action', async () => {
     const store = storeWithContent();

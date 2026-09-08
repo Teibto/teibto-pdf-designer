@@ -72,9 +72,37 @@ export async function listTemplates(): Promise<DocumentTemplate[]> {
 // SAVE
 // ═══════════════════════════════════════
 
+const pendingSaves = new WeakSet<AppStore>();
+
+async function withSaveLock<T>(store: AppStore, save: () => Promise<T>): Promise<T> {
+  if (pendingSaves.has(store)) throw new Error('กำลังบันทึกเทมเพลต กรุณารอให้เสร็จก่อน');
+  pendingSaves.add(store);
+  try { return await save(); }
+  finally { pendingSaves.delete(store); }
+}
+
+/** Attach the saved identity only to its editing session; preserve newer edits. */
+function acknowledgeSave(store: AppStore, saved: AppStore['state'], session: number, id: string): void {
+  const current = store.state;
+  if (store.documentSession !== session || current.template.id !== saved.template.id) return;
+  const unchanged = current.template.name === saved.template.name &&
+      current.elements === saved.elements && current.bands === saved.bands &&
+      current.page === saved.page && current.pagination === saved.pagination &&
+      current.copies === saved.copies && current.jsonData === saved.jsonData;
+  store.dispatch((d) => {
+    d.template.id = id;
+    d.template.isDirty = !unchanged;
+  });
+}
+
 /** Save current state as a template */
 export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
+  return withSaveLock(store, () => persistTemplate(store));
+}
+
+async function persistTemplate(store: AppStore): Promise<DocumentTemplate> {
   const state = store.state;
+  const session = store.documentSession;
   const now = new Date().toISOString();
 
   const template: DocumentTemplate = {
@@ -95,10 +123,7 @@ export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
 
   await set(`${TEMPLATE_PREFIX}${template.id}`, template);
 
-  store.dispatch((d) => {
-    d.template.id = template.id;
-    d.template.isDirty = false;
-  });
+  acknowledgeSave(store, state, session, template.id);
 
   return template;
 }
@@ -121,7 +146,15 @@ export async function saveTemplateToNetSuite(
   store: AppStore,
   opts: { rectype?: string; isDefault?: boolean } = {},
 ): Promise<{ id: string }> {
+  return withSaveLock(store, () => persistTemplateToNetSuite(store, opts));
+}
+
+async function persistTemplateToNetSuite(
+  store: AppStore,
+  opts: { rectype?: string; isDefault?: boolean },
+): Promise<{ id: string }> {
   const state = store.state;
+  const session = store.documentSession;
   const ctx = getNsContext();
 
   const options: BfoExportOptions = {
@@ -171,10 +204,7 @@ export async function saveTemplateToNetSuite(
     isDefault: opts.isDefault,
   });
 
-  store.dispatch((d) => {
-    d.template.id = result.id;
-    d.template.isDirty = false;
-  });
+  acknowledgeSave(store, state, session, result.id);
 
   return { id: result.id };
 }
@@ -228,6 +258,7 @@ export async function loadTemplate(
 
   // Step 3: Apply to store
   clearPaginationCache();
+  store.beginDocumentSession();
   const template = data as unknown as DocumentTemplate;
   store.dispatch((d) => {
     d.elements = template.elements;
@@ -366,6 +397,7 @@ export function importTemplateJson(
 
   // Step 3: Apply
   clearPaginationCache();
+  store.beginDocumentSession();
   const template = raw as unknown as DocumentTemplate;
   store.dispatch((d) => {
     d.elements = template.elements || [];

@@ -526,7 +526,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // body field decides which customrecord_pld_config row companyConfig.load()
     // matches — empty/absent (non-OneWorld) falls back to the global config.
     var subsidiaryId = bodyValue(rec, 'subsidiary') || '';
-    var cfg = companyConfig.load(subsidiaryId);
+    var cfg = companyConfig.load(subsidiaryId, { forRender: true });
 
     // Bordered key/value grids rendered as PLD tables (ShapeElement has no border,
     // so the doc-info and summary boxes are 2-column tables bound to these arrays).

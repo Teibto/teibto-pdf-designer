@@ -50,9 +50,10 @@ function buildCore({ templates = [], recordValues = {}, asString, curated = fals
     './pld_lib_company_config': companyConfigStub,
     './pld_lib_invoice_data': {
       isSupportedType: () => curated,
+      docTitles: { invoice: { th: 'ใบแจ้งหนี้', en: 'Invoice' } },
       buildTransactionData: (recType, recId, th, en) => {
         curatedCalls.push({ recType, recId, th, en });
-        return { document: { number: 'INV-9' }, subsidiaryId: '2' };
+        return { document: { number: 'INV-9' }, items: [{ name: 'ไทย' }], subsidiaryId: '2' };
       },
     },
   };
@@ -75,13 +76,19 @@ test('renderDocumentXml returns one <pdf> document per copy', () => {
   assert.deepEqual(copySources.map((d) => d.data.th), ['ต้นฉบับ', 'สำเนา']);
 });
 
-test('a curated type builds its schema once per copy, so the label reaches the title', () => {
-  const { core, curatedCalls } = buildCore({ curated: true });
+test('curated copies reuse an immutable snapshot with distinct complete copy bindings', () => {
+  const { core, curatedCalls, render } = buildCore({ curated: true });
 
   const out = core.renderDocumentXml(TPL_XML, 'invoice', '42', TWO_COPIES, {});
 
-  assert.equal(curatedCalls.length, 2);
-  assert.deepEqual(curatedCalls.map((c) => c.th), ['ต้นฉบับ', 'สำเนา']);
+  assert.equal(curatedCalls.length, 1);
+  const data = render.calls.dataSources.filter((d) => d.alias === 'record').map((d) => d.data);
+  assert.equal(data[0].items, data[1].items);
+  assert.ok(Object.isFrozen(data[0].items[0]));
+  assert.throws(() => { data[0].items[0].name = 'changed'; }, TypeError);
+  assert.deepEqual(data.map((d) => d.document.titleTH), ['ใบแจ้งหนี้ (ต้นฉบับ)', 'ใบแจ้งหนี้ (สำเนา)']);
+  assert.deepEqual(data.map((d) => d.document.titleEN), ['Invoice (Original)', 'Invoice (Copy)']);
+  assert.deepEqual(data.map((d) => d.custbody_doc_copy_label), ['ต้นฉบับ (Original)', 'สำเนา (Copy)']);
   assert.equal(out.tranId, 'INV-9', 'the document number comes from the curated data');
 });
 

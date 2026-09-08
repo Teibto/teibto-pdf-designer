@@ -186,7 +186,7 @@ define([
     renderer.addCustomDataSource({
       format: render.DataSource.OBJECT,
       alias: 'company',
-      data: companyConfig.load(subsidiaryId)
+      data: companyConfig.load(subsidiaryId, { forRender: true })
     });
 
     // Current date/user info
@@ -240,8 +240,7 @@ define([
    * into ONE <pdfset>, so a 40-page batch is a single file with every copy in
    * order (#181).
    *
-   * Curated types build their schema per copy (the doc title carries the copy
-   * label); a raw-record type loads the record ONCE and reuses it for every pass —
+   * Curated types build one immutable snapshot, with copy-specific title overlays; a raw-record type loads the record ONCE and reuses it for every pass —
    * only the ${copy.*} data source differs.
    *
    * @returns {{docs: string[], tranId: string, rec: Object|null}}
@@ -256,11 +255,10 @@ define([
     }
     if (tel) tel.stage = 'render';
 
+    var snapshot = curatedType ? freezeSnapshot(invoiceData.buildTransactionData(recType, recId)) : null;
     var tranId = '';
     var docs = copies.map(function (c) {
-      var curated = curatedType
-        ? invoiceData.buildTransactionData(recType, recId, c.th, c.en)
-        : null;
+      var curated = snapshot ? dataForCopy(snapshot, recType, c) : null;
       if (curated) tranId = tranId || (curated.document && curated.document.number) || '';
       return extractPdfDoc(makeRenderer(tplXml, curated, rec, tel, c).renderAsString());
     });
@@ -270,6 +268,30 @@ define([
     }
 
     return { docs: docs, tranId: tranId, rec: rec };
+  }
+
+  // Only plain curated data is frozen; native NetSuite records are never frozen.
+  function freezeSnapshot(value) {
+    if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+      Object.keys(value).forEach(function (key) { freezeSnapshot(value[key]); });
+      Object.freeze(value);
+    }
+    return value;
+  }
+
+  function dataForCopy(snapshot, recType, copy) {
+    var label = copyBinding(copy);
+    var titles = invoiceData.docTitles[recType] || invoiceData.docTitles.invoice;
+    var document = Object.assign({}, snapshot.document, {
+      copyTH: label.th, copyEN: label.en
+    });
+    if (titles) {
+      document.titleTH = titles.th + ' (' + label.th + ')';
+      document.titleEN = titles.en + ' (' + label.en + ')';
+    }
+    return freezeSnapshot(Object.assign({}, snapshot, {
+      document: document, custbody_doc_copy_label: label.label
+    }));
   }
 
   /**

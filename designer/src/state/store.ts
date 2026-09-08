@@ -77,6 +77,13 @@ export class StateChangedEvent extends Event {
 // ─── Store Class ───
 export class AppStore extends EventTarget {
   private _state: AppState;
+  // Outside undoable document data: even loading the same template starts a
+  // distinct editing session, invalidating pending persistence completions.
+  private _documentSession = 0;
+
+  get documentSession(): number { return this._documentSession; }
+
+  beginDocumentSession(): void { this._documentSession++; }
 
   constructor() {
     super();
@@ -120,6 +127,7 @@ export class AppStore extends EventTarget {
 
   /** Reset state to initial defaults */
   reset(): void {
+    this.beginDocumentSession();
     this._state = createInitialState();
     this.dispatchEvent(new StateChangedEvent(this._state));
   }
@@ -129,6 +137,7 @@ export class AppStore extends EventTarget {
    * Use sparingly — prefer dispatch() for granular updates.
    */
   replaceState(newState: AppState): void {
+    this.beginDocumentSession();
     this._state = newState;
     this.dispatchEvent(new StateChangedEvent(this._state));
   }

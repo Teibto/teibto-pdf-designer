@@ -28,7 +28,6 @@ export default defineConfig(({ mode }) => {
             assetFileNames: 'assets/pld-app[extname]',
           } : {
             manualChunks: {
-              'pdf-engine': ['jspdf', 'jspdf-autotable'],
               'barcode': ['bwip-js'],
             },
           }),

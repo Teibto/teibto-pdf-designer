@@ -213,16 +213,18 @@ async function suiteletFetch(
 
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  // A failed response does not prove a mutation failed on the server. Retrying
+  // save/delete/rollback can create duplicate records or history versions.
+  const maxRetries = method === 'GET' ? MAX_RETRIES : 0;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
       const response = await fetch(url.toString(), {
         ...options,
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
 
       if (response.ok) {
         // NetSuite returns HTTP 200 + an HTML login page when the session has
@@ -260,10 +262,12 @@ async function suiteletFetch(
       } else {
         throw err; // Non-retryable error (e.g., our own thrown error)
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     // Exponential backoff before retry
-    if (attempt < MAX_RETRIES) {
+    if (attempt < maxRetries) {
       const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
       console.warn(`[NS API] Retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms: ${lastError?.message}`);
       await new Promise((r) => setTimeout(r, delay));

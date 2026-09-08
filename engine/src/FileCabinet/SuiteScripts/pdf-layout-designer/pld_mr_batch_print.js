@@ -37,6 +37,9 @@ define([
 ], function (file, render, runtime, log, email, url, pldRender) {
 
   var JOB_PARAM = 'custscript_pld_mr_job';
+  var MAX_DOCS = 500;
+  // Product memory budget for resolved input, excluding pdfset framing.
+  var MAX_XML_BYTES = 8 * 1024 * 1024;
 
   // ═══════════════════════════════════════════════════
   // getInputData — หนึ่งเอกสาร = หนึ่ง key
@@ -65,15 +68,19 @@ define([
    * job spec จาก File Cabinet — พังต้องดังตั้งแต่ getInputData (R4)
    * ไม่ใช่ปล่อยให้ map วิ่งเปล่าแล้วผู้ใช้ได้อีเมลว่า "สำเร็จ 0 ใบ"
    */
-  function loadJob() {
+  function loadJob(skipValidation) {
     var fileId = runtime.getCurrentScript().getParameter({ name: JOB_PARAM });
     if (!fileId) {
       throw new Error('ไม่ได้ระบุ job file (script parameter ' + JOB_PARAM + ') — ' +
         'สั่งงานนี้จากหน้าจอพิมพ์เป็นชุดเท่านั้น');
     }
     var job = JSON.parse(file.load({ id: fileId }).getContents());
-    if (!job.rectype || !Array.isArray(job.ids) || job.ids.length === 0) {
+    if (!job || typeof job !== 'object') throw new Error('Invalid batch job');
+    if (!skipValidation && (!job.rectype || !Array.isArray(job.ids) || job.ids.length === 0)) {
       throw new Error('job file ' + fileId + ' ไม่มี rectype หรือรายการเอกสาร');
+    }
+    if (!skipValidation && job.ids.length > MAX_DOCS) {
+      throw new Error('พิมพ์เป็นชุดได้ไม่เกิน ' + MAX_DOCS + ' ใบ');
     }
     job.jobFileId = fileId;
     return job;
@@ -97,6 +104,7 @@ define([
       throw new Error('เอกสาร ' + entry.recid + ' ไม่ได้ resolve เป็น <pdf>');
     }
 
+    assertXmlBudget(utf8Bytes(contents));
     var partId = file.create({
       name: partName(entry.jobId, entry.seq),
       fileType: file.Type.PLAINTEXT,
@@ -106,10 +114,15 @@ define([
       isOnline: false
     }).save();
 
-    context.write({
-      key: sortKey(entry.seq),
-      value: JSON.stringify({ partId: partId, recid: entry.recid, tranId: out.tranId || entry.recid })
-    });
+    try {
+      context.write({
+        key: sortKey(entry.seq),
+        value: JSON.stringify({ partId: partId, recid: entry.recid, tranId: out.tranId || entry.recid })
+      });
+    } catch (e) {
+      cleanUp([{ partId: partId }], {});
+      throw e;
+    }
   }
 
   /** key ต้องเรียงแบบสตริงได้ — เอกสารในไฟล์รวมต้องอยู่ตามลำดับที่ผู้ใช้เลือก */
@@ -127,35 +140,52 @@ define([
   // ═══════════════════════════════════════════════════
 
   function summarize(summary) {
-    var job = loadJob();
-
     var parts = [];
-    summary.output.iterator().each(function (key, value) {
-      var v = JSON.parse(value);
-      v.key = key;
-      parts.push(v);
-      return true;
-    });
-    parts.sort(function (a, b) { return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0); });
-
+    var job;
     var failures = collectErrors(summary);
-
-    var result = { pdfId: '', pdfUrl: '', printed: parts.length, failed: failures.length };
-    if (parts.length > 0) {
-      result = mergeParts(job, parts, failures.length);
-    }
-
-    cleanUp(parts, job);
-    notify(job, result, failures);
-
-    log.audit({
-      title: 'PLD batch job finished',
-      details: {
-        jobId: job.jobId, rectype: job.rectype, requested: job.ids.length,
-        printed: result.printed, failed: failures.length, pdfId: result.pdfId,
-        seconds: summary.seconds, usage: summary.usage
+    var result = { pdfId: '', pdfUrl: '', printed: 0, failed: 0 };
+    var fatal;
+    try {
+      var outputError;
+      summary.output.iterator().each(function (key, value) {
+        try {
+          var v = JSON.parse(value);
+          if (!v || !v.partId) throw new Error('Missing part file ID');
+          v.key = key;
+          parts.push(v);
+        } catch (e) {
+          outputError = new Error('Invalid batch output: ' + key);
+          failures.push({ key: key, message: outputError.message });
+        }
+        return true;
+      });
+      job = loadJob(true);
+      if (outputError) throw outputError;
+      parts.sort(function (a, b) { return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0); });
+      if (summary.inputSummary && summary.inputSummary.error) {
+        throw new Error('Input: ' + summary.inputSummary.error);
       }
-    });
+      if (parts.length > MAX_DOCS) throw new Error('Batch exceeds ' + MAX_DOCS + ' documents');
+      if (parts.length > 0) result = mergeParts(job, parts, failures.length);
+    } catch (e) {
+      fatal = e;
+      failures.push({ key: 'batch', message: e.message });
+      log.error({ title: 'PLD batch job failed', details: { message: e.message } });
+    } finally {
+      if (!job) job = { jobFileId: runtime.getCurrentScript().getParameter({ name: JOB_PARAM }), ids: [] };
+      result.failed = fatal ? (Array.isArray(job.ids) ? job.ids.length : 0) : failures.length;
+      cleanUp(parts, job);
+      notify(job, result, failures);
+      log.audit({
+        title: 'PLD batch job finished',
+        details: {
+          jobId: job.jobId, rectype: job.rectype, requested: Array.isArray(job.ids) ? job.ids.length : 0,
+          printed: result.printed, failed: result.failed, pdfId: result.pdfId,
+          seconds: summary.seconds, usage: summary.usage
+        }
+      });
+    }
+    if (fatal) throw fatal;
   }
 
   /** ใบที่ map พังต้องถูกรายงานทีละใบ ไม่ใช่หายไปเงียบ ๆ จากชุด (R4) */
@@ -173,8 +203,14 @@ define([
   /** ต่อ XML ของทุกใบเป็น <pdfset> เดียว แล้วเก็บ PDF ลง File Cabinet */
   function mergeParts(job, parts, failedCount) {
     var docs = [];
+    var bytes = 0;
     parts.forEach(function (p) {
-      docs.push(file.load({ id: p.partId }).getContents());
+      var part = file.load({ id: p.partId });
+      if (typeof part.size === 'number') assertXmlBudget(bytes + part.size);
+      var contents = part.getContents();
+      bytes += utf8Bytes(contents);
+      assertXmlBudget(bytes);
+      docs.push(contents);
     });
 
     var pdfFile = pldRender.combinePdfDocs(docs);
@@ -182,13 +218,42 @@ define([
     pdfFile.folder = job.folder;
     pdfFile.isOnline = false;
     var pdfId = pdfFile.save();
+    var pdfUrl = '';
+    try {
+      var savedUrl = file.load({ id: pdfId }).url;
+      if (!savedUrl) throw new Error('Saved PDF has no download URL');
+      pdfUrl = absoluteUrl(savedUrl);
+    } catch (e) {
+      // The PDF is already durable: preserve its ID for recovery, never report
+      // a successful save as zero printed just because link lookup failed.
+      log.error({ title: 'PLD batch PDF link unavailable', details: { pdfId: pdfId, message: e.message } });
+    }
 
     return {
       pdfId: pdfId,
-      pdfUrl: absoluteUrl(file.load({ id: pdfId }).url),
+      pdfUrl: pdfUrl,
       printed: parts.length,
       failed: failedCount
     };
+  }
+
+  function assertXmlBudget(bytes) {
+    if (bytes > MAX_XML_BYTES) {
+      throw new Error('XML ของชุดเกิน 8 MiB — ลดจำนวนเอกสารหรือสำเนาแล้วส่งใหม่');
+    }
+  }
+
+  function utf8Bytes(text) {
+    var bytes = 0;
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      if (c < 128) bytes++;
+      else if (c < 2048) bytes += 2;
+      else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < text.length &&
+        text.charCodeAt(i + 1) >= 0xDC00 && text.charCodeAt(i + 1) <= 0xDFFF) { bytes += 4; i++; }
+      else bytes += 3;
+    }
+    return bytes;
   }
 
   /** ไฟล์ชั่วคราวต้องไม่ค้างใน File Cabinet ของลูกค้า */
@@ -198,7 +263,7 @@ define([
         log.error({ title: 'PLD batch cleanup', details: { partId: p.partId, message: e.message } });
       }
     });
-    try { file.delete({ id: job.jobFileId }); } catch (e) {
+    try { if (job.jobFileId) file.delete({ id: job.jobFileId }); } catch (e) {
       log.error({ title: 'PLD batch cleanup (job spec)', details: { id: job.jobFileId, message: e.message } });
     }
   }
@@ -223,16 +288,19 @@ define([
       return;
     }
 
+    var requested = Array.isArray(job.ids) ? job.ids.length : 0;
     var lines = [
       'พิมพ์เอกสารเป็นชุดเสร็จแล้ว',
       '',
       'ประเภทเอกสาร: ' + job.rectype,
-      'เลือกไว้: ' + job.ids.length + ' ใบ',
+      'เลือกไว้: ' + requested + ' ใบ',
       'สร้างสำเร็จ: ' + result.printed + ' ใบ',
-      'ล้มเหลว: ' + failures.length + ' ใบ'
+      'ล้มเหลว: ' + result.failed + ' ใบ'
     ];
     if (result.pdfUrl) {
       lines.push('', 'ไฟล์รวม: ' + result.pdfUrl);
+    } else if (result.pdfId) {
+      lines.push('', 'สร้างไฟล์แล้ว แต่ดึงลิงก์ไม่สำเร็จ — เปิด File Cabinet ด้วย file ID: ' + result.pdfId);
     }
     if (failures.length > 0) {
       lines.push('', 'ใบที่สร้างไม่สำเร็จ (ลำดับในชุด — สาเหตุ):');
@@ -246,7 +314,7 @@ define([
       email.send({
         author: requester,
         recipients: requester,
-        subject: 'พิมพ์เอกสารเป็นชุด — ' + result.printed + '/' + job.ids.length + ' ใบ',
+        subject: 'พิมพ์เอกสารเป็นชุด — ' + result.printed + '/' + requested + ' ใบ',
         body: lines.join('\n')
       });
     } catch (e) {

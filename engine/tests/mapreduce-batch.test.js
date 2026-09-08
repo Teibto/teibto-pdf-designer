@@ -216,3 +216,113 @@ test('อีเมลส่งไม่ออก ไม่ทำให้ไฟ�
   const audit = log.entries.filter((e) => e.level === 'audit').pop();
   assert.equal(audit.details.printed, 1, 'ผลลัพธ์ยังถูกบันทึกไว้ใน log');
 });
+
+
+test('oversize job fails before any map inputs are returned', () => {
+  const { mr } = buildMr({ job: { ...JOB, ids: Array(501).fill('11') } });
+  assert.throws(() => mr.getInputData(), /500/);
+});
+
+test('merge failure cleans parts and spec, notifies zero printed, and remains a failed job', () => {
+  const { mr, render, files, emails } = buildMr();
+  const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
+  render.module.xmlToPdf = () => { throw new Error('BFO merge failed'); };
+  assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a]] })), /BFO merge failed/);
+  assert.equal(files.deleted.length, 2);
+  assert.match(emails[0].body, /สร้างสำเร็จ: 0 ใบ/);
+  assert.match(emails[0].body, /ล้มเหลว: 3 ใบ/);
+  assert.match(emails[0].body, /BFO merge failed/);
+});
+
+test('input-stage failure is reported and cleaned instead of success zero', () => {
+  const { mr, files, emails } = buildMr();
+  const summary = summaryStub();
+  summary.inputSummary = { error: 'input failure' };
+  assert.throws(() => mr.summarize(summary), /input failure/);
+  assert.deepEqual(files.deleted, ['900']);
+  assert.match(emails[0].body, /input failure/);
+  assert.match(emails[0].subject, /0\/3/);
+});
+
+test('aggregate UTF-8 limit accounts for Thai and aborts merge with cleanup', () => {
+  const { mr, render, files, emails } = buildMr();
+  const a = partValue(files, '000000', '11', '<pdf>' + 'ก'.repeat(1500000) + '</pdf>');
+  const b = partValue(files, '000001', '12', '<pdf>' + 'ก'.repeat(1500000) + '</pdf>');
+  assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a], ['000001', b]] })), /8 MiB/);
+  assert.equal(render.calls.xmlToPdf.length, 0);
+  assert.equal(files.deleted.length, 3);
+  assert.match(emails[0].body, /8 MiB/);
+});
+
+test('failed map output write deletes its already saved part', () => {
+  const { mr, files } = buildMr();
+  const { context } = mapContext({ seq: 0, recid: '11', jobId: 'j1', rectype: 'itemfulfillment', tplid: '7', folder: '77' });
+  context.write = () => { throw new Error('output failure'); };
+  assert.throws(() => mr.map(context), /output failure/);
+  assert.equal(files.deleted.length, 1);
+  assert.equal(files.deleted[0], files.created[0].id);
+});
+
+
+test('known oversized part is rejected before reading contents into memory', () => {
+  const { mr, files } = buildMr();
+  const originalLoad = files.module.load;
+  let contentReads = 0;
+  files.module.load = (options) => options.id === 'large' ? {
+    size: 8 * 1024 * 1024 + 1,
+    getContents() { contentReads++; throw new Error('must not read'); },
+  } : originalLoad(options);
+  const output = [['000000', JSON.stringify({ partId: 'large', recid: '11' })]];
+  assert.throws(() => mr.summarize(summaryStub({ output })), /8 MiB/);
+  assert.equal(contentReads, 0);
+  assert.ok(files.deleted.includes('large'));
+});
+
+
+test('unreadable job spec still cleans all known output parts', () => {
+  for (const contents of [null, '{broken']) {
+    const { mr, files } = buildMr();
+    const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
+    const b = partValue(files, '000001', '12', '<pdf>B</pdf>');
+    const originalLoad = files.module.load;
+    files.module.load = (options) => {
+      if (options.id !== '900') return originalLoad(options);
+      if (contents === null) throw new Error('Job spec missing');
+      return { getContents: () => contents };
+    };
+    assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a], ['000001', b]] })));
+    assert.equal(files.deleted.length, 3);
+    assert.ok(files.deleted.includes(JSON.parse(a).partId));
+    assert.ok(files.deleted.includes(JSON.parse(b).partId));
+  }
+});
+
+test('malformed output does not prevent later valid parts from being cleaned', () => {
+  const { mr, files, emails, render } = buildMr();
+  const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
+  const b = partValue(files, '000002', '13', '<pdf>B</pdf>');
+  const output = [['000000', a], ['000001', '{broken'], ['000002', b]];
+  assert.throws(() => mr.summarize(summaryStub({ output })), /Invalid batch output/);
+  assert.equal(files.deleted.length, 3);
+  assert.equal(render.calls.xmlToPdf.length, 0);
+  assert.match(emails[0].body, /Invalid batch output/);
+});
+
+test('saved PDF survives failed URL lookup with file ID reported for recovery', () => {
+  const { mr, files, emails, log } = buildMr();
+  const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
+  const partId = JSON.parse(a).partId;
+  const originalLoad = files.module.load;
+  files.module.load = (options) => {
+    if (options.id !== '900' && options.id !== partId) throw new Error('URL lookup failed');
+    return originalLoad(options);
+  };
+  mr.summarize(summaryStub({ output: [['000000', a]] }));
+  const audit = log.entries.filter((e) => e.level === 'audit').pop();
+  assert.equal(audit.details.printed, 1);
+  assert.ok(audit.details.pdfId);
+  assert.ok(!files.deleted.includes(audit.details.pdfId));
+  assert.match(emails[0].body, /สร้างสำเร็จ: 1 ใบ/);
+  assert.ok(emails[0].body.includes('file ID: ' + audit.details.pdfId));
+  assert.ok(log.entries.some((e) => e.title === 'PLD batch PDF link unavailable'));
+});

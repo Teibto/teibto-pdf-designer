@@ -17,7 +17,7 @@ import { computePagination, finalizePagination } from '../../services/pagination
 import { formatCellValue } from '../../utils/format';
 import { getCachedBarcodeSvg } from '../../services/barcode.service';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
-import { isNetSuiteEnv, getNsContext, renderLivePreview, openRenderedPdf } from '../../services/netsuite-adapter.service';
+import { isNetSuiteEnv, getNsContext, renderLivePreview } from '../../services/netsuite-adapter.service';
 import { DEFAULT_RECORD_TYPE } from '../../constants/record-types';
 import '../shared/modal';
 
@@ -36,6 +36,7 @@ export class PldPreviewModal extends LitElement {
   @state() private serverPdfUrl: string | null = null;
   @state() private serverLoading = false;
   @state() private serverError = '';
+  private previewRequest = 0;
 
   static styles = css`
     .preview-toolbar {
@@ -373,6 +374,7 @@ export class PldPreviewModal extends LitElement {
     if (!sample && !ctx.recordId) return;
 
     this._clearServerPreview();
+    const request = this.previewRequest;
     this.serverLoading = true;
     this.serverError = '';
     try {
@@ -387,27 +389,33 @@ export class PldPreviewModal extends LitElement {
         copies: this.store.state.copies,
         sample,
       });
+      if (request !== this.previewRequest || !this.open || !this.isConnected) return;
       this.serverPdfUrl = URL.createObjectURL(blob);
     } catch (err) {
-      this.serverError = err instanceof Error ? err.message : String(err);
+      if (request === this.previewRequest) {
+        this.serverError = err instanceof Error ? err.message : String(err);
+      }
     } finally {
-      this.serverLoading = false;
+      if (request === this.previewRequest) this.serverLoading = false;
     }
   }
 
   private _clearServerPreview() {
+    this.previewRequest++;
+    this.serverLoading = false;
     if (this.serverPdfUrl) {
       URL.revokeObjectURL(this.serverPdfUrl);
       this.serverPdfUrl = null;
     }
   }
 
-  /** Open/download the print PDF from the same render Suitelet. */
+  /** Download the exact PDF displayed, including unsaved changes and sample data. */
   private _printServer() {
-    const ctx = getNsContext();
-    if (ctx?.recordType && ctx?.recordId) {
-      openRenderedPdf(ctx.recordType, ctx.recordId, undefined, true);
-    }
+    if (!this.serverPdfUrl || this.serverLoading) return;
+    const link = document.createElement('a');
+    link.href = this.serverPdfUrl;
+    link.download = 'preview.pdf';
+    link.click();
   }
 
   render() {
@@ -434,11 +442,10 @@ export class PldPreviewModal extends LitElement {
         <span class="server-hint">
           ${this._sampleMode
             ? 'เรนเดอร์โดย NetSuite N/render ด้วย ข้อมูลตัวอย่าง — ฟอนต์ หัว-ท้ายกระดาษ และชุดสำเนา ตรงกับ Print จริง ส่วนตัวเลขและชื่อเป็นของสมมติ'
-            : 'เรนเดอร์โดย NetSuite N/render — ตรงกับ Print PDF ทุกจุด'}
+            : 'พรีวิวแบบปัจจุบัน รวมการแก้ไขที่ยังไม่บันทึก — บันทึกก่อนสั่ง Print จากเอกสาร'}
         </span>
-        ${this._sampleMode
-          ? nothing
-          : html`<button class="export-btn" @click=${this._printServer}>📄 เปิด / ดาวน์โหลด PDF</button>`}
+        <button class="export-btn" ?disabled=${this.serverLoading || !this.serverPdfUrl}
+          @click=${this._printServer}>📄 ดาวน์โหลด PDF ที่แสดง</button>
       </div>
 
       ${this.serverLoading

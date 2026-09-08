@@ -636,6 +636,7 @@ export class PldTemplateManagerModal extends LitElement {
 
   private _loadSample(tpl: DocumentTemplate) {
     if (!confirmDiscardUnsaved(this.store)) return;
+    this.store.beginDocumentSession();
     clearPaginationCache();
     this.store.dispatch((draft) => {
       draft.elements = structuredClone(tpl.elements);
@@ -724,6 +725,7 @@ export class PldTemplateManagerModal extends LitElement {
         throw new Error('Template has no designer data (XML-only record) — it cannot be edited here');
       }
 
+      this.store.beginDocumentSession();
       clearPaginationCache();
       this.store.dispatch((draft) => {
         draft.elements = data.elements!;

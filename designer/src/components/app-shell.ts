@@ -11,7 +11,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { provide } from '@lit/context';
 import { AppStore, storeContext } from '../state/store';
 import { HistoryService } from '../services/history.service';
-import { registerKeyboardShortcuts } from '../services/keyboard.service';
+import { registerKeyboardShortcuts, shouldIgnoreShortcut } from '../services/keyboard.service';
 import { applyPagination, clearPaginationCache } from '../services/pagination.service';
 import {
   saveTemplate,
@@ -161,8 +161,7 @@ export class PldAppShell extends LitElement {
     // Enhanced keyboard: undo/redo
     this._keyHandler = (e: KeyboardEvent) => {
       const isMod = e.metaKey || e.ctrlKey;
-      const target = e.target as HTMLElement;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (shouldIgnoreShortcut(e)) return;
 
       if (isMod && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -371,6 +370,7 @@ export class PldAppShell extends LitElement {
   // ═══════════════════════════════════════
 
   private async _saveTemplate() {
+    const session = this.store.documentSession;
     // Inside NetSuite the 💾 button (and Ctrl+S) must persist to the customrecord.
     // Saving only to IndexedDB looked successful but never reached the account (#137).
     if (isNetSuiteEnv()) {
@@ -387,7 +387,7 @@ export class PldAppShell extends LitElement {
           );
         }
         // A real save landed — the autosave draft is now stale (#140).
-        clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
+        this._clearSavedDraft(id, session);
       } catch (err) {
         // No IndexedDB fallback — a failed NetSuite save must be visible, not
         // masked by a silent local write (R4: no silent fallback).
@@ -398,13 +398,20 @@ export class PldAppShell extends LitElement {
     // Local (non-NetSuite) mode — persist to this browser and say so plainly so
     // the user does not mistake it for a NetSuite save.
     try {
-      await saveTemplate(this.store);
+      const saved = await saveTemplate(this.store);
       showToast('บันทึกในเครื่องนี้เท่านั้น (ยังไม่เข้า NetSuite)', 'info');
       // A real save landed — the autosave draft is now stale (#140).
-      clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
+      this._clearSavedDraft(saved.id, session);
     } catch (err) {
       showToast(`บันทึกไม่สำเร็จ: ${err}`, 'error');
     }
+  }
+
+  private _clearSavedDraft(id: string, session: number) {
+    if (this.store.documentSession !== session ||
+        this.store.state.template.id !== id || this.store.state.template.isDirty) return;
+    this._autosaveDebounced.cancel();
+    clearDraft().catch((err) => console.warn('Failed to clear draft:', err));
   }
 
   /** Restore the pending autosave draft into the store (#140). */
@@ -412,6 +419,7 @@ export class PldAppShell extends LitElement {
     const draft = this._pendingDraft;
     if (!draft) return;
 
+    this.store.beginDocumentSession();
     clearPaginationCache();
     this.store.dispatch((d) => {
       d.elements = draft.elements;
@@ -473,6 +481,7 @@ export class PldAppShell extends LitElement {
     if (!confirmDiscardUnsaved(this.store)) return;
     const tpl = samples[0];
 
+    this.store.beginDocumentSession();
     clearPaginationCache();
     this.store.dispatch((draft) => {
       draft.elements = structuredClone(tpl.elements);

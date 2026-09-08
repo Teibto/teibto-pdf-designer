@@ -212,8 +212,10 @@ SuiteScripts/
 
 ค่าที่ template กลางอ้างผ่าน `${company.*}` ทั้งหมดมาจาก custom record **PDF Layout Config**
 (SDF deploy ให้อัตโนมัติ) — สร้าง 1 record ต่อ account แล้ว template ทุกใบใช้ได้ทันที
-โดยไม่ต้องแก้ template XML (#9) · Suitelet ใช้ record แรกที่ active; ถ้าไม่มี render ยังทำงาน
-(binding null-safe) แต่ค่า company ว่างทั้งหมด และมี audit log บอกไว้
+โดยไม่ต้องแก้ template XML (#9). เมื่อพิมพ์ transaction ระบบเลือก config ของ subsidiary นั้น
+หรือ global config ที่เว้น subsidiary ว่างเท่านั้น; ไม่ใช้ข้อมูลของ subsidiary อื่นแทน.
+ไม่มี config หรือ File Cabinet font Regular/Bold ที่โหลดได้จะหยุดพร้อม error และวิธีแก้ (#199).
+หน้า setup ที่ไม่มี transaction context ยังเปิดตรวจค่าที่ตั้งไว้ได้.
 
 | Field | alias ใน template | หมายเหตุ |
 |-------|-------------------|----------|
