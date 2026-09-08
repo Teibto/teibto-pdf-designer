@@ -3,8 +3,9 @@
 <!-- @author Wichit Wongta -->
 <!-- @since 2026-09-09 -->
 
-Issue #199 remains open. This is the next implementation contract, not evidence that chunking,
-automatic recovery or native-access security already exists. The current worker renders one
+Issue #199 remains open. Authenticated envelopes, part verification and guarded PDF-byte
+verification are implemented locally in schema v4. Chunking, automatic recovery and native-account
+security remain unverified/unimplemented as detailed below. The current worker renders one
 document per map invocation and merges all successful XML in summarize. Its 8 MiB / 500-document
 limits bound input, but do not prove enough governance remains to merge and publish the result.
 

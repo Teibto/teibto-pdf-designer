@@ -225,11 +225,11 @@ SuiteScripts/
 
 ### Permission migration for #199
 
-Drain existing batch tasks before deploying schema v3. Old job files without durable identity are
+Drain existing batch tasks before deploying schema v4. Old jobs without authenticated identity are
 rejected with resubmission guidance; do not mix old/new worker files while tasks run. Queue jobs
 now retain the server-resolved XML and copies at enqueue. No edits to the template or default
-after submission change that job. Per-job private folders are implemented, but native snapshot
-write access and role-revocation behavior still require hardening and sandbox evidence under
+after submission change that job. Per-job private folders and authenticated snapshots are implemented,
+but secret restrictions, native historical access and role-revocation behavior require sandbox evidence under
 `docs/PRODUCTION-READINESS.md`.
 Limits are 500 documents per job, 1,000,000 XML characters per snapshot, 8 MiB serialized job,
 8 MiB resolved XML aggregate and 20 render copies per document across immediate/queued/sample
@@ -382,7 +382,7 @@ Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Admini
 | Name | PLD - Batch Print (Map/Reduce) |
 | ID | `customscript_pld_batch_mr` |
 | Script File | `pld_mr_batch_print.js` |
-| Parameter | `custscript_pld_mr_job` — ID ของ `customrecord_pld_batch_job` (schema v3; หน้าจอเขียนให้เอง) |
+| Parameter | `custscript_pld_mr_job` — ID ของ `customrecord_pld_batch_job` (schema v4; หน้าจอเขียนให้เอง) |
 
 **Deploy:**
 
@@ -405,13 +405,42 @@ The file list now lists the caller's jobs. Status/download routes accept `job=<I
 ownership; download requires a committed result in that private folder, with `isOnline=false`.
 Notifications link to authenticated Suitelet routes, not raw File Cabinet URLs.
 
-Drain existing tasks before deploying schema v3; the parameter no longer accepts a job-file ID.
+Drain existing tasks before deploying schema v4; the parameter requires an authenticated job record ID.
 Test two users, supervisors, subsidiaries, a weaker role of the same user, direct Cabinet/native
 API access and Company-Wide Usage before enabling callers. Folder owners/admins retain native
 access; same-user role revocation and snapshot integrity are not established by route checks.
 Failed merge/commit retains private inputs for operator recovery. Automatic orphan recovery,
 retention, a deployment pool and chunked outputs are still pending; this remains a sandbox
 candidate, not a validated production queue.
+
+#### Required batch signing secret (schema v4)
+
+Before enabling queue access, an authorized account administrator must provision the account-local
+API secret `custsecret_pld_batch_v1` with a new independent high-entropy value. No value belongs in
+source control, script parameters, logs or deployment artifacts. Configure approved employees and
+restrict script use to `customscript_pld_batch` and `customscript_pld_batch_mr`; do not allow all
+scripts. Protect those scripts and their libraries from caller edits. Keep management access with
+trusted administrators. Restrict domains for crypto-only use according to Oracle's setup guidance.
+[Secret access](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_160337298977.html),
+[Secret creation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_160216498405.html).
+
+The new `custrecord_pld_job_auth` and `custrecord_pld_job_resultseal` fields hold authenticated
+envelopes, not secret values. Job writes use optimistic record saves and bounded conflict retries.
+Snapshots, part XML and result metadata are authenticated against account/environment and domain;
+downloads verify PDF bytes and stream an unsaved copy of the verified contents. The final PDF must
+fit the 10 MiB authenticated read limit; larger output fails explicitly until chunking is available.
+
+Unsigned v3 jobs and earlier outputs are deliberately unsupported by the guarded routes. Preserve
+their private artifacts under the approved retention policy and finish/drain them with the prior
+deployment before migration; never add an unsigned fallback or sign arbitrary old native fields.
+An unsigned inert row can remain if initial secret access fails. Operators must reconcile such
+rows; the current list fails closed on invalid records. Validate the new deployment with synthetic
+jobs before granting callers access. Missing/denied secrets display an integrity error.
+
+Test unauthorized scripts/employees, swapped account/role/job identity, altered XML/part/PDF bytes,
+and concurrent status/task-ID writes. Retain the prior deployment for rollback while draining the
+matching schema. Signing detects forgery but does not revoke native owner access or stop replay of
+old valid signed state; exactly-once publication and historical-access policy remain release gates.
 
 ---
 

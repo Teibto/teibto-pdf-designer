@@ -32,8 +32,8 @@ define([
   'N/record',
   'N/task',
   './pld_lib_render',
-  './pld_lib_invoice_data', './pld_lib_batch_jobs'
-], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs) {
+  './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity'
+], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs, integrity) {
 
   /** หน่วย governance ที่กันไว้ให้ขั้นตอนรวมไฟล์ + ส่ง response ตอนท้าย */
   var RESERVE_UNITS = 100;
@@ -250,8 +250,8 @@ define([
     var jobFileId;
     var taskId;
     try {
-      var jobContents = JSON.stringify({
-        schemaVersion: 3, templateSnapshot: snapshot, jobId: jobId,
+      var jobContents = integrity.seal('snapshot', {
+        schemaVersion: 4, templateSnapshot: snapshot, jobId: jobId,
         rectype: recType, tplid: tplId, ids: ids, folder: folder,
         requester: { id: user.id, role: user.role }
       });

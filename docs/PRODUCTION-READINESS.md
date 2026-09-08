@@ -19,7 +19,7 @@ Local test doubles do not execute FreeMarker/BFO or establish NetSuite role perm
 | P1 | Batch input/merge errors skip cleanup and notification | Durable job tracking and injected failure tests implemented, including corrupt snapshots and terminal commit failure. Failed jobs retain private recovery inputs; successful commits precede cleanup. Abrupt termination/orphan recovery and retention remain open. |
 | P1 | Accepted queue task reported as rejected after metadata failure | Enqueue now separates pre-submit failure cleanup from accepted-task warnings. Once submit returns, preserve snapshot/status and show job tracking even when saving task ID or resolving the link fails. Fresh folder identity/privacy validation precedes snapshot save. Local failure injections pass; connected task/role behavior remains required. |
 | P2 | Repeated transaction reads per copy | Implemented request-local frozen snapshot; copy titles/labels remain independent. Measure real governance and latency before capacity claims. |
-| P2 | Queue reads mutable templates | Implemented server-derived XML/copy snapshot at enqueue, now schema v3 with durable job identity; workers reject legacy jobs with resubmission guidance. Bounds: 1,000,000 XML characters, 8 MiB UTF-8 job. Template record edits cannot change queued output; native snapshot tampering remains tied to account permission hardening. |
+| P2 | Queue reads mutable templates | Schema v4 authenticates job state, enqueue snapshots, XML parts and PDF result bytes with an account-restricted HMAC key. Rejects unsigned/tampered artifacts; preserves immutable template selection and guarded download bytes. Bounds remain 1,000,000 XML characters / 8 MiB job and resolved XML; PDF verification adds a 10 MiB local guard. Native secret/script access and historical/replay policy remain live gates. |
 | P2 | Unbounded batch merge | Local 500-document / 8 MiB resolved UTF-8 XML guard, plus shared 20-copy limit before render work. These are safety bounds, not capacity evidence. Chunked output/job recovery design and live measurements remain required. |
 | P2 | Modal accessibility / keyboard-only workflows | Native named dialog implemented with background inertness, browser focus containment/restoration, topmost Escape, local cheatsheet toggle and inline save errors. Real Chromium regressions cover slotted/shadow inputs and narrow screen. Remaining dialog-specific errors/toasts and live Thai UX need QA. |
 | P2 | Save dialog metadata/draft consistency | Implemented omitted metadata preservation, explicit false default removal and atomic session-owned draft acknowledgement across saves. Corrected original review: server previously ignored false rather than unsetting on quick-save. Durable content/default-cleanup warning retains ID/version; conflicting defaults now block print. Cross-record default updates still require live permission/concurrency QA. |
@@ -85,14 +85,15 @@ run measured cold computation 0.664/0.203/0.625 ms and all 1,000 cache hits 0.46
 These small timings verify the local cache path only: there is no wall-clock pass threshold,
 browser rendering measurement, BFO glyph inspection or NetSuite throughput claim.
 
-Batch schema v3 replaces the MR file-ID parameter with a durable job record ID. Drain old tasks
+Batch schema v4 requires authenticated durable job records and snapshots. Drain old tasks
 before upgrade and resubmit legacy requests. Job result/count persistence precedes temporary-file
 cleanup; failed merges retain private inputs for operator recovery. Automatic recovery, deployment
 pool scheduling, chunked output, retention and permission-revocation behavior remain open.
-Custom fields are editable through authorized native APIs, so private folders and Suitelet checks
-alone do not prove snapshot integrity against a caller with native write access or a later role
-change. That threat requires account permission tests and an explicit hardening decision before
-release. No local implementation in this document establishes production readiness.
+Custom fields remain editable through authorized native APIs; their authenticated envelopes now
+detect forgery using a script-restricted API secret. Part/result verification covers the actual
+bytes passed to BFO or streamed to the caller, including post-save substitution tests. Native
+historical file access, replay of old authentic state and secret/script restrictions still require
+account tests and policy decisions. No local implementation establishes production readiness.
 
 ## Connected acceptance and evidence
 
@@ -118,9 +119,18 @@ document/template IDs, timestamp, error IDs and redacted artifact paths.
 ## Agent goal assignments
 
 The next persistence, merge-phase, authentication and recovery contracts are documented in
-[Batch reliability](architecture/BATCH-RELIABILITY.md). Chunking and signing in that document
-are planned work, not shipped behavior. Latest enqueue lifecycle regressions bring local engine
-coverage to **181/181**; the last full CI evidence above predates these additions.
+[Batch reliability](architecture/BATCH-RELIABILITY.md). Signing and byte verification are implemented
+locally; chunking/recovery remain planned work. The enqueue candidate `9fcc8c3` passed
+[CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34269318029); signing additions require
+their own full checks and account evidence.
+
+Schema v4 local verification: **201/201** engine tests, including real Node crypto adapters,
+native field/snapshot/part/result tampering, post-save PDF substitution, missing secrets and
+optimistic-write conflicts. All engine syntax checks and six template/sample checks pass.
+The same verified XML string reaches BFO; guarded download creates a new file from verified PDF
+bytes. These tests do not prove API-secret script restrictions, native role behavior or NetSuite
+crypto/file APIs. Secret denial after saving a part can retain a private orphan until the planned
+recovery/retention implementation handles it.
 
 Use these as task/objective text when assigning agents; they are not assumed CLI syntax.
 Assign non-overlapping file ownership per task, preserve other agents' work, and return exact

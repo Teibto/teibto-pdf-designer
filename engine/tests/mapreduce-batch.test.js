@@ -25,7 +25,7 @@ const TPL_XML = '<pdf><body>ok</body></pdf>';
 const TWO_COPIES = JSON.stringify({ copies: [{ th: 'ต้นฉบับ', en: 'Original' }, { th: 'สำเนา', en: 'Copy' }] });
 
 const JOB = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   templateSnapshot: { xml: TPL_XML, copies: JSON.parse(TWO_COPIES).copies },
   jobId: '501',
   rectype: 'itemfulfillment',
@@ -43,8 +43,9 @@ const JOB = {
  */
 function buildMr({ job = JOB, failIds = [], emailFails = false } = {}) {
   const log = logStub();
+  let signedSnapshot;
   const files = fileSystemStub({
-    files: job ? { '900': { folder: '77', isOnline: false, getContents: () => JSON.stringify(job) } } : {},
+    files: job ? { '900': { folder: '77', isOnline: false, getContents: () => signedSnapshot } } : {},
   });
   const render = renderStub({ fileSystem: files });
   const emails = [];
@@ -86,6 +87,11 @@ function buildMr({ job = JOB, failIds = [], emailFails = false } = {}) {
     },
   };
   const rows = require('./helpers/batch-store').batchStore(stubs, files, job);
+  files.integrity = loadAmd('./pld_lib_batch_integrity', stubs);
+  if (job) {
+    signedSnapshot = files.integrity.seal('snapshot', job);
+    files.snapshotDigest = files.integrity.digest(signedSnapshot);
+  }
   return { stubs, rows, mr: loadAmd('./pld_mr_batch_print', stubs), log, render, files, emails };
 }
 
@@ -163,7 +169,10 @@ function partValue(files, seq, recid, contents) {
   const id = files.module.create({
     name: 'pld_part_501_' + seq + '.txt', isOnline: false, fileType: 'PLAINTEXT', contents, folder: '77',
   }).save();
-  return JSON.stringify({ partId: id, recid: recid, tranId: 'IF-' + recid });
+  const proof = files.integrity.seal('part', {jobId:'501',snapshotDigest:files.snapshotDigest,
+    seq:Number(seq),recid:String(recid),partId:String(id),folder:'77',name:'pld_part_501_' + seq + '.txt',
+    bytes:Buffer.byteLength(contents),contentsHash:files.integrity.digest(contents)});
+  return JSON.stringify({ partId: id, recid: recid, tranId: 'IF-' + recid, proof });
 }
 
 test('รวมเป็นไฟล์เดียวตามลำดับที่ผู้ใช้เลือก แล้วลบไฟล์ชั่วคราวทิ้ง', () => {
@@ -270,13 +279,15 @@ test('failed map output write deletes its already saved part', () => {
 
 test('known oversized part is rejected before reading contents into memory', () => {
   const { mr, files } = buildMr();
+  const value = partValue(files, '000000', '11', '<pdf>A</pdf>');
+  const partId = JSON.parse(value).partId;
   const originalLoad = files.module.load;
   let contentReads = 0;
-  files.module.load = (options) => options.id === '9999' ? {
+  files.module.load = (options) => options.id === partId ? {
     name: 'pld_part_501_000000.txt', folder: '77', isOnline: false, size: 8 * 1024 * 1024 + 1,
     getContents() { contentReads++; throw new Error('must not read'); },
   } : originalLoad(options);
-  const output = [['000000', JSON.stringify({ partId: '9999', recid: '11' })]];
+  const output = [['000000', value]];
   assert.throws(() => mr.summarize(summaryStub({ output })), /8 MiB/);
   assert.equal(contentReads, 0);
   assert.equal(files.deleted.length, 0);
@@ -474,4 +485,66 @@ test('terminal summarize replay preserves committed result after snapshot cleanu
   assert.deepEqual(rows.get('501'), committed);
   assert.equal(files.deleted.length, removes);
   assert.equal(emails.length, 1);
+});
+
+test('tampered part XML or signed part identity never reaches BFO or cleanup', () => {
+  for (const mode of ['contents', 'identity', 'signature']) {
+    const { mr, files, render } = buildMr();
+    const part = JSON.parse(partValue(files, '000000', '11', '<pdf>ต้นฉบับ</pdf>'));
+    if (mode === 'contents') files.contents[part.partId] = '<pdf>ถูกแก้ไข</pdf>';
+    else if (mode === 'identity') part.recid = '12';
+    else {
+      const proof = JSON.parse(part.proof); proof.data.seq = 1;
+      part.proof = JSON.stringify(proof);
+    }
+    assert.throws(() => mr.summarize(summaryStub({ output: [['000000', JSON.stringify(part)]] })), /integrity|identity/);
+    assert.equal(render.calls.xmlToPdf.length, 0, mode);
+    assert.equal(files.deleted.length, 0, mode);
+  }
+});
+
+test('unsigned snapshot and unavailable secret fail before transaction work', () => {
+  for (const mode of ['unsigned', 'secret']) {
+    const { mr, files, stubs, render } = buildMr();
+    if (mode === 'unsigned') {
+      const load = files.module.load;
+      files.module.load = opts => opts.id === '900'
+        ? { folder:'77',isOnline:false,getContents:()=>JSON.stringify(JOB) } : load(opts);
+    } else stubs['N/crypto'].createSecretKey = () => { throw new Error('denied'); };
+    assert.throws(() => mr.getInputData(), /integrity/);
+    assert.equal(render.calls.created, 0);
+    assert.equal(files.created.length, 0);
+  }
+});
+
+test('oversized PDF cannot be signed or published as a downloadable result', () => {
+  const { mr, files, rows } = buildMr();
+  const part = partValue(files, '000000', '11', '<pdf>ok</pdf>');
+  const load = files.module.load;
+  let pdfReads = 0;
+  files.module.load = opts => {
+    const out = load(opts);
+    if (out.name?.endsWith('.pdf')) return { ...out, size:10*1024*1024+1,
+      getContents() { pdfReads++; throw new Error('must not read large PDF'); } };
+    return out;
+  };
+  assert.throws(() => mr.summarize(summaryStub({output:[['000000',part]]})), /size limit/);
+  assert.equal(pdfReads,0);
+  assert.equal(rows.get('501').custrecord_pld_job_status,'FAILED');
+  assert.equal(files.deleted.length,0);
+});
+
+test('PDF replaced between save and readback is never blessed with a valid result signature', () => {
+  const { mr, files, rows } = buildMr();
+  const part = partValue(files, '000000', '11', '<pdf>ok</pdf>');
+  const load = files.module.load;
+  files.module.load = opts => {
+    const out = load(opts);
+    return out.name?.endsWith('.pdf') ? { ...out,
+      getContents: () => Buffer.from('%PDF-1.4 attacker bytes').toString('base64') } : out;
+  };
+  assert.throws(() => mr.summarize(summaryStub({output:[['000000',part]]})), /integrity mismatch after save/);
+  assert.equal(rows.get('501').custrecord_pld_job_status,'FAILED');
+  assert.equal(rows.get('501').custrecord_pld_job_resultseal || '', '');
+  assert.equal(files.deleted.length,0);
 });

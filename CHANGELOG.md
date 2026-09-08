@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Production-readiness candidate (#199; sandbox acceptance pending)
+- Authenticate queued job state, schema v4 snapshots, XML parts and PDF results with an account-restricted HMAC key. Verify guarded download bytes before streaming; reject unsigned/tampered inputs and oversized results. Requires API-secret setup, draining legacy jobs and sandbox permission tests; native historical access and replay remain separate gates.
 - Preserve accepted batch tasks when recording the task ID fails; show tracking and a Thai warning against resubmission. Pre-submit failures retain their original error, mark the job failed where possible and clean only verified private snapshots.
 - Fix pagination cache returning stale pages after changes to arbitrary rows or table columns; add Thai data probes up to 10,000 rows.
 - Resolve development/build dependency advisories and migrate Storybook, Vitest and ESLint configuration; retain browser and unit coverage.

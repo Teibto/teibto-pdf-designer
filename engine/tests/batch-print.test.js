@@ -132,7 +132,7 @@ function buildBatch({
     },
   };
   const rows = require('./helpers/batch-store').batchStore(stubs, files);
-  return { stubs, rows, suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search, files, task, folderRecords };
+  return { openSnapshot: (text) => JSON.parse(JSON.stringify(loadAmd('./pld_lib_batch_integrity', stubs).open('snapshot', text))), stubs, rows, suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search, files, task, folderRecords };
 }
 
 const DOCS = [
@@ -416,7 +416,7 @@ function queueRequest(ids, extra = {}) {
 }
 
 test('ชุดใหญ่ถูกส่งเป็น job ให้ Map/Reduce พร้อมรายการเอกสารครบ', () => {
-  const { suitelet, files, task } = buildBatch({ documents: DOCS, templates: TEMPLATES });
+  const { suitelet, openSnapshot, files, task } = buildBatch({ documents: DOCS, templates: TEMPLATES });
   const ids = ['11', '12', '13', '14', '15', '16', '17', '18'];
   const { context, response } = queueRequest(ids, { tplid: '7' });
 
@@ -424,7 +424,7 @@ test('ชุดใหญ่ถูกส่งเป็น job ให้ Map/Redu
 
   const jobFile = files.created.find((f) => /^pld_job_/.test(f.name));
   assert.ok(jobFile, 'ต้องเขียน job spec ลง File Cabinet');
-  const job = JSON.parse(jobFile.contents);
+  const job = openSnapshot(jobFile.contents);
   assert.deepEqual(job.ids, ids, 'รายการเอกสารต้องครบ — parameter เดียวใส่ไม่พอสำหรับชุดใหญ่');
   assert.equal(job.rectype, 'itemfulfillment');
   assert.equal(job.tplid, '7');
@@ -465,7 +465,7 @@ test('เกินเพดานต่อหนึ่ง job = บอกให�
 });
 
 test('queue creates a fresh private job folder before saving snapshot', () => {
-  const { suitelet, files, rows } = buildBatch({ documents: DOCS, templates: TEMPLATES });
+  const { suitelet, openSnapshot, files, rows } = buildBatch({ documents: DOCS, templates: TEMPLATES });
   suitelet.onRequest(queueRequest(['11', '12']).context);
   assert.equal(rows.get('502').isprivate, true);
   assert.equal(rows.get('502').owner, 9);
@@ -489,20 +489,20 @@ test('ปุ่มส่งเข้าคิวอยู่บนหน้า�
 
 
 test('queue freezes server-resolved XML and copies, ignoring request snapshot fields', () => {
-  const { suitelet, files } = buildBatch({ templates: TEMPLATES });
+  const { suitelet, openSnapshot, files } = buildBatch({ templates: TEMPLATES });
   const { context } = queueRequest(['11'], {
     templateSnapshot: JSON.stringify({ xml: '<pdf>injected</pdf>', copies: [] }),
     xml: '<pdf>injected</pdf>', copies: '[]', schemaVersion: '1',
   });
   suitelet.onRequest(context);
-  const job = JSON.parse(files.created.find((f) => /^pld_job_/.test(f.name)).contents);
-  assert.equal(job.schemaVersion, 3);
+  const job = openSnapshot(files.created.find((f) => /^pld_job_/.test(f.name)).contents);
+  assert.equal(job.schemaVersion, 4);
   assert.equal(job.templateSnapshot.xml, TPL_XML);
   assert.deepEqual(job.templateSnapshot.copies, JSON.parse(TWO_COPIES).copies);
 });
 
 test('task submission failure deletes job spec and reports the failure', () => {
-  const { suitelet, files, task } = buildBatch({ templates: TEMPLATES });
+  const { suitelet, openSnapshot, files, task } = buildBatch({ templates: TEMPLATES });
   task.module.create = () => ({ submit() { throw new Error('QUEUE_FULL'); } });
   const { context, response } = queueRequest(['11']);
   suitelet.onRequest(context);
@@ -514,7 +514,7 @@ test('task submission failure deletes job spec and reports the failure', () => {
 
 test('oversized resolved template is rejected before queue file creation', () => {
   const oversized = [{ id: '7', values: { custrecord_pld_tpl_xml: 'x'.repeat(1000001), custrecord_pld_tpl_data: TWO_COPIES } }];
-  const { suitelet, files, task } = buildBatch({ templates: oversized });
+  const { suitelet, openSnapshot, files, task } = buildBatch({ templates: oversized });
   const { context, response } = queueRequest(['11']);
   suitelet.onRequest(context);
   assert.equal(files.created.length, 0);
@@ -526,9 +526,9 @@ test('oversized resolved template is rejected before queue file creation', () =>
 test('queue accepts a valid saved template larger than the former snapshot cap', () => {
   const largeXml = '<pdf><body>' + 'ก'.repeat(989900) + '</body></pdf>';
   const templates = [{ id: '7', values: { custrecord_pld_tpl_xml: largeXml, custrecord_pld_tpl_data: JSON.stringify({ copies: [{ th: 'สำเนา', en: '' }] }) } }];
-  const { suitelet, files, task } = buildBatch({ templates });
+  const { suitelet, openSnapshot, files, task } = buildBatch({ templates });
   suitelet.onRequest(queueRequest(['11']).context);
-  const job = JSON.parse(files.created.find((f) => /^pld_job_/.test(f.name)).contents);
+  const job = openSnapshot(files.created.find((f) => /^pld_job_/.test(f.name)).contents);
   assert.equal(job.templateSnapshot.xml, largeXml);
   assert.equal(job.templateSnapshot.copies[0].th, 'สำเนา');
   assert.equal(task.submitted.length, 1);
@@ -538,7 +538,7 @@ test('queue accepts a valid saved template larger than the former snapshot cap',
 test('immediate and queued print reject 21 copies before render work or job creation', () => {
   const templates = [{ id: '7', values: { custrecord_pld_tpl_xml: TPL_XML, custrecord_pld_tpl_data: JSON.stringify({ copies: Array(21).fill({ th: 'สำเนา' }) }) } }];
   for (const request of [printRequest, queueRequest]) {
-    const { suitelet, files, render, task } = buildBatch({ templates });
+    const { suitelet, openSnapshot, files, render, task } = buildBatch({ templates });
     const { context, response } = request(['11']);
     suitelet.onRequest(context);
     assert.match(response.state.body, /20/);
@@ -647,7 +647,18 @@ test('enqueue rejects changed native folder or parent references before saving t
     const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
     assert.equal(f.files.created.length, 0, changedField);
     assert.equal(f.task.submitted.length, 0, changedField);
-    assert.equal(f.rows.get('501').custrecord_pld_job_status, 'FAILED');
-    assert.match(ctx.response.state.body, /storage identity changed/);
+    assert.equal(f.rows.get('501').custrecord_pld_job_status, 'PREPARING');
+    assert.match(ctx.response.state.body, /integrity mismatch/);
+    // Native tampering invalidates the entire state; the catch must not reseal it.
   }
+});
+
+test('queued snapshot is authenticated and in-place XML tampering invalidates it', () => {
+  const f = buildBatch({ templates: TEMPLATES });
+  f.suitelet.onRequest(queueRequest(['11']).context);
+  const saved = f.files.created[0].contents;
+  assert.equal(f.openSnapshot(saved).schemaVersion, 4);
+  const altered = saved.replace('<body>ok</body>', '<body>injected</body>');
+  assert.notEqual(saved, altered);
+  assert.throws(() => f.openSnapshot(altered), /integrity|authentication/i);
 });

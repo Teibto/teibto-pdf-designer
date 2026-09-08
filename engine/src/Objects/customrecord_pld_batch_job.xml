@@ -60,5 +60,15 @@
       <label>Task</label><fieldtype>TEXT</fieldtype>
       <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
     </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_resultseal">
+      <label>Authenticated Result</label><fieldtype>CLOBTEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+      <description>Authenticated result file identity, bytes digest, counts and printed sequences.</description>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_auth">
+      <label>Authenticated State</label><fieldtype>CLOBTEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+      <description>HMAC envelope binding authoritative job state to native owner and ID. Native edits invalidate the seal.</description>
+    </customrecordcustomfield>
   </customrecordcustomfields>
 </customrecordtype>

@@ -34,8 +34,8 @@ define([
   'N/log',
   'N/email',
   'N/url',
-  './pld_lib_render', './pld_lib_batch_jobs'
-], function (file, render, runtime, log, email, url, pldRender, jobs) {
+  './pld_lib_render', './pld_lib_batch_jobs', './pld_lib_batch_integrity'
+], function (file, render, runtime, log, email, url, pldRender, jobs, integrity) {
 
   var JOB_PARAM = 'custscript_pld_mr_job';
   var MAX_DOCS = 500;
@@ -83,7 +83,7 @@ define([
     if (jobFile.size > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
     var contents = jobFile.getContents();
     if (utf8Bytes(contents) > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
-    var job = JSON.parse(contents);
+    var job = integrity.open('snapshot', contents);
     if (!job || typeof job !== 'object') throw new Error('Invalid batch job');
     if ((!job.rectype || !Array.isArray(job.ids) || job.ids.length === 0)) {
       throw new Error('job file ' + fileId + ' ไม่มี rectype หรือรายการเอกสาร');
@@ -93,7 +93,7 @@ define([
     }
     {
       var snapshot = job.templateSnapshot;
-      if (job.schemaVersion !== 3 || !snapshot) {
+      if (job.schemaVersion !== 4 || !snapshot) {
         throw new Error('งานคิวรุ่นเก่าไม่มี template snapshot — ส่งงานใหม่จากหน้าพิมพ์เป็นชุด');
       }
       if (typeof snapshot.xml !== 'string' || !snapshot.xml.trim() || snapshot.xml.length > 1000000 ||
@@ -114,6 +114,7 @@ define([
       !Array.isArray(job.ids) || job.ids.length !== Number(durable.requested)) throw new Error('Batch snapshot identity mismatch');
     job.durable = durable;
     job.jobFileId = fileId;
+    job.snapshotDigest = integrity.digest(contents);
     return job;
   }
 
@@ -151,13 +152,18 @@ define([
       isOnline: false
     }).save();
 
+    var part = { partId: String(partId), recid: String(entry.recid), tranId: String(out.tranId || entry.recid) };
+    part.proof = integrity.seal('part', { jobId: job.jobId, snapshotDigest: job.snapshotDigest,
+      seq: entry.seq, recid: part.recid, partId: part.partId, folder: String(job.folder),
+      name: partName(job.jobId, entry.seq), bytes: utf8Bytes(contents), contentsHash: integrity.digest(contents) });
     try {
       context.write({
         key: sortKey(entry.seq),
-        value: JSON.stringify({ partId: partId, recid: entry.recid, tranId: out.tranId || entry.recid })
+        value: JSON.stringify(part)
       });
     } catch (e) {
-      cleanUp([{ partId: partId }], job, false);
+      part.key = sortKey(entry.seq);
+      cleanUp([part], job, false);
       throw e;
     }
   }
@@ -228,7 +234,7 @@ define([
       if (parts.length > 0) result = mergeParts(job, parts, job.ids.length - parts.length);
       result.failed = job.ids.length - result.printed;
       jobs.update(job.jobId, { status: result.printed ? (result.failed ? 'PARTIAL' : 'COMPLETE') : 'FAILED',
-        result: result.pdfId, printed: result.printed, failed: result.failed });
+        result: result.pdfId, resultseal: result.resultseal || '', printed: result.printed, failed: result.failed });
       committed = true;
     } catch (e) {
       fatal = e;
@@ -276,10 +282,9 @@ define([
     var docs = [];
     var bytes = 0;
     parts.forEach(function (p) {
-      var part = jobs.loadFile(job.durable, p.partId);
-      if (part.name !== partName(job.jobId, Number(p.key))) throw new Error('Invalid batch part file');
+      var part = verifyPart(job, p);
       if (typeof part.size === 'number') assertXmlBudget(bytes + part.size);
-      var contents = part.getContents();
+      var contents = part.contents;
       bytes += utf8Bytes(contents);
       assertXmlBudget(bytes);
       docs.push(contents);
@@ -289,9 +294,21 @@ define([
     pdfFile.name = 'batch_' + job.rectype + '_' + parts.length + '_' + job.jobId + '.pdf';
     pdfFile.folder = job.folder;
     pdfFile.isOnline = false;
+    if (!Number.isFinite(pdfFile.size) || pdfFile.size > 10 * 1024 * 1024) throw new Error('PDF exceeds authenticated download size limit');
+    var originalHash = integrity.digestPdf(pdfFile.getContents());
+    var originalSize = pdfFile.size;
+    var originalName = pdfFile.name;
     jobs.assertFolder(job.durable);
     var pdfId = pdfFile.save();
-    jobs.loadFile(job.durable, pdfId);
+    var saved = jobs.loadFile(job.durable, pdfId);
+    if (!Number.isFinite(saved.size) || saved.size > 10 * 1024 * 1024) throw new Error('PDF exceeds authenticated download size limit');
+    if (saved.size !== originalSize || saved.name !== originalName || integrity.digestPdf(saved.getContents()) !== originalHash) {
+      throw new Error('PDF integrity mismatch after save');
+    }
+    var resultseal = integrity.seal('result', { jobId: job.jobId, folder: String(job.folder),
+      fileId: String(pdfId), name: originalName, contentsHash: originalHash,
+      size: originalSize, printed: parts.length, failed: failedCount,
+      sequences: parts.map(function (p) { return Number(p.key); }) });
     var pdfUrl = '';
     try { pdfUrl = absoluteUrl(jobs.route(job.jobId)); } catch (linkError) {
       log.error({ title: 'PLD batch status link unavailable', details: { jobId: job.jobId, message: linkError.message } });
@@ -299,10 +316,25 @@ define([
 
     return {
       pdfId: pdfId,
+      resultseal: resultseal,
       pdfUrl: pdfUrl,
       printed: parts.length,
       failed: failedCount
     };
+  }
+
+  function verifyPart(job, part) {
+    var proof = integrity.open('part', part.proof);
+    var seq = Number(part.key);
+    if (proof.jobId !== job.jobId || proof.snapshotDigest !== job.snapshotDigest || proof.seq !== seq ||
+      proof.recid !== String(job.ids[seq]) || proof.recid !== String(part.recid) || proof.partId !== String(part.partId) ||
+      proof.folder !== String(job.folder) || proof.name !== partName(job.jobId, seq)) throw new Error('Invalid authenticated batch part identity');
+    var stored = jobs.loadFile(job.durable, part.partId);
+    if (stored.name !== proof.name) throw new Error('Invalid batch part file');
+    if (typeof stored.size === 'number') assertXmlBudget(stored.size);
+    var contents = stored.getContents();
+    if (utf8Bytes(contents) !== proof.bytes || integrity.digest(contents) !== proof.contentsHash) throw new Error('Batch part integrity mismatch');
+    return { size: proof.bytes, contents: contents };
   }
 
   function assertXmlBudget(bytes) {
@@ -327,11 +359,17 @@ define([
   /** ไฟล์ชั่วคราวต้องไม่ค้างใน File Cabinet ของลูกค้า */
   function cleanUp(parts, job, removeSnapshot) {
     parts.forEach(function (p) {
-      try { jobs.loadFile(job.durable, p.partId); file.delete({ id: p.partId }); } catch (e) {
+      try { verifyPart(job, p); file.delete({ id: p.partId }); } catch (e) {
         log.error({ title: 'PLD batch cleanup', details: { partId: p.partId, message: e.message } });
       }
     });
-    try { if (removeSnapshot && job.jobFileId) { jobs.loadFile(job.durable, job.jobFileId); file.delete({ id: job.jobFileId }); } } catch (e) {
+    try { if (removeSnapshot && job.jobFileId) {
+      var snapshot = jobs.loadFile(job.durable, job.jobFileId);
+      var contents = snapshot.getContents();
+      integrity.open('snapshot', contents);
+      if (integrity.digest(contents) !== job.snapshotDigest) throw new Error('Batch snapshot changed before cleanup');
+      file.delete({ id: job.jobFileId });
+    } } catch (e) {
       log.error({ title: 'PLD batch cleanup (job spec)', details: { id: job.jobFileId, message: e.message } });
     }
   }
