@@ -108,7 +108,8 @@ test('engine fingerprint tracks dirty scripts and Objects without account metada
   f.write(script, 'synthetic version two');
   const second = stamp(f.root);
   assert.notEqual(first.enginePayload.sha256, second.enginePayload.sha256);
-  assert.notEqual(first.enginePayload.files[script], second.enginePayload.files[script]);
+  assert.notEqual(first.enginePayload.files.find(entry => entry.path === script).sha256,
+    second.enginePayload.files.find(entry => entry.path === script).sha256);
   f.write('engine/src/Objects/customrecord_sample.xml', '<record changed="true"/>');
   const third = stamp(f.root);
   assert.notEqual(second.enginePayload.sha256, third.enginePayload.sha256);
@@ -118,7 +119,8 @@ test('engine fingerprint tracks dirty scripts and Objects without account metada
   const fourth = stamp(f.root);
   assert.equal(third.enginePayload.sha256, fourth.enginePayload.sha256);
   assert.equal(JSON.stringify(fourth).includes('synthetic-private'), false);
-  assert.deepEqual(Object.keys(fourth.enginePayload.files), Object.keys(fourth.enginePayload.files).sort());
+  const payloadPaths = fourth.enginePayload.files.map(entry => entry.path);
+  assert.deepEqual(payloadPaths, [...payloadPaths].sort());
 });
 
 test('stamp revalidates source and environment after stage and preserves prior stamp', t => {

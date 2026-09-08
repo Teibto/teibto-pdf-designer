@@ -82,11 +82,11 @@ export function enginePayload(root) {
   if (fs.existsSync(path.join(root, 'engine/src/Objects'))) {
     inputs.push(...files(root, 'engine/src/Objects').filter(name => name.endsWith('.xml')));
   }
-  const inventory = {};
+  const inventory = [];
   for (const name of inputs.sort()) {
     if (!fs.existsSync(path.join(root, name))) continue;
     if (fs.lstatSync(path.join(root, name)).isSymbolicLink()) throw new Error('Symlinks are not supported in engine payload');
-    inventory[name] = digest(fs.readFileSync(path.join(root, name)));
+    inventory.push({ path: name, sha256: digest(fs.readFileSync(path.join(root, name))) });
   }
   return {
     schema: 1,
