@@ -334,6 +334,127 @@ test("lost render context.write preserves committed PART and replay does not rer
   assert.equal(Number(f.jobs.load("501").printed), 1);
 });
 
+test("render recovery reuses committed parts and the immutable snapshot after an input-stage failure", () => {
+  const f = buildMr();
+  const entries = f.mr.getInputData();
+  f.mr.map(mapContext(entries[0]).context);
+  const prior = f.artifacts.get(ctx(f), "PART", 0);
+  const inputFailure = summaryStub(); inputFailure.inputSummary = { error: "synthetic input interruption" };
+  assert.throws(() => f.mr.summarize(inputFailure), /input failed/);
+  const failed = f.jobs.load("501");
+  assert.equal(failed.status, "FAILED"); assert.equal(failed.plan, "");
+  // The Suitelet separately verifies owner, signed token, snapshot and terminal task.
+  // Exercise worker behavior after that authenticated atomic recovery claim.
+  f.jobs.update("501", { status: "RUNNING", phase: "RENDER_SUBMITTING", task: "" },
+    { status: "FAILED", phase: "DONE", plan: "", outputs: "" });
+  const calls = f.render.calls.renderedAsString;
+  runRender(f); runMerge(f);
+  assert.equal(f.render.calls.renderedAsString - calls, 4); // Two remaining documents, two copies each.
+  assert.equal(f.artifacts.get(ctx(f), "PART", 0).partId, prior.partId);
+  const completed = f.jobs.load("501");
+  assert.equal(completed.status, "COMPLETE"); assert.equal(completed.printed, "3");
+  assert.equal(completed.snapshot, failed.snapshot); assert.equal(completed.snapshotdigest, failed.snapshotdigest);
+  assert.equal(f.files.deleted.length, 0);
+});
+
+test("status-page render recovery token drives the existing workers to a downloadable completed job", () => {
+  const f = buildMr(), helpers = require("./helpers/ns-stubs");
+  f.stubs["N/xml"] = helpers.xmlStub;
+  f.jobs.update("501", { task: "original-render-task" });
+  const entries = f.mr.getInputData(); f.mr.map(mapContext(entries[0]).context);
+  const failedInput = summaryStub(); failedInput.inputSummary = { error: "synthetic input failure" };
+  assert.throws(() => f.mr.summarize(failedInput), /input failed/);
+  const load = f.files.module.load;
+  f.files.module.load = opts => {
+    const out = load(opts);
+    return String(opts.id) === "900" ? { ...out, name: "pld_job_501.json", size: Buffer.byteLength(out.getContents()) } : out;
+  };
+  f.stubs["N/task"].TaskStatus = { COMPLETE: "COMPLETE", FAILED: "FAILED" };
+  f.stubs["N/task"].checkStatus = ({ taskId }) => {
+    assert.equal(taskId, "original-render-task"); return { status: "FAILED" };
+  };
+  const create = f.stubs["N/task"].create;
+  let recovered = 0;
+  f.stubs["N/task"].create = opts => {
+    assert.equal(opts.scriptId, "customscript_pld_batch_mr");
+    assert.equal(opts.params.custscript_pld_mr_job, "501");
+    return { submit() { recovered++; return "recovered-render-task"; } };
+  };
+  const sl = loadAmd("./pld_sl_batch_print", f.stubs);
+  const page = helpers.contextStub({ parameters: { action: "status", job: "501" } }); sl.onRequest(page.context);
+  const encoded = /name="token" value="([^"]+)"/.exec(page.response.state.body);
+  assert.ok(encoded, "recoverable job status includes the first POST token");
+  const token = encoded[1].replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const post = helpers.contextStub({ method: "POST", parameters: { action: "recover", job: "501", token } });
+  sl.onRequest(post.context);
+  assert.equal(recovered, 1); assert.equal(f.jobs.load("501").task, "recovered-render-task");
+  assert.match(post.response.state.body, /ระบบกำลังสร้างเอกสาร/);
+  f.stubs["N/task"].create = create;
+  runRender(f); runMerge(f);
+  assert.equal(f.jobs.load("501").status, "COMPLETE");
+  assert.ok(f.jobs.download("501", 0).getContents());
+});
+
+test("overlapping render input claims preserve a competing plan or published result", () => {
+  for (const finish of [false, true]) {
+    const f = buildMr(); const submit = f.stubs["N/record"].submitFields;
+    let raced = false;
+    f.stubs["N/record"].submitFields = opts => {
+      if (!raced && opts.values.custrecord_pld_job_phase === "RENDERING") {
+        raced = true; runRender(f); if (finish) runMerge(f);
+      }
+      return submit(opts);
+    };
+    assert.equal(f.mr.getInputData().length, 0);
+    const current = f.jobs.load("501");
+    assert.ok(current.plan);
+    assert.equal(current.status, finish ? "COMPLETE" : "RUNNING");
+    assert.notEqual(current.phase, "RENDERING");
+    if (finish) assert.equal(f.jobs.download("501", 0).name.endsWith(".pdf"), true);
+  }
+});
+
+test("overlapping input claims for the same render task reuse immutable keys without a false failure", () => {
+  const f = buildMr(), submit = f.stubs["N/record"].submitFields;
+  let raced = false;
+  f.stubs["N/record"].submitFields = opts => {
+    if (!raced && opts.values.custrecord_pld_job_phase === "RENDERING") {
+      raced = true; assert.equal(f.mr.getInputData().length, 3);
+    }
+    return submit(opts);
+  };
+  assert.equal(f.mr.getInputData().length, 3);
+  assert.equal(f.jobs.load("501").phase, "RENDERING");
+});
+
+test("render input accepts the concurrent task-ID acknowledgement without downgrading a newer task", () => {
+  for (const prior of ["", "already-known-task"]) {
+    const f = buildMr();
+    f.jobs.update("501", { status: "RUNNING", phase: "RENDER_SUBMITTING", task: prior });
+    const submit = f.stubs["N/record"].submitFields; let raced = false;
+    f.stubs["N/record"].submitFields = opts => {
+      if (!raced && opts.values.custrecord_pld_job_phase === "RENDERING") {
+        raced = true; f.jobs.update("501", { task: "accepted-task" });
+      }
+      return submit(opts);
+    };
+    if (prior) assert.throws(() => f.mr.getInputData(), /changed/);
+    else assert.equal(f.mr.getInputData().length, 3);
+    const job = f.jobs.load("501");
+    assert.equal(job.task, "accepted-task");
+    assert.equal(job.phase, prior ? "RENDER_SUBMITTING" : "RENDERING");
+  }
+  const f = buildMr(), submit = f.stubs["N/record"].submitFields; let raced = false;
+  f.stubs["N/record"].submitFields = opts => {
+    if (!raced && opts.values.custrecord_pld_job_phase === "RENDERING") {
+      raced = true; f.mr.getInputData(); f.jobs.update("501", { task: "accepted-task" });
+    }
+    return submit(opts);
+  };
+  assert.equal(f.mr.getInputData().length, 3);
+  assert.equal(f.jobs.load("501").phase, "RENDERING");
+});
+
 test("lost reduce context.write and terminal summarize replay reuse committed CHUNK", () => {
   const f = buildMr();
   runRender(f);

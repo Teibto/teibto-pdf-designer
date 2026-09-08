@@ -474,7 +474,15 @@ sandbox. [N/file deletion and governance](https://docs.oracle.com/en/cloud/saas/
 is part of this budget; native check/delete is not atomic. No scheduled cleanup or retention age is
 enabled by this change.
 
-Age-based retention, adoption of files saved before ledger commit, render-stage recovery and
+Pre-plan render recovery is available only for FAILED/DONE jobs with a known render task and no
+plan, output or merge task. Both render and merge recovery require a signed action token from the
+current status page. The caller must retain the original role; render recovery verifies snapshot
+identity/digest, checks the old task is terminal and atomically clears its identity before submitting.
+Unknown outcomes remain RENDER_SUBMIT_UNKNOWN and require operator reconciliation. Never fill task
+IDs by editing native fields: authenticated job state must not be bypassed. Verify concurrent claims,
+worker reuse, expired/unavailable task status and accepted-task metadata failures in sandbox.
+
+Age-based retention, adoption of files saved before ledger commit, recovery after a sealed plan and
 deployment pools remain pending. Size limits are safety bounds; measure actual BFO usage, output
 size and Thai layout before setting release capacity.
 

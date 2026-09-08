@@ -7,7 +7,8 @@ Issue #199 remains open. Schema v5 implements authenticated PART/CHUNK publicati
 rendering, metadata-only planning/finalization, a separate bounded merge reduce phase and guarded
 PDF-byte downloads. Owner-triggered merge recovery verifies the prior task is terminal and claims
 the job atomically. These are local implementations, not native-account security or capacity proof.
-Render recovery, orphan adoption, age-based retention and deployment pools remain unfinished.
+Owner-triggered render recovery before plan publication is implemented locally. Recovery after
+an immutable plan is sealed, orphan adoption, age-based retention and deployment pools remain unfinished.
 Owner-triggered cleanup of published XML inputs is bounded and implemented locally.
 
 ## Enqueue acceptance boundary
@@ -129,6 +130,21 @@ external side effects, so these boundaries require application idempotency.
 [Restart behavior](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1491509438.html).
 
 ## Recovery acceptance tests
+
+The status page offers render recovery only for FAILED/DONE jobs with a snapshot, its digest,
+a recorded render task, and no plan, outputs or merge task. Recovery POSTs for both render and
+merge require a signed action token bound to the current job state and caller. Render recovery
+verifies the immutable snapshot and a terminal prior task, then atomically claims submission and
+clears the old task ID. An ambiguous submission remains RENDER_SUBMIT_UNKNOWN; it never authorizes
+a blind retry. Accepted-task metadata failures retain the worker's current state and warn the user.
+The same snapshot and committed PART ledger are reused. Missing parts are rendered from current
+transaction records, so recovery does not promise a historical transaction snapshot across keys.
+
+Render input claims compare the observed status, phase and task with empty plan/outputs. A
+competing planner/finalizer wins without being reopened by stale input initialization. Overlapping
+input invocations for the same rendering task can return identical immutable keys; map publication
+still verifies/reuses the ledger winner. Jobs with a sealed plan are not reset by render recovery,
+including all-document failures with an empty-chunk plan.
 
 - Inject termination after each file save and before/after every durable commit. Resume without
   losing committed work, publishing duplicate chunks or deleting an active generation's inputs.

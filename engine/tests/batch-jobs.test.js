@@ -315,8 +315,14 @@ function recoveryFixture(status = 'FAILED') {
     checkStatus(opts){checked.push(opts.taskId);return{status};},
     create(opts){return{submit(){submitted.push(opts);return'NEW_MERGE_TASK';}};}};
   f.sl=loadAmd('./pld_sl_batch_print',f.stubs);
-  f.request=(method='POST')=>{const ctx=contextStub({method,parameters:{action:'recover',job:'501'}});f.sl.onRequest(ctx.context);return ctx.response.state;};
-  return{...f,submitted,checked};
+  f.issueToken=()=>{
+    const ctx=contextStub({parameters:{action:'status',job:'501'}});f.sl.onRequest(ctx.context);
+    const found=ctx.response.state.body.match(/name="token" value="([^"]+)"/);
+    return found ? found[1].replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&') : '';
+  };
+  f.recoveryToken=f.issueToken();
+  f.request=(method='POST',token=f.recoveryToken,extra={})=>{const ctx=contextStub({method,parameters:{action:'recover',job:'501',token,...extra}});f.sl.onRequest(ctx.context);return ctx.response.state;};
+  return Object.assign(f,{submitted,checked});
 }
 
 test('merge recovery requires POST, authoritative terminal task and a single atomic claim', () => {
@@ -363,4 +369,96 @@ test('accepted recovery with task metadata failure never retains old task identi
   assert.equal(f.submitted.length,1);
   assert.equal(f.jobs.load('501').mergetask,'');
   assert.equal(f.jobs.load('501').status,'RUNNING');
+});
+
+function renderRecoveryFixture(status='FAILED') {
+  const f=recoveryFixture(status);
+  const snapshot=f.integrity.seal('snapshot',{schemaVersion:5,jobId:'501',folder:'77',requester:{id:'9',role:'3'},ids:['11'],
+    rectype:'invoice',templateSnapshot:{xml:'<pdf>synthetic</pdf>',copies:[{en:'Original'}]}});
+  Object.assign(f.job,{custrecord_pld_job_phase:'DONE',custrecord_pld_job_plan:'',custrecord_pld_job_outputs:'',custrecord_pld_job_mergetask:'',
+    custrecord_pld_job_task:'OLD_RENDER_TASK',custrecord_pld_job_result:'',custrecord_pld_job_resultseal:'',custrecord_pld_job_snapshotdigest:f.integrity.digest(snapshot)});
+  signJob(f.stubs,'501',f.job);
+  const load=f.files.module.load;
+  f.files.module.load=(opts)=>String(opts.id)==='900'?{name:'pld_job_501.json',folder:'77',isOnline:false,size:Buffer.byteLength(snapshot),getContents:()=>snapshot}:load(opts);
+  f.stubs['N/task'].create=opts=>({submit(){f.submitted.push(opts);return'NEW_RENDER_TASK';}});
+  f.recoveryToken=f.issueToken();
+  return f;
+}
+
+test('both recovery phases require an action-specific initial signature before task inspection',()=>{
+  for(const build of [recoveryFixture,renderRecoveryFixture]) {
+    for(const token of [null,'', '{}']) {
+      const f=build();f.request('POST',token);
+      assert.equal(f.checked.length,0);assert.equal(f.submitted.length,0);
+    }
+    const f=build();const forged=f.recoveryToken.replace('recover','forged');
+    assert.notEqual(forged,f.recoveryToken);f.request('POST',forged);
+    assert.equal(f.submitted.length,0);
+    f.request('POST',f.integrity.seal('cleanup',{jobId:'501'}));assert.equal(f.submitted.length,0);
+  }
+});
+
+test('known-terminal render recovery claims same immutable job once and ignores caller phase',()=>{
+  for(const status of ['COMPLETE','FAILED']) {
+    const f=renderRecoveryFixture(status);
+    assert.match(f.request('GET').body,/requires POST/);
+    assert.match(f.request('POST',f.recoveryToken,{kind:'MERGE',phase:'MERGE_FAILED'}).body,/ส่งเข้าคิวแล้ว/);
+    assert.deepEqual(f.checked,['OLD_RENDER_TASK']);assert.equal(f.submitted.length,1);
+    assert.equal(f.submitted[0].scriptId,'customscript_pld_batch_mr');
+    assert.equal(f.submitted[0].params.custscript_pld_mr_job,'501');
+    const job=f.jobs.load('501');assert.equal(job.phase,'RENDER_SUBMITTING');assert.equal(job.task,'NEW_RENDER_TASK');assert.equal(job.plan,'');
+    f.request();assert.equal(f.submitted.length,1);
+  }
+});
+
+test('render recovery excludes active/unknown tasks, sealed plans, outputs, missing identity, and terminal successes',()=>{
+  for(const status of ['PROCESSING','PENDING',null]) {const f=renderRecoveryFixture(status);f.request();assert.equal(f.submitted.length,0);}
+  for(const change of [{task:''},{plan:'sealed-plan'},{outputs:'sealed-results'},{mergetask:'OLD_MERGE'},{status:'COMPLETE'},{status:'PARTIAL'},{phase:'RENDER_SUBMIT_UNKNOWN'}]) {
+    const f=renderRecoveryFixture();
+    for(const [key,value] of Object.entries(change))f.job['custrecord_pld_job_'+key]=value;
+    signJob(f.stubs,'501',f.job);
+    f.request();assert.equal(f.submitted.length,0,JSON.stringify(change));
+  }
+});
+
+test('stale recovery token or different current user/role cannot claim a worker',()=>{
+  const f=renderRecoveryFixture();f.jobs.update('501',{task:'REPLACED_RENDER_TASK'});
+  assert.match(f.request().body,/token identity mismatch/);assert.equal(f.submitted.length,0);
+  for(const actor of [{id:10,role:3},{id:9,role:4}]) {
+    const other=renderRecoveryFixture();Object.assign(other.user,actor);
+    assert.match(other.request().body,/unavailable/);assert.equal(other.submitted.length,0);
+  }
+});
+
+test('render recovery validates snapshot bytes before claiming and rejects a concurrent signed plan',()=>{
+  const altered=renderRecoveryFixture();const load=altered.files.module.load;
+  altered.files.module.load=opts=>{const result=load(opts);if(String(opts.id)==='900')result.getContents=()=>'{corrupt';return result;};
+  assert.match(altered.request().body,/snapshot digest mismatch/);assert.equal(altered.submitted.length,0);assert.equal(altered.jobs.load('501').task,'OLD_RENDER_TASK');
+  const raced=renderRecoveryFixture();
+  raced.stubs['N/task'].checkStatus=()=>{raced.jobs.update('501',{plan:raced.integrity.seal('plan',{jobId:'501'})});return{status:'COMPLETE'};};
+  assert.match(raced.request().body,/changed/);assert.equal(raced.submitted.length,0);
+});
+
+test('render submission ambiguity fences retries and accepted metadata failure preserves active worker phase',()=>{
+  for(const empty of [false,true]) {
+    const f=renderRecoveryFixture();let attempts=0;
+    f.stubs['N/task'].create=()=>({submit(){attempts++;if(empty)return'';throw new Error('unknown outcome');}});
+    assert.match(f.request().body,/ไม่ต้องส่งซ้ำ/);assert.equal(f.jobs.load('501').phase,'RENDER_SUBMIT_UNKNOWN');assert.equal(f.jobs.load('501').task,'');
+    f.request();assert.equal(attempts,1);
+  }
+  const f=renderRecoveryFixture(), submit=f.stubs['N/record'].submitFields;
+  f.stubs['N/task'].create=opts=>({submit(){f.submitted.push(opts);f.jobs.update('501',{phase:'RENDERING'});return'NEW_RENDER_TASK';}});
+  f.stubs['N/record'].submitFields=opts=>{if(opts.values.custrecord_pld_job_task==='NEW_RENDER_TASK')throw new Error('metadata failed');return submit(opts);};
+  assert.match(f.request().body,/ระบบรับงานแล้ว/);assert.equal(f.submitted.length,1);assert.equal(f.jobs.load('501').phase,'RENDERING');assert.equal(f.jobs.load('501').task,'');
+});
+
+test('unknown recovery outcome has a status link without claiming PDF creation failed',()=>{
+  const f=renderRecoveryFixture();
+  f.stubs['N/task'].create=()=>({submit(){throw new Error('submission outcome unavailable');}});
+  const response=f.request();
+  assert.match(response.body,/ยังยืนยันการทำงานต่อไม่ได้/);
+  assert.match(response.body,/action=status.*job=501/);
+  assert.match(response.body,/รหัสอ้างอิง/);
+  assert.doesNotMatch(response.body,/ระบบสร้างไฟล์ PDF ของชุดนี้ไม่ได้/);
+  assert.doesNotMatch(response.body,/setTimeout|\.submit\(\)/);
 });

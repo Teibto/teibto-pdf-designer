@@ -30,7 +30,35 @@ define([
   function getInputData() {
     var job = pipeline.loadJob(PARAM);
     if (job.durable.plan) return [];
-    jobs.update(job.jobId, { status: "RUNNING", phase: "RENDERING" });
+    for (var claimAttempt = 0; claimAttempt < 2; claimAttempt++) {
+      try {
+        jobs.update(job.jobId, { status: "RUNNING", phase: "RENDERING" }, {
+          status: job.durable.status, phase: job.durable.phase, task: job.durable.task, plan: "", outputs: "",
+        });
+        break;
+      } catch (claimError) {
+        // A restart can overlap planning/finalization. Never reopen a published job
+        // or replace the merge phase using a snapshot read before that transition.
+        var current = jobs.load(job.jobId);
+        if (current.plan || ["COMPLETE", "PARTIAL", "FAILED"].indexOf(current.status) >= 0) return [];
+        // submit() may start this worker before its caller persists the returned
+        // task ID. Retry that exact metadata-only acknowledgement once.
+        if (claimAttempt === 0 && !job.durable.task && current.task && Object.keys(current).every(function (key) {
+          return key === "task" || current[key] === job.durable[key];
+        })) {
+          job.durable = current;
+          continue;
+        }
+        var acknowledged = !job.durable.task && current.task && Object.keys(current).every(function (key) {
+          return ["status", "phase", "task"].indexOf(key) >= 0 || current[key] === job.durable[key];
+        });
+        if (current.status !== "RUNNING" || current.phase !== "RENDERING" || (current.task !== job.durable.task && !acknowledged) ||
+          current.snapshotdigest !== job.snapshotDigest || current.outputs) throw claimError;
+        // Another input invocation for this same task already claimed rendering.
+        // Returning the same immutable keys is safe; each map verifies its ledger winner.
+        break;
+      }
+    }
     return job.ids.map(function (id, seq) {
       return {
         seq: seq,

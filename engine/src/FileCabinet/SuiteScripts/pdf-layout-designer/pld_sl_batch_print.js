@@ -69,7 +69,7 @@ define([
       }
       if (request.parameters.action === 'recover') {
         if (request.method !== 'POST') throw new Error('Recovery requires POST');
-        return recoverMerge(context, tel);
+        return recoverJob(context, tel);
       }
       if (request.parameters.action === 'cleanup') {
         if (request.method !== 'POST') throw new Error('Cleanup requires POST');
@@ -84,6 +84,7 @@ define([
     } catch (e) {
       logBatchError(tel, e);
       if (request.parameters.action === 'cleanup') return writeCleanupError(context, tel, e);
+      if (request.parameters.action === 'recover') return writeRecoveryError(context, tel, e);
       writeErrorPage(context.response, tel, e);
     }
   }
@@ -326,35 +327,73 @@ define([
     return bytes;
   }
 
-  function recoverMerge(context, tel) {
+  function recoveryKind(job) {
+    if (job.status !== 'FAILED' || job.outputs) return '';
+    if (job.phase === 'MERGE_FAILED' && job.mergetask && job.plan) return 'MERGE';
+    if (job.phase === 'DONE' && !job.plan && !job.mergetask && job.snapshot && job.snapshotdigest && job.task) return 'RENDER';
+    return '';
+  }
+  function recoveryBinding(job, kind) {
+    return { action: 'recover', jobId: job.id, requester: job.requester, role: job.role, kind: kind,
+      stateDigest: integrity.digest(JSON.stringify(job)) };
+  }
+  function validateRecoverySnapshot(job) {
+    var stored = jobs.loadFile(job, job.snapshot);
+    if (stored.name !== 'pld_job_' + job.id + '.json' || !Number.isSafeInteger(Number(stored.size)) ||
+      Number(stored.size) < 1 || Number(stored.size) > 8 * 1024 * 1024) throw new Error('Invalid recovery snapshot file');
+    var text = stored.getContents();
+    if (typeof text !== 'string' || utf8Bytes(text) > 8 * 1024 * 1024 || integrity.digest(text) !== job.snapshotdigest) throw new Error('Recovery snapshot digest mismatch');
+    var spec = integrity.open('snapshot', text);
+    if (!spec || spec.schemaVersion !== 5 || String(spec.jobId) !== job.id || String(spec.folder) !== job.folder ||
+      !spec.requester || String(spec.requester.id) !== job.requester || String(spec.requester.role) !== job.role ||
+      !Array.isArray(spec.ids) || !spec.ids.length || spec.ids.length > MAX_QUEUE_DOCS || spec.ids.length !== Number(job.requested) ||
+      spec.ids.some(function (id) { return !/^[1-9][0-9]*$/.test(String(id)); })) throw new Error('Recovery snapshot identity mismatch');
+  }
+  function recoverJob(context, tel) {
     var job = jobs.load(context.request.parameters.job);
-    if (job.status !== 'FAILED' || job.phase !== 'MERGE_FAILED' || !job.mergetask || !job.plan) {
-      throw new Error('งานนี้ยังไม่พร้อมให้ทำขั้นรวมไฟล์ต่อ — กรุณาตรวจสอบกับผู้ดูแล');
-    }
-    var plan = integrity.open('plan', job.plan);
-    if (!plan || plan.jobId !== job.id || plan.snapshotDigest !== job.snapshotdigest || !Array.isArray(plan.chunks) || !plan.chunks.length) {
-      throw new Error('Invalid authenticated recovery plan');
-    }
-    var checked = task.checkStatus({ taskId: job.mergetask });
+    var kind = recoveryKind(job);
+    if (!kind) throw new Error('งานนี้ยังไม่พร้อมให้ทำต่อ — กรุณาตรวจสอบกับผู้ดูแล');
+    var token = context.request.parameters.token;
+    if (typeof token !== 'string' || token.length > 4096) throw new Error('Invalid recovery token');
+    var binding = integrity.open('recovery', token);
+    var expected = recoveryBinding(job, kind);
+    if (!binding || Object.keys(binding).length !== Object.keys(expected).length ||
+      Object.keys(expected).some(function (key) { return binding[key] !== expected[key]; })) throw new Error('Recovery token identity mismatch');
+    if (kind === 'MERGE') {
+      var plan = integrity.open('plan', job.plan);
+      if (!plan || plan.jobId !== job.id || plan.snapshotDigest !== job.snapshotdigest || !Array.isArray(plan.chunks) || !plan.chunks.length) {
+        throw new Error('Invalid authenticated recovery plan');
+      }
+    } else validateRecoverySnapshot(job);
+    var taskField = kind === 'MERGE' ? 'mergetask' : 'task';
+    var checked = task.checkStatus({ taskId: job[taskField] });
     if (!checked || (checked.status !== task.TaskStatus.COMPLETE && checked.status !== task.TaskStatus.FAILED)) {
       throw new Error('งานประมวลผลเดิมยังไม่สิ้นสุดหรือยังตรวจสอบไม่ได้ — ไม่ต้องส่งซ้ำ');
     }
-    jobs.update(job.id, { status: 'RUNNING', phase: 'MERGE_SUBMITTING', mergetask: '' },
-      { status: 'FAILED', phase: 'MERGE_FAILED', mergetask: job.mergetask });
+    var claim = { status: 'RUNNING', phase: kind + '_SUBMITTING' };
+    claim[taskField] = '';
+    // Compare the complete authenticated state, including snapshot/plan/results,
+    // before clearing the old task. A competing claim cannot share this token.
+    jobs.update(job.id, claim, job);
     var taskId;
     try {
-      taskId = task.create({ taskType: task.TaskType.MAP_REDUCE, scriptId: 'customscript_pld_batch_merge',
-        deploymentId: 'customdeploy_pld_batch_merge', params: { custscript_pld_merge_job: job.id } }).submit();
-      if (!taskId) throw new Error('Missing merge task identity');
+      var params = {};
+      params[kind === 'MERGE' ? 'custscript_pld_merge_job' : 'custscript_pld_mr_job'] = job.id;
+      taskId = task.create({ taskType: task.TaskType.MAP_REDUCE,
+        scriptId: kind === 'MERGE' ? 'customscript_pld_batch_merge' : 'customscript_pld_batch_mr',
+        deploymentId: kind === 'MERGE' ? 'customdeploy_pld_batch_merge' : 'customdeploy_pld_batch_mr', params: params }).submit();
+      if (!taskId) throw new Error('Missing recovery task identity');
     } catch (submitError) {
-      try { jobs.update(job.id, { phase: 'MERGE_SUBMIT_UNKNOWN' }); } catch (stateError) {
+      var submitting = { status: 'RUNNING', phase: kind + '_SUBMITTING' }; submitting[taskField] = '';
+      try { jobs.update(job.id, { phase: kind + '_SUBMIT_UNKNOWN' }, submitting); } catch (stateError) {
         log.error({ title: 'PLD recovery outcome persistence failed', details: { jobId: job.id, message: stateError.message } });
       }
       log.error({ title: 'PLD recovery submission unknown', details: { jobId: job.id, message: submitError.message } });
       throw new Error('ยังยืนยันผลการส่งงานไม่ได้ — แจ้งผู้ดูแลพร้อมหมายเลขงาน ' + job.id + ' และไม่ต้องส่งซ้ำ');
     }
     var warning = '';
-    try { jobs.update(job.id, { mergetask: taskId }); }
+    var accepted = {}, expectedEmptyTask = {}; accepted[taskField] = taskId; expectedEmptyTask[taskField] = '';
+    try { jobs.update(job.id, accepted, expectedEmptyTask); }
     catch (stateError) {
       log.error({ title: 'PLD accepted recovery task persistence failed', details: { jobId: job.id, taskId: taskId, message: stateError.message } });
       warning = 'ระบบรับงานแล้ว แต่บันทึกหมายเลขประมวลผลไม่สำเร็จ กรุณาติดตามงานเดิม ไม่ต้องส่งซ้ำ';
@@ -368,12 +407,16 @@ define([
     var text = '<p>งาน ' + esc(job.id) + ' · ' + esc(statuses[job.status] || job.status) + '</p>' +
       '<p>เลือก ' + esc(job.requested) + ' ใบ · สำเร็จ ' + esc(job.printed) + ' ใบ · ล้มเหลว ' + esc(job.failed) + ' ใบ</p>';
     if (job.status === 'PARTIAL') text += '<p class="warn">ไฟล์นี้ไม่ครบทุกใบ กรุณาตรวจสอบรายการที่ล้มเหลวก่อนใช้งาน</p>';
-    if (job.status === 'FAILED' && job.phase === 'MERGE_FAILED' && job.mergetask) {
+    var recovery = recoveryKind(job);
+    if (recovery) {
+      var recoveryToken = integrity.seal('recovery', recoveryBinding(job, recovery));
       text += '<form method="POST" action="' + esc(jobs.route(job.id, 'recover')) + '">' +
         '<input type="hidden" name="action" value="recover"><input type="hidden" name="job" value="' + esc(job.id) + '">' +
-        '<button type="submit">ทำขั้นรวมไฟล์ต่อ</button><p>ใช้ผลรายเอกสารและไฟล์ส่วนที่ตรวจสอบแล้ว ไม่สร้างงานพิมพ์ใหม่</p></form>';
+        '<input type="hidden" name="token" value="' + esc(recoveryToken) + '">' +
+        '<button type="submit">' + (recovery === 'MERGE' ? 'ทำขั้นรวมไฟล์ต่อ' : 'ทำขั้นสร้างเอกสารต่อ') + '</button>' +
+        '<p>ใช้ผลรายเอกสารและไฟล์ส่วนที่ตรวจสอบแล้ว ไม่สร้างงานพิมพ์ใหม่</p></form>';
     }
-    if (job.phase === 'MERGE_SUBMIT_UNKNOWN') text += '<p class="warn">ยังยืนยันการส่งขั้นรวมไฟล์ไม่ได้ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงานและไม่ต้องส่งซ้ำ</p>';
+    if (job.phase === 'MERGE_SUBMIT_UNKNOWN' || job.phase === 'RENDER_SUBMIT_UNKNOWN') text += '<p class="warn">ยังยืนยันการส่งงานประมวลผลไม่ได้ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงานและไม่ต้องส่งซ้ำ</p>';
     if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.outputs) {
       var outputs = jobs.results(job.id);
       text += outputs.map(function (output) {
@@ -415,6 +458,17 @@ define([
     html += '<p><a href="' + esc(jobs.route(jobId)) + '">' + (result.token ? 'หยุดและกลับไปดูงาน' : 'กลับไปดูงานและดาวน์โหลด PDF') + '</a></p>';
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
     context.response.write(pageShell('ล้างไฟล์ชั่วคราว', html));
+  }
+  function writeRecoveryError(context, tel, error) {
+    var back = '<button type="button" onclick="history.back()">กลับหน้าก่อนหน้า</button>';
+    try {
+      var job = jobs.load(context.request.parameters.job);
+      back = '<a href="' + esc(jobs.route(job.id)) + '">กลับไปตรวจสถานะงาน</a>';
+    } catch (unavailable) { /* Never expose a job outside the authenticated caller's scope. */ }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ยังยืนยันการทำงานต่อไม่ได้', '<h1>ยังยืนยันการทำงานต่อไม่ได้</h1>' +
+      '<p>กรุณาตรวจสถานะงานก่อนดำเนินการต่อ หากยังยืนยันการส่งงานไม่ได้ ไม่ต้องส่งซ้ำและแจ้งผู้ดูแลพร้อมรหัสอ้างอิง</p>' +
+      '<p>' + esc(error.message || String(error)) + '</p><p>รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p><p>' + back + '</p>'));
   }
   function writeCleanupError(context, tel, error) {
     var back = '<button type="button" onclick="history.back()">กลับหน้าก่อนหน้า</button>';

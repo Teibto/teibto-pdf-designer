@@ -145,6 +145,16 @@ permission failures, replay and depleted governance. The 20-second deadline is c
 native file search/type/delete behavior and concurrent Cabinet edits require sandbox evidence.
 No live account changes have occurred.
 
+Pre-plan render recovery verification: **250/250** engine tests pass. The status-page token flows
+through the real Suitelet, job/HMAC modules and both workers to a downloadable completed result.
+Tests cover committed-part reuse, immutable snapshot identity, terminal-task checks, stale/forged
+tokens, competing claims/plans/results, unknown submit outcomes and metadata acknowledgements that
+arrive after the worker starts. Recovery applies only before a plan is sealed; it does not erase
+an all-failed plan or promise historical transaction data for previously unrendered documents.
+The preceding cleanup candidate `f823f27` passed
+[full CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34273933536).
+These new recovery changes require their own CI and connected role/task/BFO evidence.
+
 Use these as task/objective text when assigning agents; they are not assumed CLI syntax.
 Assign non-overlapping file ownership per task, preserve other agents' work, and return exact
 tests/evidence plus unresolved risks. Primary owns generated integration and every connected action.
