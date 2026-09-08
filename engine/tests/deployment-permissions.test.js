@@ -10,14 +10,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-test('all packaged PDF deployments explicitly clear role elevation', () => {
+test('packaged PDF deployments do not pin a role and Suitelets prohibit anonymous access', () => {
   const folder = path.join(__dirname, '../src/Objects');
   const files = fs.readdirSync(folder).filter((name) => name.startsWith('customscript_') && name.endsWith('.xml'));
   assert.ok(files.length >= 4);
   for (const filename of files) {
     const xml = fs.readFileSync(path.join(folder, filename), 'utf8');
     for (const deployment of xml.matchAll(/<scriptdeployment\b[^>]*>([\s\S]*?)<\/scriptdeployment>/g)) {
-      // Absence is not equivalent: an upgrade may preserve the deployed old role.
+      // Empty fields preserve the intended upgrade instruction for user-facing
+      // deployments. MR caller-role inheritance comes from programmatic submission;
+      // this XML assertion cannot prove its effective execution role.
       assert.match(deployment[1], /<runasrole\s*(?:\/\s*>|>\s*<\/runasrole>)/, filename);
       assert.doesNotMatch(deployment[1], /<runasrole>\s*[^<\s]/, filename);
       if (xml.includes('<suitelet ')) {

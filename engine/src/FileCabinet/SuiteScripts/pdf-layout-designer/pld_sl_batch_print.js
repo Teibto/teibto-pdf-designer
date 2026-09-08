@@ -259,6 +259,7 @@ define([
     var folder = durable.folder;
     var jobFileId;
     var taskId;
+    var submissionAttempted = false;
     try {
       var jobContents = integrity.seal('snapshot', {
         schemaVersion: 5, templateSnapshot: snapshot, jobId: jobId,
@@ -278,14 +279,32 @@ define([
       jobFileId = snapshotFile.save();
       jobs.loadFile(jobs.load(jobId), jobFileId);
       jobs.update(jobId, { snapshot: jobFileId, snapshotdigest: integrity.digest(jobContents), status: 'QUEUED', phase: 'RENDER_QUEUED' });
-      taskId = task.create({
+      var pending = task.create({
         taskType: task.TaskType.MAP_REDUCE,
         scriptId: 'customscript_pld_batch_mr',
         deploymentId: 'customdeploy_pld_batch_mr',
         params: { custscript_pld_mr_job: jobId }
-      }).submit();
+      });
+      if (!pending || typeof pending.submit !== 'function') throw new Error('Render task preparation failed');
+      tel.stage = 'queue-submit';
+      submissionAttempted = true;
+      taskId = pending.submit();
+      if (typeof taskId !== 'string' || !taskId.trim()) throw new Error('Render task submission returned no task ID');
     } catch (e) {
-      // Only pre-acceptance failures reach this block. Keep the initiating error.
+      if (submissionAttempted) {
+        // Submission may have been accepted before an exception/empty reply.
+        // Keep its input and never downgrade a worker which already advanced.
+        try { jobs.update(jobId, { phase: 'RENDER_SUBMIT_UNKNOWN' }, {
+          status: 'QUEUED', phase: 'RENDER_QUEUED', task: '', snapshot: String(jobFileId),
+          snapshotdigest: integrity.digest(jobContents), plan: '', outputs: '', mergetask: ''
+        }); } catch (outcomeError) {
+          log.error({ title: 'PLD initial queue outcome persistence failed', details: { jobId: jobId, message: outcomeError.message } });
+        }
+        logBatchError(tel, e);
+        return writeQueueUnknown(context, tel, jobId);
+      }
+      // Preparation failed before submit was called. Cleanup is safe; preserve
+      // the initiating error when secondary state/cleanup operations also fail.
       try { jobs.update(jobId, { status: 'FAILED', failed: ids.length }); }
       catch (stateError) {
         log.error({ title: 'PLD queue failure state unavailable', details: { jobId: jobId, message: stateError.message } });
@@ -489,6 +508,19 @@ define([
       (rows.length ? rows.map(function (job) {
         return '<section><a href="' + esc(jobs.route(job.id)) + '">ดูสถานะงาน</a>' + jobSummary(job) + '</section>';
       }).join('') : '<p>ยังไม่มีงานพิมพ์ในบทบาทนี้</p>')));
+  }
+
+  function writeQueueUnknown(context, tel, jobId) {
+    var tracking = '';
+    try {
+      var current = jobs.load(jobId);
+      tracking = '<a href="' + esc(jobs.route(current.id)) + '">ตรวจสถานะงานนี้</a>';
+    } catch (unavailable) { /* Keep the uncertainty visible even if status lookup fails. */ }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ยังยืนยันการส่งงานไม่ได้', '<h1>ยังยืนยันการส่งงานไม่ได้</h1>' +
+      '<p>หมายเลขงาน <code>' + esc(jobId) + '</code></p>' +
+      '<p>ระบบอาจเริ่มประมวลผลแล้ว กรุณาตรวจสถานะงานและแจ้งผู้ดูแลพร้อมรหัสอ้างอิง ไม่ต้องส่งซ้ำ</p>' +
+      '<p>รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p><p>' + tracking + '</p>'));
   }
 
   function writeQueuedPage(context, tel, recType, count, jobId, warning) {

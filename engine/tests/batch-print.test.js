@@ -501,14 +501,14 @@ test('queue freezes server-resolved XML and copies, ignoring request snapshot fi
   assert.deepEqual(job.templateSnapshot.copies, JSON.parse(TWO_COPIES).copies);
 });
 
-test('task submission failure deletes job spec and reports the failure', () => {
+test('task preparation failure deletes job spec and reports the failure', () => {
   const { suitelet, openSnapshot, files, task } = buildBatch({ templates: TEMPLATES });
-  task.module.create = () => ({ submit() { throw new Error('QUEUE_FULL'); } });
+  task.module.create = () => { throw new Error('TASK_CREATE_FAILED'); };
   const { context, response } = queueRequest(['11']);
   suitelet.onRequest(context);
   const job = files.created.find((f) => /^pld_job_/.test(f.name));
   assert.ok(files.deleted.includes(job.id));
-  assert.match(response.state.body, /QUEUE_FULL/);
+  assert.match(response.state.body, /TASK_CREATE_FAILED/);
   assert.doesNotMatch(response.state.body, /ส่งเข้าคิวแล้ว/);
 });
 
@@ -583,10 +583,10 @@ test('enqueue preserves original failure when state persistence and cleanup also
     if (opts.values.custrecord_pld_job_status === 'FAILED') throw new Error('state unavailable');
     return submit(opts);
   };
-  f.task.module.create = () => ({ submit() { throw new Error('QUEUE_FULL original'); } });
+  f.task.module.create = () => { throw new Error('TASK_CREATE_FAILED original'); };
   f.files.module.delete = () => { throw new Error('cleanup unavailable'); };
   const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
-  assert.match(ctx.response.state.body, /QUEUE_FULL original/);
+  assert.match(ctx.response.state.body, /TASK_CREATE_FAILED original/);
   assert.doesNotMatch(ctx.response.state.body, /cleanup unavailable|state unavailable/);
   assert.ok(f.log.entries.some((e) => e.title === 'PLD queue failure state unavailable'));
   assert.ok(f.log.entries.some((e) => e.title === 'PLD queue job cleanup failed'));
@@ -661,4 +661,57 @@ test('queued snapshot is authenticated and in-place XML tampering invalidates it
   const altered = saved.replace('<body>ok</body>', '<body>injected</body>');
   assert.notEqual(saved, altered);
   assert.throws(() => f.openSnapshot(altered), /integrity|authentication/i);
+});
+
+test('initial submit exception or missing task ID preserves input and reports uncertainty rather than acceptance', () => {
+  for (const reply of ['throws', '', null, undefined, '   ']) {
+    const f = buildBatch({ templates: TEMPLATES }); let attempts = 0;
+    f.task.module.create = () => ({ submit() { attempts++; if (reply === 'throws') throw new Error('acknowledgement lost'); return reply; } });
+    const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
+    assert.equal(attempts, 1);
+    assert.equal(f.files.deleted.length, 0);
+    const job = loadAmd('./pld_lib_batch_jobs', f.stubs).load('501');
+    assert.equal(job.status, 'QUEUED');
+    assert.equal(job.phase, 'RENDER_SUBMIT_UNKNOWN');
+    assert.equal(job.snapshot, f.files.created[0].id);
+    assert.equal(job.task, '');
+    assert.match(ctx.response.state.body, /ยังยืนยันการส่งงานไม่ได้/);
+    assert.match(ctx.response.state.body, /action=status.*job=501/);
+    assert.match(ctx.response.state.body, /ไม่ต้องส่งซ้ำ/);
+    assert.doesNotMatch(ctx.response.state.body, /ส่งเข้าคิวแล้ว|ระบบรับงานแล้ว|ระบบสร้างไฟล์ PDF ของชุดนี้ไม่ได้|setTimeout/);
+  }
+});
+
+test('submit exception after worker advancement or publication does not downgrade authenticated state', () => {
+  for (const advanced of [
+    { status: 'RUNNING', phase: 'RENDERING', task: 'accepted-task' },
+    { status: 'COMPLETE', phase: 'DONE', task: 'accepted-task', outputs: 'published-worker-output' },
+  ]) {
+    const f = buildBatch({ templates: TEMPLATES });
+    const jobs = loadAmd('./pld_lib_batch_jobs', f.stubs);
+    f.task.module.create = () => ({ submit() { jobs.update('501', advanced); throw new Error('acknowledgement lost after execution'); } });
+    const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
+    const job = jobs.load('501');
+    for (const [key, value] of Object.entries(advanced)) assert.equal(job[key], value);
+    assert.equal(f.files.deleted.length, 0);
+    assert.match(ctx.response.state.body, /ยังยืนยันการส่งงานไม่ได้/);
+    assert.ok(f.log.entries.some(e => e.title === 'PLD initial queue outcome persistence failed'));
+  }
+});
+
+test('unknown-phase persistence failure still preserves snapshot and displays honest status link', () => {
+  const f = buildBatch({ templates: TEMPLATES });
+  const submit = f.stubs['N/record'].submitFields;
+  f.stubs['N/record'].submitFields = opts => {
+    if (opts.values.custrecord_pld_job_phase === 'RENDER_SUBMIT_UNKNOWN') throw new Error('state persistence unavailable');
+    return submit(opts);
+  };
+  f.task.module.create = () => ({ submit() { throw new Error('submit reply lost'); } });
+  const ctx = queueRequest(['11']); f.suitelet.onRequest(ctx.context);
+  assert.equal(f.files.deleted.length, 0);
+  const job = loadAmd('./pld_lib_batch_jobs', f.stubs).load('501');
+  assert.equal(job.status, 'QUEUED'); assert.equal(job.phase, 'RENDER_QUEUED'); assert.equal(job.task, '');
+  assert.match(ctx.response.state.body, /ยังยืนยันการส่งงานไม่ได้/);
+  assert.match(ctx.response.state.body, /action=status.*job=501/);
+  assert.doesNotMatch(ctx.response.state.body, /ส่งเข้าคิวแล้ว|ระบบสร้างไฟล์ PDF ของชุดนี้ไม่ได้/);
 });

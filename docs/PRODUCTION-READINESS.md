@@ -14,10 +14,10 @@ Local test doubles do not execute FreeMarker/BFO or establish NetSuite role perm
 | P1 | Save race, duplicate POST retries, nested-input keyboard shortcuts | Implemented locally; deferred-response, double-save and editable/IME regressions. Preserve new edits and document identity, including a new template saved while editing. |
 | P1 | Download differs from current preview; stale responses after reopen | Implemented locally; download displayed blob and discard superseded responses. Three component regressions. Live save/reload/print parity still required. |
 | P1 | Wrong subsidiary config and unusable Thai fonts silently print | Implemented locally; require matching/global config and valid File Cabinet fonts for render, retain setup inspection. Live missing-font and subsidiary tests required. |
-| P1 | All-role Suitelets execute as Administrator | Candidate explicitly clears role elevation in all packaged deployments, including the new merge phase, and disables anonymous Suitelet access. SDF/readback and restricted-user role matrix remain release blockers; no claim of runtime authorization based on XML tests. |
+| P1 | All-role Suitelets execute as Administrator | Candidate emits empty runasrole and disables anonymous Suitelet access. User-facing overrides need SDF/readback; MR caller-role inheritance depends on programmatic submission, not its fixed Administrator UI field. Restricted-user execution matrix remains a release blocker; XML tests alone do not prove runtime authorization. |
 | P1 | Shared batch folder exposes job JSON/XML and other users' output | Local candidate adds durable requester/role/owner identity, per-job private folder readback and job-authorized download. Native record/file permissions, direct URLs, weaker-role access and retention remain release blockers; local stubs cannot establish account privacy. |
 | P1 | Batch input/merge errors skip cleanup and notification | Authenticated PART/CHUNK commits survive lost MR output and successful chunks are reused. Failure notifications include the job reference. Owner-triggered cleanup verifies terminal tasks and published PDFs, then deletes committed XML inputs in bounded signed continuations. Snapshot/orphans/unpublished inputs remain retained; age-based retention and orphan adoption remain open. |
-| P1 | Accepted queue task reported as rejected after metadata failure | Enqueue now separates pre-submit failure cleanup from accepted-task warnings. Once submit returns, preserve snapshot/status and show job tracking even when saving task ID or resolving the link fails. Fresh folder identity/privacy validation precedes snapshot save. Local failure injections pass; connected task/role behavior remains required. |
+| P1 | Accepted queue task reported as rejected after metadata failure | Enqueue separates preparation failure cleanup from the submit boundary. Once submit is attempted, thrown/empty responses retain snapshot/status and report uncertainty; a guarded update cannot downgrade an advanced worker. Accepted-task ID/link failures preserve work and show tracking. Connected task/role behavior remains required. |
 | P2 | Repeated transaction reads per copy | Implemented request-local frozen snapshot; copy titles/labels remain independent. Measure real governance and latency before capacity claims. |
 | P2 | Queue reads mutable templates | Schema v5 authenticates job state, enqueue snapshots, ledger artifacts, chunk plans and output manifests. Guarded downloads verify actual PDF bytes. Bounds: 1,000,000 XML characters / 8 MiB job, 8 MiB XML per chunk and 10 MiB PDF per chunk. Native secret/script access and historical/replay policy remain live gates. |
 | P2 | Unbounded batch merge | Schema v5 uses a separate reduce-stage merge, at most 25 documents / 8 MiB framed XML per chunk, within 500-document and 20-copy input limits. Planning/finalization read ledger metadata rather than all XML/PDF contents. Owner-triggered merge recovery requires a terminal task and atomic claim. Native governance/capacity, orphan adoption, retention and deployment pools remain open. |
@@ -153,7 +153,16 @@ arrive after the worker starts. Recovery applies only before a plan is sealed; i
 an all-failed plan or promise historical transaction data for previously unrendered documents.
 The preceding cleanup candidate `f823f27` passed
 [full CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34273933536).
-These new recovery changes require their own CI and connected role/task/BFO evidence.
+Recovery commit `c849373` also passed
+[full CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34275216255).
+Connected role/task/BFO evidence remains required.
+
+Initial-submit ambiguity verification: **253/253** engine tests pass, including thrown, empty and
+whitespace task-ID responses, concurrent worker progress/publication, failed uncertainty markers
+and preparation-only cleanup. Snapshot and advanced worker state survive every injected ambiguous
+submit response. Syntax and MR object XML well-formedness pass; this is not native SDF validation.
+Deployment documentation now distinguishes MR caller inheritance from its fixed Administrator UI
+field and records the documented native deployment-selection option for the next pool integration.
 
 Use these as task/objective text when assigning agents; they are not assumed CLI syntax.
 Assign non-overlapping file ownership per task, preserve other agents' work, and return exact

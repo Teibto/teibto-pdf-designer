@@ -13,13 +13,14 @@ Owner-triggered cleanup of published XML inputs is bounded and implemented local
 
 ## Enqueue acceptance boundary
 
-The boundary is the return of a task ID from `task.submit()`. Before that return, failures should
-mark the caller-owned durable job FAILED when possible and clean only verified private files.
-After that return, failures while recording the task ID must preserve the accepted job and its
-snapshot. Show its tracking reference and a warning; do not describe the request as rejected,
-delete worker inputs or encourage a second submission. A failed cleanup/state update must not
-hide the original failure. Account-level loss of record access can prevent persisting FAILED;
-retain a structured log for operator reconciliation instead of inventing a successful transition.
+Preparation can mark the caller-owned job FAILED and clean verified private files only before
+calling `task.submit()`. Once that call begins, an exception or missing task-ID response may hide
+acceptance. Preserve the snapshot and show uncertainty plus job/error references. Set
+RENDER_SUBMIT_UNKNOWN only if the original QUEUED/RENDER_QUEUED state and immutable storage still
+match; an advanced worker or published result wins. A returned task ID proves acceptance, so later
+metadata failures retain the accepted job with a warning. None of these ambiguous outcomes permits
+an automatic resubmit. A failed cleanup/state update must not hide the original failure; loss of
+record access requires structured logs for operator reconciliation, not an invented transition.
 
 ## Trust boundaries
 
@@ -176,6 +177,25 @@ outputs, authorizes phase boundaries and performs every connected action.
 Do not run simultaneous writers against the shared batch library. Schema migration must drain
 old tasks and reject incompatible envelopes explicitly. New phases are not enabled on an account
 until secret/permission setup, deployment identity and recovery/negative tests are verified there.
+
+### Deployment pool evidence and next integration
+
+The package currently has one render and one merge deployment, and initial queue, recovery and
+render-to-merge handoff each pin a deployment ID. Oracle documents native selection when
+`deploymentId` is omitted: an eligible deployment is deployed, Not Scheduled, and has no unfinished
+instance. Programmatic submission inherits the calling script's user/role. This provides a native
+pool option without an administrator dispatcher; pool size still does not establish throughput.
+[On-demand submission](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
+
+Integration must use fixed stage script/parameter identities, preserve the signed job and submission
+boundary at every call site, and audit account-added eligible deployments. Do not try another slot
+after an unknown submit outcome. A full pool needs an explicit nonacceptance/reconciliation contract
+before automatic retry can be safe; an elapsed timer is not evidence that no task was accepted.
+MR UI Execute As Role is fixed Administrator, while effective programmatic execution inherits its
+caller; the blank XML field is not the runtime authorization mechanism. Validate all stages under
+the intended restricted role and do not use Save and Execute or scheduled System-user dispatch.
+[MR deployment fields](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1509578980.html),
+[UI execution identity](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1509579025.html).
 
 Current local evidence includes 51 documents split 25/25/1, Thai byte-boundary chunking, 500-row
 planning without XML reads, finalization without PDF reads, lost PART/CHUNK output callbacks,

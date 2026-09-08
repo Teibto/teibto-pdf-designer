@@ -7,7 +7,7 @@
     <scriptcustomfield scriptid="custscript_pld_mr_job">
       <accesslevel>2</accesslevel>
       <applyformatting>F</applyformatting>
-      <description>ID ของ customrecord_pld_batch_job ที่หน้าจอพิมพ์เป็นชุดสร้าง (schema v3)</description>
+      <description>ID ของ customrecord_pld_batch_job ที่หน้าจอพิมพ์เป็นชุดสร้าง (schema v5)</description>
       <displaytype>NORMAL</displaytype>
       <fieldtype>TEXT</fieldtype>
       <isformula>F</isformula>

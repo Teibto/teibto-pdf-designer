@@ -240,12 +240,18 @@ template ID/version and repair permissions/default selection before printing. Mu
 defaults for the same record type now cause an explicit error; the renderer does not pick one
 arbitrarily. The new content and version remain available even if changing another record fails.
 
-The candidate clears `runasrole` explicitly on all four deployments and sets Suitelets
-`isonline=F`. Intended behavior is **Current Role**: transaction loads/searches/rendering respect
-the caller's record, employee and subsidiary restrictions. Do not restore Administrator execution
-to work around a missing permission. An empty optional field is used instead of omitting it so an
-upgrade clears the old assignment; SDF validation and deployment readback must verify the actual
-Execute as Role value before release. Local XML tests only prevent packaging elevation.
+The candidate emits empty `runasrole` on packaged deployments and sets Suitelets `isonline=F`.
+For user-facing scripts, verify that upgrading clears the old Administrator override and preserves
+the caller's record/employee/subsidiary restrictions. Do not restore elevation for missing permissions.
+For Map/Reduce, role inheritance comes from **programmatic submission by the caller**, not from
+interpreting an empty XML field as a selectable Current Role deployment setting. Oracle documents
+the MR deployment UI's Execute As Role as fixed Administrator, while script-submitted executions
+inherit their caller. UI/scheduled execution is not an approved batch path.
+[MR deployment fields](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1509578980.html),
+[script submission](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
+Empty MR `runasrole` is present in Oracle's
+[SDF example](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157185630390.html).
+Local XML tests verify packaging only; SDF readback and restricted-role executions remain mandatory.
 
 Prepare a minimum-permission role matrix per account: transaction View for required document
 types; View for template/company config and font files; editor roles additionally need template
@@ -308,7 +314,7 @@ clearing role elevation does not establish per-requester batch privacy.
 
 ## Template Governance — ใครแก้เทมเพลตได้ (#189)
 
-Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Administrator` เพราะ **การพิมพ์** ต้องอ่าน transaction / ฟอนต์ / config ข้าม subsidiary ได้ ผลข้างเคียงคือสิทธิ์ระดับ record ของ NetSuite ไม่ได้กันการเขียนเทมเพลตไว้เลย engine จึงตรวจสิทธิ์เอง ก่อนทุก action ที่เปลี่ยนเทมเพลต (`save` / `delete` / `rollback`).
+รุ่นเก่าใช้ `All Roles` + `Execute as Administrator`; candidate นี้ต้องยกเลิกการยกระดับของ Suitelet และพิสูจน์สิทธิ์ผู้เรียกตามขั้นตอนด้านบน การพิมพ์ต้องเคารพสิทธิ์ record/subsidiary ของผู้ใช้ ส่วน action เปลี่ยนเทมเพลต (`save` / `delete` / `rollback`) ตรวจ editor allowlist เพิ่มจากสิทธิ์ NetSuite.
 
 **ตั้งค่า:** ช่อง **Template Editor Roles** (`custrecord_pld_cfg_editor_roles`) บน config record — ใส่ internal id ของ role คั่นด้วย comma เช่น `1017,1042` (ดู id ที่ Setup > Users/Roles > Manage Roles คอลัมน์ Internal ID)
 
@@ -446,7 +452,7 @@ old valid signed state; exactly-once publication and historical-access policy re
 #### Merge deployment and recovery (schema v5)
 
 Deploy `pld_mr_batch_merge.js` as `customscript_pld_batch_merge` /
-`customdeploy_pld_batch_merge`, Not Scheduled, Current Role. Parameter
+`customdeploy_pld_batch_merge`, Not Scheduled, submitted programmatically with the caller's role. Parameter
 `custscript_pld_merge_job` contains the authenticated job record ID. Render workers publish PART
 records before MR output; merge reduce publishes one CHUNK record per bounded invocation.
 Exact `(job, snapshot digest, kind, ordinal)` external IDs provide logical uniqueness, which must
@@ -481,6 +487,12 @@ identity/digest, checks the old task is terminal and atomically clears its ident
 Unknown outcomes remain RENDER_SUBMIT_UNKNOWN and require operator reconciliation. Never fill task
 IDs by editing native fields: authenticated job state must not be bypassed. Verify concurrent claims,
 worker reuse, expired/unavailable task status and accepted-task metadata failures in sandbox.
+
+Initial queue submission also treats a thrown or missing task-ID response as uncertain once
+`submit()` was called. It retains the private snapshot and exposes the job/error reference; a
+guarded RENDER_SUBMIT_UNKNOWN marker cannot overwrite a worker that already advanced. Only
+preparation failures before the call may mark the job failed and remove its snapshot. Unknown
+submissions have no automatic retry, including when the deployment pool is saturated.
 
 Age-based retention, adoption of files saved before ledger commit, recovery after a sealed plan and
 deployment pools remain pending. Size limits are safety bounds; measure actual BFO usage, output
