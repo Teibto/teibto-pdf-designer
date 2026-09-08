@@ -23,6 +23,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: designer/package-lock.json
+
       - name: Install gitleaks (pinned)
         run: |
           curl -sfL -o /tmp/gitleaks.tgz \
@@ -64,6 +70,9 @@ jobs:
           done
           node --test "engine/tests/**/*.test.js"
 
+      - name: Build/deploy provenance regression tests
+        run: node --test scripts/build-provenance.test.mjs
+
       # ==================== STACK: Node (designer/) ====================
       # monorepo: แอปหลักอยู่ designer/ — ไม่มี package.json ที่ root
       - name: Node — lint + test (designer/)
@@ -71,8 +80,17 @@ jobs:
         working-directory: designer
         run: |
           npm ci
-          npm run lint --if-present
-          npm test --if-present
+          npm audit --audit-level=high
+          npm run lint
+          npm test -- --run
+
+      # Dev-server tests do not prove either deployment bundle can be produced.
+      - name: Designer — production builds
+        working-directory: designer
+        run: |
+          npm run build
+          npm run build:netsuite
+          npm run storybook:build
 
       # 5) Playwright e2e (#146) — save/render flows had no automated regression coverage in CI
       # playwright.config.ts มี webServer block ที่ auto-start `npm run dev` เอง — ไม่ต้อง start server เอง

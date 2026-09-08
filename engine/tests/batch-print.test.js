@@ -131,7 +131,8 @@ function buildBatch({
       docTitles: DOC_TITLES,
     },
   };
-  return { suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search, files, task, folderRecords };
+  const rows = require('./helpers/batch-store').batchStore(stubs, files);
+  return { rows, suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search, files, task, folderRecords };
 }
 
 const DOCS = [
@@ -432,12 +433,12 @@ test('ชุดใหญ่ถูกส่งเป็น job ให้ Map/Redu
   assert.equal(task.submitted.length, 1);
   assert.equal(task.submitted[0].taskType, 'MAP_REDUCE');
   assert.equal(task.submitted[0].scriptId, 'customscript_pld_batch_mr');
-  assert.equal(task.submitted[0].params.custscript_pld_mr_job, jobFile.id,
+  assert.equal(task.submitted[0].params.custscript_pld_mr_job, job.jobId,
     'MR ต้องได้ file id ของ job spec');
 
   assert.equal(response.state.files.length, 0, 'หน้าจอไม่รอผล — ไม่มี PDF ตรงนี้');
   assert.match(response.state.body, /ส่งเข้าคิวแล้ว/);
-  assert.match(response.state.body, /MAPREDUCETASK_1/, 'บอกหมายเลขงานให้ตามต่อได้');
+  assert.match(response.state.body, /501/, 'บอกหมายเลขงานให้ตามต่อได้');
 });
 
 test('ไม่มี template = ไม่ส่งงานเข้าคิว (ไม่งั้น map พังทีละใบทั้งชุด)', () => {
@@ -463,29 +464,14 @@ test('เกินเพดานต่อหนึ่ง job = บอกให�
   assert.match(response.state.body, /501/);
 });
 
-test('ไฟล์ของงานไปอยู่ในโฟลเดอร์ pld-batch ใต้โฟลเดอร์ของ engine', () => {
-  const { suitelet, files, folderRecords } = buildBatch({ documents: DOCS, templates: TEMPLATES });
-  const { context } = queueRequest(['11', '12']);
-
-  suitelet.onRequest(context);
-
-  assert.equal(folderRecords.length, 1, 'ยังไม่มีโฟลเดอร์ → สร้างให้ครั้งเดียว');
-  assert.equal(folderRecords[0].type, 'folder');
-  assert.equal(folderRecords[0].values.name, 'pld-batch');
-  assert.equal(folderRecords[0].values.parent, '55', 'ใต้โฟลเดอร์ที่ deploy stamp ชี้ไว้');
-  assert.equal(files.created.find((f) => /^pld_job_/.test(f.name)).folder, '77');
-});
-
-test('มีโฟลเดอร์อยู่แล้วก็ใช้ตัวเดิม ไม่สร้างซ้ำทุกครั้งที่สั่งพิมพ์', () => {
-  const { suitelet, files, folderRecords } = buildBatch({
-    documents: DOCS, templates: TEMPLATES, folders: [{ id: '88', values: {} }],
-  });
-  const { context } = queueRequest(['11', '12']);
-
-  suitelet.onRequest(context);
-
-  assert.equal(folderRecords.length, 0);
-  assert.equal(files.created.find((f) => /^pld_job_/.test(f.name)).folder, '88');
+test('queue creates a fresh private job folder before saving snapshot', () => {
+  const { suitelet, files, rows } = buildBatch({ documents: DOCS, templates: TEMPLATES });
+  suitelet.onRequest(queueRequest(['11', '12']).context);
+  assert.equal(rows.get('502').isprivate, true);
+  assert.equal(rows.get('502').owner, 9);
+  assert.equal(rows.get('502').parent, 55);
+  assert.equal(files.created[0].folder, '502');
+  assert.equal(rows.get('501').custrecord_pld_job_snapshot, files.created[0].id);
 });
 
 test('ปุ่มส่งเข้าคิวอยู่บนหน้าจอ และสลับปลายทางผ่าน hidden field เดียว', () => {
@@ -510,7 +496,7 @@ test('queue freezes server-resolved XML and copies, ignoring request snapshot fi
   });
   suitelet.onRequest(context);
   const job = JSON.parse(files.created.find((f) => /^pld_job_/.test(f.name)).contents);
-  assert.equal(job.schemaVersion, 2);
+  assert.equal(job.schemaVersion, 3);
   assert.equal(job.templateSnapshot.xml, TPL_XML);
   assert.deepEqual(job.templateSnapshot.copies, JSON.parse(TWO_COPIES).copies);
 });

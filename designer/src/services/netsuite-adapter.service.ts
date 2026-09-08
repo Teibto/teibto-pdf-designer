@@ -526,7 +526,7 @@ export async function renderLivePreview(opts: {
     return await response.blob();
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`Preview render timeout after ${DEFAULT_TIMEOUT_MS}ms`);
+      throw new Error(`Preview render timeout after ${DEFAULT_TIMEOUT_MS}ms`, { cause: err });
     }
     throw err;
   } finally {

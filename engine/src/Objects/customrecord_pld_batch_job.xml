@@ -1,0 +1,64 @@
+<!-- @author Wichit Wongta; @since 2026-09-09 -->
+<customrecordtype scriptid="customrecord_pld_batch_job">
+  <recordname>PDF Batch Job</recordname>
+  <accesstype>USEPERMISSIONLIST</accesstype>
+  <allowuiaccess>F</allowuiaccess>
+  <allowinlineediting>F</allowinlineediting>
+  <allowquickadd>F</allowquickadd>
+  <allowquicksearch>F</allowquicksearch>
+  <allowattachments>F</allowattachments>
+  <enableoptimisticlocking>T</enableoptimisticlocking>
+  <enablesystemnotes>T</enablesystemnotes>
+  <includename>T</includename>
+  <showowner>T</showowner>
+  <showownerallowchange>F</showownerallowchange>
+  <!-- Deny by default. Grant selected caller roles EDIT with VIEWANDEDIT restrictions,
+       mirrored on those roles. Native restrictions include subordinates; application
+       checks also require exact requester and role. -->
+  <customrecordcustomfields>
+    <customrecordcustomfield scriptid="custrecord_pld_job_requester">
+      <label>Requester</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_role">
+      <label>Role</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_status">
+      <label>Status</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_folder">
+      <label>Folder</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_parent">
+      <label>Parent</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_snapshot">
+      <label>Snapshot</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_result">
+      <label>Result</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_requested">
+      <label>Requested</label><fieldtype>INTEGER</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_printed">
+      <label>Printed</label><fieldtype>INTEGER</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_failed">
+      <label>Failed</label><fieldtype>INTEGER</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+    <customrecordcustomfield scriptid="custrecord_pld_job_task">
+      <label>Task</label><fieldtype>TEXT</fieldtype>
+      <storevalue>T</storevalue><accesslevel>2</accesslevel><searchlevel>2</searchlevel>
+    </customrecordcustomfield>
+  </customrecordcustomfields>
+</customrecordtype>

@@ -72,17 +72,9 @@ if [ "${#AUTHIDS[@]}" -eq 0 ]; then
   exit 1
 fi
 
-# --- 1) stamp version --------------------------------------------------------
-[ -f "${VERSION_FILE}" ] || { echo "ERROR: ไม่มี ${VERSION_FILE}" >&2; exit 1; }
-VERSION="$(tr -d '[:space:]' < "${VERSION_FILE}")"
-SHA="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo 'nogit')"
-DIRTY=""
-git -C "${REPO_ROOT}" diff --quiet 2>/dev/null || DIRTY="+dirty"
-BUILT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-mkdir -p "${APP_DIR}"
-printf '{"version":"%s","sha":"%s%s","built":"%s"}\n' \
-  "${VERSION}" "${SHA}" "${DIRTY}" "${BUILT}" > "${STAMP_FILE}"
+# --- 1) build + verify before version stamp -----------------------------------
+command -v node >/dev/null 2>&1 || { echo "ERROR: Node.js is required for build provenance" >&2; exit 1; }
+PROVENANCE="${SCRIPT_DIR}/build-provenance.mjs"
 
 # --- 1b) build + stage designer SPA bundle เข้า File Cabinet path (#39) --------
 # pld_sl_designer.js serve dist/ จาก File Cabinet ด้วย path — bundle ต้องอยู่ใน deploy scope
@@ -97,10 +89,14 @@ else
     || { echo "ERROR: designer build ล้มเหลว — ดู ${DESIGNER_DIR}/.deploy-build.log" >&2; tail -8 "${DESIGNER_DIR}/.deploy-build.log" >&2; exit 1; }
 fi
 [ -f "${DIST_SRC}/index.html" ] || { echo "ERROR: ไม่พบ ${DIST_SRC}/index.html หลัง build" >&2; exit 1; }
-rm -rf "${DIST_DEST}"
-mkdir -p "${DIST_DEST}"
-cp -r "${DIST_SRC}/." "${DIST_DEST}/"
-echo "▶ staged SPA → ${DIST_DEST} ($(find "${DIST_DEST}" -type f | wc -l | tr -d ' ') files)"
+node "${PROVENANCE}" stage "${REPO_ROOT}"
+# Stamp only after both source and staged asset hashes have been verified.
+node "${PROVENANCE}" stamp "${REPO_ROOT}" >/dev/null
+VERSION="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version' "${STAMP_FILE}")"
+SHA="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha' "${STAMP_FILE}")"
+DIRTY=""
+BUILT="$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).built' "${STAMP_FILE}")"
+echo "▶ verified and staged SPA → ${DIST_DEST}"
 
 echo "════════════════════════════════════════════════════════════"
 echo " PLD deploy  ·  version ${VERSION}  ·  sha ${SHA}${DIRTY}  ·  ${BUILT}"
@@ -126,7 +122,8 @@ restore_repo_files() {
     rm -f "${PROJECT_JSON}"
   fi
   cp "${BACKUP_DIR}/deploy.xml" "${DEPLOY_XML}"
-  rm -rf "${BACKUP_DIR}"
+  rm -f "${BACKUP_DIR}/project.json" "${BACKUP_DIR}/deploy.xml"
+  rmdir "${BACKUP_DIR}"
 }
 trap restore_repo_files EXIT
 

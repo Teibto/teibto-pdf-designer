@@ -8,7 +8,8 @@
  * หน้าจอ `pld_sl_batch_print` พิมพ์สดได้ราวสิบใบต่อครั้ง (วัดจริงบน SB2: ใบแจ้งหนี้
  * 2 สำเนา ≈ 160 usage units/ใบ จาก 1,000 units ของ Suitelet) เกินกว่านั้นมันจะส่ง
  * งานมาที่สคริปต์ตัวนี้ ซึ่งได้ **1,000 units ต่อหนึ่ง map invocation** — หนึ่ง
- * เอกสารต่อหนึ่ง key จึงไม่มีวันเต็มโควตา ไม่ว่าชุดจะใหญ่แค่ไหน
+ * เอกสารต่อหนึ่ง key; oversized documents can still exhaust governance.
+ * Merge remains bounded to 8 MiB XML / 500 documents; chunking/recovery/pooling are not implemented.
  *
  * ทุกใบ render ผ่าน `pld_lib_render` ตัวเดียวกับปุ่ม Print และหน้าจอพิมพ์เป็นชุด
  * (CLAUDE.md — BFO เป็น render engine เดียว) ผลลัพธ์คือไฟล์ PDF ก้อนเดียวใน File
@@ -20,7 +21,7 @@
  * file id · summarize โหลดกลับมาต่อกันครั้งเดียว แล้วลบไฟล์ชั่วคราวทิ้ง
  *
  * job spec (ไฟล์ JSON ที่ Suitelet เขียนไว้) ส่งมาทาง script parameter
- * `custscript_pld_mr_job` = file id — parameter เก็บ id ตัวเดียว ไม่ใช่รายการ
+ * `custscript_pld_mr_job` = durable job record ID — parameter เก็บ id ตัวเดียว ไม่ใช่รายการ
  * เอกสารทั้งชุด (ชุด 300 ใบยาวเกินกว่าจะยัดลง parameter)
  *
  * @author Wichit Wongta
@@ -33,8 +34,8 @@ define([
   'N/log',
   'N/email',
   'N/url',
-  './pld_lib_render'
-], function (file, render, runtime, log, email, url, pldRender) {
+  './pld_lib_render', './pld_lib_batch_jobs'
+], function (file, render, runtime, log, email, url, pldRender, jobs) {
 
   var JOB_PARAM = 'custscript_pld_mr_job';
   var MAX_DOCS = 500;
@@ -47,6 +48,7 @@ define([
 
   function getInputData() {
     var job = loadJob();
+    jobs.update(job.jobId, { status: 'RUNNING' });
     log.audit({
       title: 'PLD batch job started',
       details: { jobId: job.jobId, rectype: job.rectype, tplid: job.tplid, count: job.ids.length }
@@ -68,27 +70,30 @@ define([
    * job spec จาก File Cabinet — พังต้องดังตั้งแต่ getInputData (R4)
    * ไม่ใช่ปล่อยให้ map วิ่งเปล่าแล้วผู้ใช้ได้อีเมลว่า "สำเร็จ 0 ใบ"
    */
-  function loadJob(skipValidation) {
+  function loadJob() {
     var fileId = runtime.getCurrentScript().getParameter({ name: JOB_PARAM });
     if (!fileId) {
-      throw new Error('ไม่ได้ระบุ job file (script parameter ' + JOB_PARAM + ') — ' +
+      throw new Error('ไม่ได้ระบุ job file/job record (script parameter ' + JOB_PARAM + ') — ' +
         'สั่งงานนี้จากหน้าจอพิมพ์เป็นชุดเท่านั้น');
     }
-    var jobFile = file.load({ id: fileId });
+    var durable = jobs.load(fileId);
+    if (['QUEUED', 'RUNNING'].indexOf(durable.status) < 0) throw new Error('Batch job is not runnable');
+    var jobFile = jobs.loadFile(durable, durable.snapshot);
+    fileId = durable.snapshot;
     if (jobFile.size > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
     var contents = jobFile.getContents();
     if (utf8Bytes(contents) > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
     var job = JSON.parse(contents);
     if (!job || typeof job !== 'object') throw new Error('Invalid batch job');
-    if (!skipValidation && (!job.rectype || !Array.isArray(job.ids) || job.ids.length === 0)) {
+    if ((!job.rectype || !Array.isArray(job.ids) || job.ids.length === 0)) {
       throw new Error('job file ' + fileId + ' ไม่มี rectype หรือรายการเอกสาร');
     }
-    if (!skipValidation && job.ids.length > MAX_DOCS) {
+    if (job.ids.length > MAX_DOCS) {
       throw new Error('พิมพ์เป็นชุดได้ไม่เกิน ' + MAX_DOCS + ' ใบ');
     }
-    if (!skipValidation) {
+    {
       var snapshot = job.templateSnapshot;
-      if (job.schemaVersion !== 2 || !snapshot) {
+      if (job.schemaVersion !== 3 || !snapshot) {
         throw new Error('งานคิวรุ่นเก่าไม่มี template snapshot — ส่งงานใหม่จากหน้าพิมพ์เป็นชุด');
       }
       if (typeof snapshot.xml !== 'string' || !snapshot.xml.trim() || snapshot.xml.length > 1000000 ||
@@ -104,6 +109,10 @@ define([
         throw new Error('Invalid batch job metadata');
       }
     }
+    if (String(job.jobId) !== durable.id || String(job.folder) !== String(durable.folder) ||
+      !job.requester || String(job.requester.id) !== String(durable.requester) || String(job.requester.role) !== String(durable.role) ||
+      !Array.isArray(job.ids) || job.ids.length !== Number(durable.requested)) throw new Error('Batch snapshot identity mismatch');
+    job.durable = durable;
     job.jobFileId = fileId;
     return job;
   }
@@ -132,6 +141,7 @@ define([
     }
 
     assertXmlBudget(utf8Bytes(contents));
+    jobs.assertFolder(job.durable);
     var partId = file.create({
       name: partName(entry.jobId, entry.seq),
       fileType: file.Type.PLAINTEXT,
@@ -147,7 +157,7 @@ define([
         value: JSON.stringify({ partId: partId, recid: entry.recid, tranId: out.tranId || entry.recid })
       });
     } catch (e) {
-      cleanUp([{ partId: partId }], {});
+      cleanUp([{ partId: partId }], job, false);
       throw e;
     }
   }
@@ -172,7 +182,18 @@ define([
     var failures = collectErrors(summary);
     var result = { pdfId: '', pdfUrl: '', printed: 0, failed: 0 };
     var fatal;
+    var committed = false;
+    var terminalReplay = false;
     try {
+      // Resolve authority independently: a corrupt/missing snapshot must still
+      // leave a durable FAILED state, without trusting snapshot requester fields.
+      var durable = jobs.load(runtime.getCurrentScript().getParameter({ name: JOB_PARAM }));
+      if (['COMPLETE', 'PARTIAL', 'FAILED'].indexOf(durable.status) >= 0) {
+        terminalReplay = true;
+        log.audit({ title: 'PLD batch terminal replay ignored', details: { jobId: durable.id, status: durable.status } });
+        return;
+      }
+      job = { durable: durable, jobId: durable.id, ids: [], requester: { id: durable.requester } };
       var outputError;
       summary.output.iterator().each(function (key, value) {
         try {
@@ -186,31 +207,54 @@ define([
         }
         return true;
       });
-      job = loadJob(true);
+      job = loadJob();
       if (outputError) throw outputError;
       parts.sort(function (a, b) { return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0); });
       if (summary.inputSummary && summary.inputSummary.error) {
         throw new Error('Input: ' + summary.inputSummary.error);
       }
       if (parts.length > MAX_DOCS) throw new Error('Batch exceeds ' + MAX_DOCS + ' documents');
-      if (parts.length > 0) result = mergeParts(job, parts, failures.length);
+      var seen = {};
+      parts.forEach(function (part) {
+        var seq = Number(part.key);
+        if (!/^\d{6}$/.test(part.key) || seq >= job.ids.length || seen[part.key] || String(part.recid) !== String(job.ids[seq])) throw new Error('Invalid batch output identity');
+        seen[part.key] = true;
+      });
+      job.ids.forEach(function (recid, seq) {
+        if (!seen[sortKey(seq)] && !failures.some(function (f) { return Number(f.key) === seq; })) {
+          failures.push({ key: sortKey(seq), message: 'ไม่มีผลลัพธ์สำหรับเอกสาร ' + recid + ' — ส่งเอกสารนี้ใหม่' });
+        }
+      });
+      if (parts.length > 0) result = mergeParts(job, parts, job.ids.length - parts.length);
+      result.failed = job.ids.length - result.printed;
+      jobs.update(job.jobId, { status: result.printed ? (result.failed ? 'PARTIAL' : 'COMPLETE') : 'FAILED',
+        result: result.pdfId, printed: result.printed, failed: result.failed });
+      committed = true;
     } catch (e) {
       fatal = e;
       failures.push({ key: 'batch', message: e.message });
       log.error({ title: 'PLD batch job failed', details: { message: e.message } });
     } finally {
-      if (!job) job = { jobFileId: runtime.getCurrentScript().getParameter({ name: JOB_PARAM }), ids: [] };
-      result.failed = fatal ? (Array.isArray(job.ids) ? job.ids.length : 0) : failures.length;
-      cleanUp(parts, job);
-      notify(job, result, failures);
-      log.audit({
-        title: 'PLD batch job finished',
-        details: {
-          jobId: job.jobId, rectype: job.rectype, requested: Array.isArray(job.ids) ? job.ids.length : 0,
-          printed: result.printed, failed: result.failed, pdfId: result.pdfId,
-          seconds: summary.seconds, usage: summary.usage
+      if (!terminalReplay) {
+        if (!job) job = { ids: [] };
+        result.failed = fatal ? (job.durable ? Number(job.durable.requested) : 0) : result.failed;
+        if (fatal) { result.printed = 0; result.pdfUrl = ''; }
+        if (fatal && job.durable) {
+          try { jobs.update(job.jobId, { status: 'FAILED', printed: 0, failed: Number(job.durable.requested) }); }
+          catch (persistError) { log.error({ title: 'PLD durable failure update failed', details: persistError.message }); }
         }
-      });
+        // Preserve snapshot/parts on commit failure for operator recovery.
+        if (committed) cleanUp(parts, job, true);
+        if (committed || (fatal && job.durable)) notify(job, result, failures);
+        log.audit({
+          title: 'PLD batch job finished',
+          details: {
+            jobId: job.jobId, rectype: job.rectype, requested: Array.isArray(job.ids) ? job.ids.length : 0,
+            printed: result.printed, failed: result.failed, pdfId: result.pdfId,
+            seconds: summary.seconds, usage: summary.usage
+          }
+        });
+      }
     }
     if (fatal) throw fatal;
   }
@@ -232,7 +276,8 @@ define([
     var docs = [];
     var bytes = 0;
     parts.forEach(function (p) {
-      var part = file.load({ id: p.partId });
+      var part = jobs.loadFile(job.durable, p.partId);
+      if (part.name !== partName(job.jobId, Number(p.key))) throw new Error('Invalid batch part file');
       if (typeof part.size === 'number') assertXmlBudget(bytes + part.size);
       var contents = part.getContents();
       bytes += utf8Bytes(contents);
@@ -244,16 +289,12 @@ define([
     pdfFile.name = 'batch_' + job.rectype + '_' + parts.length + '_' + job.jobId + '.pdf';
     pdfFile.folder = job.folder;
     pdfFile.isOnline = false;
+    jobs.assertFolder(job.durable);
     var pdfId = pdfFile.save();
+    jobs.loadFile(job.durable, pdfId);
     var pdfUrl = '';
-    try {
-      var savedUrl = file.load({ id: pdfId }).url;
-      if (!savedUrl) throw new Error('Saved PDF has no download URL');
-      pdfUrl = absoluteUrl(savedUrl);
-    } catch (e) {
-      // The PDF is already durable: preserve its ID for recovery, never report
-      // a successful save as zero printed just because link lookup failed.
-      log.error({ title: 'PLD batch PDF link unavailable', details: { pdfId: pdfId, message: e.message } });
+    try { pdfUrl = absoluteUrl(jobs.route(job.jobId)); } catch (linkError) {
+      log.error({ title: 'PLD batch status link unavailable', details: { jobId: job.jobId, message: linkError.message } });
     }
 
     return {
@@ -284,13 +325,13 @@ define([
   }
 
   /** ไฟล์ชั่วคราวต้องไม่ค้างใน File Cabinet ของลูกค้า */
-  function cleanUp(parts, job) {
+  function cleanUp(parts, job, removeSnapshot) {
     parts.forEach(function (p) {
-      try { file.delete({ id: p.partId }); } catch (e) {
+      try { jobs.loadFile(job.durable, p.partId); file.delete({ id: p.partId }); } catch (e) {
         log.error({ title: 'PLD batch cleanup', details: { partId: p.partId, message: e.message } });
       }
     });
-    try { if (job.jobFileId) file.delete({ id: job.jobFileId }); } catch (e) {
+    try { if (removeSnapshot && job.jobFileId) { jobs.loadFile(job.durable, job.jobFileId); file.delete({ id: job.jobFileId }); } } catch (e) {
       log.error({ title: 'PLD batch cleanup (job spec)', details: { id: job.jobFileId, message: e.message } });
     }
   }
@@ -315,7 +356,7 @@ define([
       return;
     }
 
-    var requested = Array.isArray(job.ids) ? job.ids.length : 0;
+    var requested = job.durable ? Number(job.durable.requested) : (Array.isArray(job.ids) ? job.ids.length : 0);
     var lines = [
       'พิมพ์เอกสารเป็นชุดเสร็จแล้ว',
       '',
@@ -326,8 +367,8 @@ define([
     ];
     if (result.pdfUrl) {
       lines.push('', 'ไฟล์รวม: ' + result.pdfUrl);
-    } else if (result.pdfId) {
-      lines.push('', 'สร้างไฟล์แล้ว แต่ดึงลิงก์ไม่สำเร็จ — เปิด File Cabinet ด้วย file ID: ' + result.pdfId);
+    } else if (result.pdfId && result.printed > 0) {
+      lines.push('', 'ดูสถานะงานและดาวน์โหลดจากหน้าพิมพ์เป็นชุด');
     }
     if (failures.length > 0) {
       lines.push('', 'ใบที่สร้างไม่สำเร็จ (ลำดับในชุด — สาเหตุ):');

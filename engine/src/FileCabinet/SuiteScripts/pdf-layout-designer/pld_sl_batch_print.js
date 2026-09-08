@@ -32,8 +32,8 @@ define([
   'N/record',
   'N/task',
   './pld_lib_render',
-  './pld_lib_invoice_data'
-], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData) {
+  './pld_lib_invoice_data', './pld_lib_batch_jobs'
+], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs) {
 
   /** หน่วย governance ที่กันไว้ให้ขั้นตอนรวมไฟล์ + ส่ง response ตอนท้าย */
   var RESERVE_UNITS = 100;
@@ -67,6 +67,8 @@ define([
       if (request.method === 'POST' && request.parameters.action === 'queue') {
         return queueBatch(context, tel);
       }
+      if (request.parameters.action === 'download') return context.response.writeFile({ file: jobs.download(request.parameters.job), isInline: false });
+      if (request.parameters.action === 'status') return writeJobStatus(context);
       if (request.parameters.action === 'files') {
         return writeFilesPage(context, tel);
       }
@@ -201,17 +203,11 @@ define([
   /** เพดานต่อหนึ่ง job — ใหญ่กว่านี้ให้แบ่งส่ง ไม่ใช่ปล่อยให้ไฟล์รวมใหญ่จนเปิดไม่ไหว */
   var MAX_QUEUE_DOCS = 500;
 
-  /** โฟลเดอร์ปลายทางของไฟล์รวม + ไฟล์ชั่วคราวของ job */
-  var OUTPUT_FOLDER_NAME = 'pld-batch';
-
-  /** ไฟล์ stamp ที่ deploy.sh เขียนไว้ทุกครั้ง — ใช้หาโฟลเดอร์ของ engine บน account */
-  var VERSION_FILE_PATH = '/SuiteScripts/pdf-layout-designer/pld_version.txt';
-
   /**
    * ส่งชุดใหญ่ให้ Map/Reduce ทำแทน
    *
    * Suitelet มี 1,000 units ต่อครั้ง (ราว 6 ใบตามที่วัดได้จริงบน SB2) ส่วน map
-   * ได้ 1,000 units **ต่อหนึ่งเอกสาร** ชุดใหญ่จึงไม่ชนโควตาเลย · หน้าจอไม่รอผล
+   * ได้ 1,000 units **ต่อหนึ่งเอกสาร** ต้องตรวจขีดจำกัดเอกสารและขั้นตอนรวมไฟล์ด้วย · หน้าจอไม่รอผล
    * แต่บอกเลข task ไว้ตามงานได้ แล้ว engine อีเมลลิงก์ไฟล์ให้เมื่อเสร็จ
    *
    * รายการเอกสารไปทาง **ไฟล์ job spec** ไม่ใช่ script parameter — ชุด 300 ใบยาว
@@ -248,17 +244,18 @@ define([
 
     tel.stage = 'queue';
     var user = runtime.getCurrentUser();
-    var jobId = tel.errorId.replace(/^PLD-/, '');
-    var folder = outputFolderId();
+    var durable = jobs.create(ids.length);
+    var jobId = durable.id;
+    var folder = durable.folder;
     var jobContents = JSON.stringify({
-        schemaVersion: 2,
+        schemaVersion: 3,
         templateSnapshot: snapshot,
         jobId: jobId,
         rectype: recType,
         tplid: tplId,
         ids: ids,
         folder: folder,
-        requester: { id: user.id, name: user.name, email: user.email }
+        requester: { id: user.id, role: user.role }
       });
     // JSON escaping can expand XML; measure the persisted UTF-8 job, not just XML.
     if (utf8Bytes(jobContents) > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
@@ -271,23 +268,27 @@ define([
       isOnline: false
     }).save();
 
+    jobs.loadFile(durable, jobFileId);
+    jobs.update(jobId, { snapshot: jobFileId, status: 'QUEUED' });
     var taskId;
     try {
       taskId = task.create({
         taskType: task.TaskType.MAP_REDUCE,
         scriptId: 'customscript_pld_batch_mr',
         deploymentId: 'customdeploy_pld_batch_mr',
-        params: { custscript_pld_mr_job: jobFileId }
+        params: { custscript_pld_mr_job: jobId }
       }).submit();
     } catch (e) {
       try { file.delete({ id: jobFileId }); } catch (cleanupError) {
         log.error({ title: 'PLD queue job cleanup failed', details: { jobFileId: jobFileId, message: cleanupError.message } });
       }
+      jobs.update(jobId, { status: 'FAILED', failed: ids.length });
       throw e;
     }
+    jobs.update(jobId, { task: taskId });
 
     logBatchOk(tel, { queued: ids.length, taskId: taskId, jobFileId: jobFileId });
-    writeQueuedPage(context, tel, recType, ids.length, taskId);
+    writeQueuedPage(context, tel, recType, ids.length, jobId);
   }
 
   function utf8Bytes(text) {
@@ -303,92 +304,37 @@ define([
     return bytes;
   }
 
-  /**
-   * โฟลเดอร์ `pld-batch` ใต้โฟลเดอร์ของ engine — หาให้เจอจากไฟล์ stamp ที่ deploy
-   * เขียนไว้เสมอ จึงไม่ต้องตั้งค่า folder id ต่อ account · ไม่มี stamp = ยังไม่ได้
-   * deploy ครบ ต้องดังให้เห็น ไม่ใช่ไปโยนไฟล์ไว้ที่ root เงียบ ๆ (R4)
-   */
-  function outputFolderId() {
-    var parent;
-    try {
-      parent = file.load({ id: VERSION_FILE_PATH }).folder;
-    } catch (e) {
-      throw new Error('หาโฟลเดอร์ของ engine ไม่เจอ (' + VERSION_FILE_PATH + ') — ' +
-        'deploy engine ให้ครบก่อนใช้การส่งเข้าคิว');
-    }
-
-    var found = '';
-    search.create({
-      type: 'folder',
-      filters: [['name', 'is', OUTPUT_FOLDER_NAME], 'AND', ['parent', 'anyof', parent]],
-      columns: ['internalid']
-    }).run().each(function (row) { found = row.id; return false; });
-    if (found) return found;
-
-    var rec = record.create({ type: 'folder' });
-    rec.setValue({ fieldId: 'name', value: OUTPUT_FOLDER_NAME });
-    rec.setValue({ fieldId: 'parent', value: parent });
-    return rec.save();
+  function jobSummary(job) {
+    var text = '<p>Job ' + esc(job.id) + ' · ' + esc(job.status) + '</p>' +
+      '<p>เลือก ' + esc(job.requested) + ' ใบ · สำเร็จ ' + esc(job.printed) + ' ใบ · ล้มเหลว ' + esc(job.failed) + ' ใบ</p>';
+    if (job.status === 'PARTIAL') text += '<p class="warn">ไฟล์นี้ไม่ครบทุกใบ กรุณาตรวจสอบรายการที่ล้มเหลวก่อนใช้งาน</p>';
+    if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.result) text += '<a href="' + esc(jobs.route(job.id, 'download')) + '">ดาวน์โหลด PDF</a>';
+    return text;
   }
-
-  /**
-   * ไฟล์ชุดที่สร้างไว้แล้ว — ผู้ใช้ที่ปิดอีเมลทิ้งหรือลบเมลไปแล้วยังหาไฟล์เจอ
-   * และเป็นวิธีตรวจว่างานที่ส่งเข้าคิวไปได้ผลจริงโดยไม่ต้องขุด File Cabinet
-   */
+  function writeJobStatus(context) {
+    var job = jobs.load(context.request.parameters.job);
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('สถานะงานพิมพ์', '<h1>สถานะงานพิมพ์</h1>' + jobSummary(job)));
+  }
   function writeFilesPage(context, tel) {
     tel.stage = 'files';
-    var folder = outputFolderId();
-    var rows = [];
-    search.create({
-      type: 'file',
-      filters: [['folder', 'anyof', folder]],
-      columns: [
-        search.createColumn({ name: 'name' }),
-        search.createColumn({ name: 'created', sort: search.Sort.DESC }),
-        search.createColumn({ name: 'documentsize' }),
-        search.createColumn({ name: 'url' })
-      ]
-    }).run().getRange({ start: 0, end: 40 }).forEach(function (r) {
-      rows.push({
-        name: r.getValue('name'),
-        created: r.getValue('created'),
-        kb: r.getValue('documentsize'),
-        url: r.getValue('url')
-      });
-    });
-
-    var body = rows.length === 0
-      ? '<p class="warn">ยังไม่มีไฟล์ในโฟลเดอร์ <code>' + esc(OUTPUT_FOLDER_NAME) + '</code></p>'
-      : '<table class="docs"><thead><tr><th>ไฟล์</th><th>สร้างเมื่อ</th><th class="num">ขนาด (KB)</th></tr></thead><tbody>' +
-        rows.map(function (f) {
-          return '<tr><td><a href="' + esc(f.url) + '" target="_blank">' + esc(f.name) + '</a></td>' +
-            '<td>' + esc(f.created) + '</td><td class="num">' + esc(f.kb) + '</td></tr>';
-        }).join('') + '</tbody></table>';
-
+    var rows = jobs.list();
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
-    context.response.write(pageShell('ไฟล์ชุดที่สร้างไว้', [
-      '<h1>ไฟล์ชุดที่สร้างไว้</h1>',
-      '<p class="sub">ไฟล์รวมจากการส่งเข้าคิว เก็บไว้ใน File Cabinet โฟลเดอร์ <code>' +
-      esc(OUTPUT_FOLDER_NAME) + '</code> — ไฟล์ชั่วคราวระหว่างทางถูกลบทิ้งเมื่องานจบแล้ว</p>',
-      body,
-      '<p><button class="primary" onclick="history.back()">กลับ</button></p>'
-    ].join('\n')));
+    context.response.write(pageShell('งานพิมพ์ของฉัน', '<h1>งานพิมพ์ของฉัน</h1>' +
+      (rows.length ? rows.map(function (job) {
+        return '<section><a href="' + esc(jobs.route(job.id)) + '">ดูสถานะงาน</a>' + jobSummary(job) + '</section>';
+      }).join('') : '<p>ยังไม่มีงานพิมพ์ในบทบาทนี้</p>')));
   }
 
-  function writeQueuedPage(context, tel, recType, count, taskId) {
+  function writeQueuedPage(context, tel, recType, count, jobId) {
     var html = pageShell('ส่งเข้าคิวแล้ว', [
       '<h1>ส่งเข้าคิวแล้ว</h1>',
-      '<p class="sub">ชุดนี้มี ' + count + ' ใบ ซึ่งมากกว่าที่พิมพ์สดได้ในครั้งเดียว ' +
-      'ระบบจึงทยอยสร้างให้เบื้องหลัง</p>',
-      '<p class="ref">เมื่อเสร็จ ระบบจะ<b>อีเมลลิงก์ไฟล์รวม</b>ไปที่อีเมลของคุณ ' +
-      'และเก็บไฟล์ไว้ใน File Cabinet โฟลเดอร์ <code>' + esc(OUTPUT_FOLDER_NAME) + '</code><br />' +
-      'หมายเลขงาน <code>' + esc(taskId) + '</code> · รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p>',
-      '<p class="hint">ติดตามสถานะได้ที่ Customization → Scripting → Map/Reduce Script Status ' +
-      '(ค้นด้วยหมายเลขงานด้านบน) · ใบที่สร้างไม่สำเร็จจะถูกระบุไว้ในอีเมลเป็นรายใบ</p>',
-      '<p><a href="?action=files">ดูไฟล์ชุดที่สร้างไว้แล้ว</a></p>',
+      '<p>เลือกไว้ ' + count + ' ใบ ระบบกำลังสร้างเอกสารเบื้องหลัง</p>',
+      '<p>หมายเลขงาน <code>' + esc(jobId) + '</code> · รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p>',
+      '<p>เมื่อเสร็จ ระบบจะส่งอีเมลแจ้งผล คุณสามารถปิดหน้านี้และกลับมาติดตามงานด้วยผู้ใช้และบทบาทเดิม</p>',
+      '<p><a href="' + esc(jobs.route(jobId)) + '">ติดตามสถานะงานนี้</a></p>',
       '<p><button class="primary" onclick="history.back()">กลับไปเลือกชุดถัดไป</button></p>'
     ].join('\n'));
-
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
     context.response.write(html);
   }

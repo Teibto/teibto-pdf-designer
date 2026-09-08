@@ -1,4 +1,4 @@
-// eslint.config.js — flat config (ESLint 9) สำหรับ designer/ (TypeScript + Lit) · #17
+// eslint.config.js — flat config (ESLint 10) สำหรับ designer/ (TypeScript + Lit) · #17
 // เป้าหมาย: จับ bug จริง (unused, unsafe, fallthrough) เป็น error; noise เชิงสไตล์เป็น warn
 // รัน: npm run lint · CI เรียกผ่าน npm run lint --if-present ใน quality-gate
 // @author Wichit Wongta @since 2026-07-17

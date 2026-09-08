@@ -25,14 +25,14 @@ const TPL_XML = '<pdf><body>ok</body></pdf>';
 const TWO_COPIES = JSON.stringify({ copies: [{ th: 'ต้นฉบับ', en: 'Original' }, { th: 'สำเนา', en: 'Copy' }] });
 
 const JOB = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   templateSnapshot: { xml: TPL_XML, copies: JSON.parse(TWO_COPIES).copies },
-  jobId: 'j1',
+  jobId: '501',
   rectype: 'itemfulfillment',
   tplid: '7',
   ids: ['11', '12', '13'],
   folder: '77',
-  requester: { id: '9', name: 'QA Tester', email: 'qa@example.test' },
+  requester: { id: '9', role: '3', name: 'QA Tester', email: 'qa@example.test' },
 };
 
 /**
@@ -44,14 +44,14 @@ const JOB = {
 function buildMr({ job = JOB, failIds = [], emailFails = false } = {}) {
   const log = logStub();
   const files = fileSystemStub({
-    files: job ? { '900': { getContents: () => JSON.stringify(job) } } : {},
+    files: job ? { '900': { folder: '77', isOnline: false, getContents: () => JSON.stringify(job) } } : {},
   });
   const render = renderStub({ fileSystem: files });
   const emails = [];
   const stubs = {
     'N/file': files.module,
     'N/render': render.module,
-    'N/runtime': runtimeStub({ script: { getParameter: () => (job ? '900' : '') } }),
+    'N/runtime': runtimeStub({ script: { getParameter: () => (job ? '501' : '') } }),
     'N/log': log.module,
     'N/email': {
       send(opts) {
@@ -85,7 +85,8 @@ function buildMr({ job = JOB, failIds = [], emailFails = false } = {}) {
       docTitles: {},
     },
   };
-  return { mr: loadAmd('./pld_mr_batch_print', stubs), log, render, files, emails };
+  const rows = require('./helpers/batch-store').batchStore(stubs, files, job);
+  return { stubs, rows, mr: loadAmd('./pld_mr_batch_print', stubs), log, render, files, emails };
 }
 
 /** map context ที่จดสิ่งที่ถูก write ออกไป */
@@ -131,13 +132,13 @@ test('ไม่มี job parameter = ล้มตั้งแต่ต้น �
 test('map เขียน XML ของใบตัวเองเป็นไฟล์ชั่วคราว แล้วส่งต่อแค่ file id', () => {
   const { mr, files } = buildMr();
   const { written, context } = mapContext({
-    seq: 2, recid: '13', jobId: 'j1', rectype: 'itemfulfillment', tplid: '7', folder: '77',
+    seq: 2, recid: '13', jobId: '501', rectype: 'itemfulfillment', tplid: '7', folder: '77',
   });
 
   mr.map(context);
 
   const part = files.created[0];
-  assert.match(part.name, /^pld_part_j1_000002\.txt$/);
+  assert.match(part.name, /^pld_part_501_000002\.txt$/);
   assert.equal(part.folder, '77');
   assert.equal(part.encoding, 'UTF-8', 'ข้อความไทยใน XML ต้องไม่เพี้ยนตอนอ่านกลับ');
   assert.equal((part.contents.match(/<pdf>/g) || []).length, 2, 'สองสำเนาอยู่ในไฟล์เดียวของใบนี้');
@@ -150,7 +151,7 @@ test('map เขียน XML ของใบตัวเองเป็นไ�
 test('ใบที่ render ไม่ได้ ต้องโยน error ให้ Map/Reduce จดเป็นความล้มเหลวของ key นั้น', () => {
   const { mr } = buildMr({ failIds: ['12'] });
   const { context } = mapContext({
-    seq: 1, recid: '12', jobId: 'j1', rectype: 'itemfulfillment', tplid: '7', folder: '77',
+    seq: 1, recid: '12', jobId: '501', rectype: 'itemfulfillment', tplid: '7', folder: '77',
   });
 
   assert.throws(() => mr.map(context), /does not exist: 12/);
@@ -160,7 +161,7 @@ test('ใบที่ render ไม่ได้ ต้องโยน error ใ�
 
 function partValue(files, seq, recid, contents) {
   const id = files.module.create({
-    name: 'pld_part_j1_' + seq, fileType: 'PLAINTEXT', contents, folder: '77',
+    name: 'pld_part_501_' + seq + '.txt', isOnline: false, fileType: 'PLAINTEXT', contents, folder: '77',
   }).save();
   return JSON.stringify({ partId: id, recid: recid, tranId: 'IF-' + recid });
 }
@@ -186,7 +187,7 @@ test('รวมเป็นไฟล์เดียวตามลำดับ�
 
   assert.equal(emails.length, 1);
   assert.match(emails[0].body, /สร้างสำเร็จ: 3 ใบ/);
-  assert.match(emails[0].body, /https:\/\/acct\.app\.netsuite\.com\/core\/media/, 'ลิงก์ไฟล์กดได้จากอีเมล');
+  assert.match(emails[0].body, /https:\/\/acct\.app\.netsuite\.com\/app\/site\/hosting\/scriptlet/, 'ลิงก์ไฟล์กดได้จากอีเมล');
 });
 
 test('ใบที่พังถูกรายงานรายใบในอีเมล พร้อมสาเหตุ', () => {
@@ -200,7 +201,7 @@ test('ใบที่พังถูกรายงานรายใบใน�
   mr.summarize(summary);
 
   assert.match(emails[0].body, /สร้างสำเร็จ: 1 ใบ/);
-  assert.match(emails[0].body, /ล้มเหลว: 1 ใบ/);
+  assert.match(emails[0].body, /ล้มเหลว: 2 ใบ/);
   assert.match(emails[0].body, /This record does not exist: 12/);
   assert.match(emails[0].subject, /1\/3 ใบ/, 'หัวเรื่องบอกสัดส่วนที่ได้จริง');
 });
@@ -225,40 +226,41 @@ test('oversize job fails before any map inputs are returned', () => {
   assert.throws(() => mr.getInputData(), /500/);
 });
 
-test('merge failure cleans parts and spec, notifies zero printed, and remains a failed job', () => {
+test('merge failure retains parts and spec for recovery and durably marks failure', () => {
   const { mr, render, files, emails } = buildMr();
   const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
   render.module.xmlToPdf = () => { throw new Error('BFO merge failed'); };
   assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a]] })), /BFO merge failed/);
-  assert.equal(files.deleted.length, 2);
+  assert.equal(files.deleted.length, 0);
   assert.match(emails[0].body, /สร้างสำเร็จ: 0 ใบ/);
+  assert.doesNotMatch(emails[0].body, /ดาวน์โหลด|ไฟล์รวม:/);
   assert.match(emails[0].body, /ล้มเหลว: 3 ใบ/);
   assert.match(emails[0].body, /BFO merge failed/);
 });
 
-test('input-stage failure is reported and cleaned instead of success zero', () => {
+test('input-stage failure is reported with snapshot retained', () => {
   const { mr, files, emails } = buildMr();
   const summary = summaryStub();
   summary.inputSummary = { error: 'input failure' };
   assert.throws(() => mr.summarize(summary), /input failure/);
-  assert.deepEqual(files.deleted, ['900']);
+  assert.deepEqual(files.deleted, []);
   assert.match(emails[0].body, /input failure/);
   assert.match(emails[0].subject, /0\/3/);
 });
 
-test('aggregate UTF-8 limit accounts for Thai and aborts merge with cleanup', () => {
+test('aggregate UTF-8 limit accounts for Thai and aborts merge with inputs retained', () => {
   const { mr, render, files, emails } = buildMr();
   const a = partValue(files, '000000', '11', '<pdf>' + 'ก'.repeat(1500000) + '</pdf>');
   const b = partValue(files, '000001', '12', '<pdf>' + 'ก'.repeat(1500000) + '</pdf>');
   assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a], ['000001', b]] })), /8 MiB/);
   assert.equal(render.calls.xmlToPdf.length, 0);
-  assert.equal(files.deleted.length, 3);
+  assert.equal(files.deleted.length, 0);
   assert.match(emails[0].body, /8 MiB/);
 });
 
 test('failed map output write deletes its already saved part', () => {
   const { mr, files } = buildMr();
-  const { context } = mapContext({ seq: 0, recid: '11', jobId: 'j1', rectype: 'itemfulfillment', tplid: '7', folder: '77' });
+  const { context } = mapContext({ seq: 0, recid: '11', jobId: '501', rectype: 'itemfulfillment', tplid: '7', folder: '77' });
   context.write = () => { throw new Error('output failure'); };
   assert.throws(() => mr.map(context), /output failure/);
   assert.equal(files.deleted.length, 1);
@@ -270,18 +272,18 @@ test('known oversized part is rejected before reading contents into memory', () 
   const { mr, files } = buildMr();
   const originalLoad = files.module.load;
   let contentReads = 0;
-  files.module.load = (options) => options.id === 'large' ? {
-    size: 8 * 1024 * 1024 + 1,
+  files.module.load = (options) => options.id === '9999' ? {
+    name: 'pld_part_501_000000.txt', folder: '77', isOnline: false, size: 8 * 1024 * 1024 + 1,
     getContents() { contentReads++; throw new Error('must not read'); },
   } : originalLoad(options);
-  const output = [['000000', JSON.stringify({ partId: 'large', recid: '11' })]];
+  const output = [['000000', JSON.stringify({ partId: '9999', recid: '11' })]];
   assert.throws(() => mr.summarize(summaryStub({ output })), /8 MiB/);
   assert.equal(contentReads, 0);
-  assert.ok(files.deleted.includes('large'));
+  assert.equal(files.deleted.length, 0);
 });
 
 
-test('unreadable job spec still cleans all known output parts', () => {
+test('unreadable job spec does not authorize cleanup of output references', () => {
   for (const contents of [null, '{broken']) {
     const { mr, files } = buildMr();
     const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
@@ -293,42 +295,35 @@ test('unreadable job spec still cleans all known output parts', () => {
       return { getContents: () => contents };
     };
     assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a], ['000001', b]] })));
-    assert.equal(files.deleted.length, 3);
-    assert.ok(files.deleted.includes(JSON.parse(a).partId));
-    assert.ok(files.deleted.includes(JSON.parse(b).partId));
+    assert.equal(files.deleted.length, 0);
+    assert.ok(!files.deleted.includes(JSON.parse(a).partId));
+    assert.ok(!files.deleted.includes(JSON.parse(b).partId));
   }
 });
 
-test('malformed output does not prevent later valid parts from being cleaned', () => {
+test('malformed output preserves valid parts for recovery', () => {
   const { mr, files, emails, render } = buildMr();
   const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
   const b = partValue(files, '000002', '13', '<pdf>B</pdf>');
   const output = [['000000', a], ['000001', '{broken'], ['000002', b]];
   assert.throws(() => mr.summarize(summaryStub({ output })), /Invalid batch output/);
-  assert.equal(files.deleted.length, 3);
+  assert.equal(files.deleted.length, 0);
   assert.equal(render.calls.xmlToPdf.length, 0);
   assert.match(emails[0].body, /Invalid batch output/);
 });
 
-test('saved PDF survives failed URL lookup with file ID reported for recovery', () => {
-  const { mr, files, emails, log } = buildMr();
+test('PDF verification failure preserves inputs and marks durable job failed', () => {
+  const { mr, files, rows } = buildMr();
   const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
-  const partId = JSON.parse(a).partId;
-  const originalLoad = files.module.load;
-  files.module.load = (options) => {
-    if (options.id !== '900' && options.id !== partId) throw new Error('URL lookup failed');
-    return originalLoad(options);
+  const original = files.module.load;
+  files.module.load = (opts) => {
+    if (opts.id !== '900' && opts.id !== JSON.parse(a).partId) throw new Error('Readback failed');
+    return original(opts);
   };
-  mr.summarize(summaryStub({ output: [['000000', a]] }));
-  const audit = log.entries.filter((e) => e.level === 'audit').pop();
-  assert.equal(audit.details.printed, 1);
-  assert.ok(audit.details.pdfId);
-  assert.ok(!files.deleted.includes(audit.details.pdfId));
-  assert.match(emails[0].body, /สร้างสำเร็จ: 1 ใบ/);
-  assert.ok(emails[0].body.includes('file ID: ' + audit.details.pdfId));
-  assert.ok(log.entries.some((e) => e.title === 'PLD batch PDF link unavailable'));
+  assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a]] })), /Readback failed/);
+  assert.equal(files.deleted.length, 0);
+  assert.equal(rows.get('501').custrecord_pld_job_status, 'FAILED');
 });
-
 
 test('legacy queued jobs fail visibly without resolving a mutable template', () => {
   const { schemaVersion, templateSnapshot, ...legacy } = JOB;
@@ -338,7 +333,7 @@ test('legacy queued jobs fail visibly without resolving a mutable template', () 
   summary.inputSummary = { error: 'งานคิวรุ่นเก่าไม่มี template snapshot — ส่งงานใหม่' };
   assert.throws(() => mr.summarize(summary), /template snapshot/);
   assert.match(emails[0].body, /ส่งงานใหม่/);
-  assert.ok(files.deleted.includes('900'));
+  assert.ok(!files.deleted.includes('900'));
 });
 
 test('workers use frozen enqueue XML and copy labels even when template is unavailable', () => {
@@ -398,4 +393,85 @@ test('persisted excessive copies are rejected before scheduling or rendering', (
   assert.throws(() => mr.getInputData(), /20.*render execution limit/);
   assert.throws(() => mr.map(mapContext({ seq: 0, recid: '11' }).context), /20.*render execution limit/);
   assert.equal(render.calls.created, 0);
+});
+
+
+test('durable output is committed before any cleanup and notifications use authorized route', () => {
+  const { mr, files, rows, emails } = buildMr();
+  const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
+  const remove = files.module.delete;
+  files.module.delete = (opts) => {
+    assert.equal(rows.get('501').custrecord_pld_job_status, 'PARTIAL');
+    assert.ok(rows.get('501').custrecord_pld_job_result);
+    assert.equal(rows.get('501').custrecord_pld_job_printed, 1);
+    remove(opts);
+  };
+  mr.summarize(summaryStub({ output: [['000000', a]] }));
+  assert.equal(files.deleted.length, 2);
+  assert.match(emails[0].body, /action=status&job=501/);
+  assert.doesNotMatch(emails[0].body, /media.nl|file ID:/);
+});
+
+test('durable output commit failure keeps all inputs and saved PDF for operator recovery', () => {
+  const { mr, files, rows, stubs, emails } = buildMr();
+  const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
+  const submit = stubs['N/record'].submitFields;
+  stubs['N/record'].submitFields = (opts) => {
+    if (opts.values.custrecord_pld_job_result) throw new Error('commit failure');
+    return submit(opts);
+  };
+  assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a]] })), /commit failure/);
+  assert.equal(files.deleted.length, 0);
+  assert.equal(rows.get('501').custrecord_pld_job_status, 'FAILED');
+  assert.match(emails[0].body, /สร้างสำเร็จ: 0 ใบ/);
+  assert.doesNotMatch(emails[0].body, /ดาวน์โหลด|ไฟล์รวม:/);
+});
+
+test('forged Map/Reduce actor fails before transaction render and file cleanup', () => {
+  const { mr, render, files, stubs } = buildMr();
+  stubs['N/runtime'].getCurrentUser = () => ({ id: 10, role: 3 });
+  assert.throws(() => mr.getInputData(), /unavailable/);
+  assert.throws(() => mr.map(mapContext({ seq: 0, recid: '11' }).context), /unavailable/);
+  assert.throws(() => mr.summarize(summaryStub()), /unavailable/);
+  assert.equal(render.calls.created, 0);
+  assert.equal(files.deleted.length, 0);
+});
+
+test('corrupt snapshot leaves durable failure and counts without trusting its requester', () => {
+  const { mr, files, rows, emails } = buildMr();
+  const original = files.module.load;
+  files.module.load = (opts) => opts.id === '900' ? { folder: '77', isOnline: false, getContents: () => '{broken' } : original(opts);
+  assert.throws(() => mr.summarize(summaryStub()));
+  assert.equal(rows.get('501').custrecord_pld_job_status, 'FAILED');
+  assert.equal(rows.get('501').custrecord_pld_job_failed, 3);
+  assert.equal(files.deleted.length, 0);
+  assert.equal(emails[0].recipients, '9');
+  assert.match(emails[0].body, /ล้มเหลว: 3 ใบ/);
+});
+
+test('folder privacy mutation during rendering prevents saving PDF', () => {
+  const { mr, files, rows, render } = buildMr();
+  const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
+  const combine = render.module.xmlToPdf; let saves = 0;
+  render.module.xmlToPdf = (opts) => {
+    const pdf = combine(opts);
+    rows.get('77').isprivate = false;
+    pdf.save = () => { saves++; throw new Error('must not save'); };
+    return pdf;
+  };
+  assert.throws(() => mr.summarize(summaryStub({ output: [['000000', a]] })), /privacy\/owner\/parent/);
+  assert.equal(saves, 0);
+  assert.equal(files.deleted.length, 0);
+});
+
+test('terminal summarize replay preserves committed result after snapshot cleanup', () => {
+  const { mr, files, rows, emails } = buildMr();
+  const a = partValue(files, '000000', '11', '<pdf>A</pdf>');
+  mr.summarize(summaryStub({ output: [['000000', a]] }));
+  const committed = { ...rows.get('501') };
+  const removes = files.deleted.length;
+  mr.summarize(summaryStub({ output: [['000000', a]] }));
+  assert.deepEqual(rows.get('501'), committed);
+  assert.equal(files.deleted.length, removes);
+  assert.equal(emails.length, 1);
 });

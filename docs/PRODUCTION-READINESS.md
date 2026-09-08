@@ -15,16 +15,16 @@ Local test doubles do not execute FreeMarker/BFO or establish NetSuite role perm
 | P1 | Download differs from current preview; stale responses after reopen | Implemented locally; download displayed blob and discard superseded responses. Three component regressions. Live save/reload/print parity still required. |
 | P1 | Wrong subsidiary config and unusable Thai fonts silently print | Implemented locally; require matching/global config and valid File Cabinet fonts for render, retain setup inspection. Live missing-font and subsidiary tests required. |
 | P1 | All-role Suitelets execute as Administrator | Candidate now explicitly clears role elevation in four deployments and disables anonymous Suitelet access. SDF/readback and restricted-user role matrix remain release blockers; no claim of runtime authorization based on XML tests. |
-| P1 | Shared batch folder exposes job JSON/XML and other users' output | Open release blocker. Persistent requester ownership, private staging, authorized download and retention cleanup required. Test two users and direct URLs. |
-| P1 | Batch input/merge errors skip cleanup and notification | Local injected failure tests pass, including task submission cleanup. Abrupt termination/orphan recovery and durable job tracking remain open. |
+| P1 | Shared batch folder exposes job JSON/XML and other users' output | Local candidate adds durable requester/role/owner identity, per-job private folder readback and job-authorized download. Native record/file permissions, direct URLs, weaker-role access and retention remain release blockers; local stubs cannot establish account privacy. |
+| P1 | Batch input/merge errors skip cleanup and notification | Durable job tracking and injected failure tests implemented, including corrupt snapshots and terminal commit failure. Failed jobs retain private recovery inputs; successful commits precede cleanup. Abrupt termination/orphan recovery and retention remain open. |
 | P2 | Repeated transaction reads per copy | Implemented request-local frozen snapshot; copy titles/labels remain independent. Measure real governance and latency before capacity claims. |
-| P2 | Queue reads mutable templates | Implemented server-derived XML/copy snapshot at enqueue, schema v2; workers reject legacy jobs with resubmission guidance. Bounds: 1,000,000 XML characters, 8 MiB UTF-8 job. Template edits cannot change queued output; protecting job files from edits remains tied to private staging permissions. |
+| P2 | Queue reads mutable templates | Implemented server-derived XML/copy snapshot at enqueue, now schema v3 with durable job identity; workers reject legacy jobs with resubmission guidance. Bounds: 1,000,000 XML characters, 8 MiB UTF-8 job. Template record edits cannot change queued output; native snapshot tampering remains tied to account permission hardening. |
 | P2 | Unbounded batch merge | Local 500-document / 8 MiB resolved UTF-8 XML guard, plus shared 20-copy limit before render work. These are safety bounds, not capacity evidence. Chunked output/job recovery design and live measurements remain required. |
 | P2 | Modal accessibility / keyboard-only workflows | Native named dialog implemented with background inertness, browser focus containment/restoration, topmost Escape, local cheatsheet toggle and inline save errors. Real Chromium regressions cover slotted/shadow inputs and narrow screen. Remaining dialog-specific errors/toasts and live Thai UX need QA. |
 | P2 | Save dialog metadata/draft consistency | Implemented omitted metadata preservation, explicit false default removal and atomic session-owned draft acknowledgement across saves. Corrected original review: server previously ignored false rather than unsetting on quick-save. Durable content/default-cleanup warning retains ID/version; conflicting defaults now block print. Cross-record default updates still require live permission/concurrency QA. |
-| P2 | Dependency security | Direct nanoid patched from 5.1.6 to 5.1.16; production lockfile audit now reports zero findings. Development/build tool advisories remain open; audit counts differ by installed versus lockfile scope, so use explicit scope in evidence. |
-| P2 | Build / deployment provenance | Removed obsolete jsPDF manual chunk that broke normal build. Open: CI production builds, artifact manifest/hash, dirty staged/untracked detection and safe --no-build reuse. Coordinate existing CI PR #198. |
-| P2 | Startup size and large-designer interaction | NetSuite bundle baseline approximately 1.235 MB / 335 KB gzip. Profile startup, large tables, drag/edit/undo and pagination before choosing an optimization. |
+| P2 | Dependency security | Full dependency audit now reports zero findings after Vite 6.4.3, Vitest 3.2.7, Storybook 9.1.20 and ESLint 10 migration. Lockfile/runtime upgrades verified with unit tests, builds and Chromium. Continue monitoring advisories. |
+| P2 | Build / deployment provenance | Local manifest seals complete designer inputs/environment hashes and assets; stale/tampered --no-build reuse fails before SuiteCloud. Stamp includes staged/untracked dirty state and scoped engine payload hash. CI now requires provenance tests and all three builds. This detects consistency, not artifact signing or live deployment parity; runner policy remains separate in PR #198. |
+| P2 | Startup size and large-designer interaction | Fixed sampled pagination cache missing arbitrary row/column changes; immutable store inputs use reference hits, mutable inputs use complete keys. Synthetic 100/1,000/10,000-row regressions pass. Current NetSuite JS is 1,320.04 kB / 354.65 kB gzip; real startup, drag/edit/undo and server capacity remain unmeasured. |
 
 ## Architecture decisions
 
@@ -55,14 +55,17 @@ Run from repository root unless a command starts with `cd designer`:
 
 ```sh
 node --test "engine/tests/**/*.test.js"
+node --test scripts/build-provenance.test.mjs
 bash scripts/validate-templates.sh
 bash scripts/secret-scan.sh
 cd designer
 npm ci
+npm audit --audit-level=high
 npm run lint
 npm test -- --run
 npm run build
 npm run build:netsuite
+npm run storybook:build
 npx playwright test --workers=2 --reporter=line
 ```
 
@@ -70,6 +73,28 @@ Windows restricted process environments may require approved child-process execu
 can use `node --test --test-isolation=none "engine/tests/**/*.test.js"`. On this workstation the
 `python3` Store alias is broken; the validator passed using a shell function forwarding `python3`
 to the installed `python`, without modifying the validator.
+
+Round-three local evidence: **175/175** engine tests, **631/631** designer unit tests,
+**87/87** Chromium tests and **6/6**
+build-provenance tests. Full dependency audit is zero (including development dependencies).
+Storybook still exports 12 stories from the six existing story files. Current local logs include
+`designer/.unit-final.log`, `.e2e-toolchain.log` and `.build-netsuite-final.log` (ignored).
+Round-two CI at `36b96be` passed; round-three changes require their own head-specific CI result.
+
+The synthetic row-mode pagination probe covers 100/1,000/10,000 Thai rows with complete,
+non-overlapping slices (4/40/400 pages) and 1,000 identical cache hits per fixture. One local Node
+run measured cold computation 0.664/0.203/0.625 ms and all 1,000 cache hits 0.465/0.271/0.287 ms.
+These small timings verify the local cache path only: there is no wall-clock pass threshold,
+browser rendering measurement, BFO glyph inspection or NetSuite throughput claim.
+
+Batch schema v3 replaces the MR file-ID parameter with a durable job record ID. Drain old tasks
+before upgrade and resubmit legacy requests. Job result/count persistence precedes temporary-file
+cleanup; failed merges retain private inputs for operator recovery. Automatic recovery, deployment
+pool scheduling, chunked output, retention and permission-revocation behavior remain open.
+Custom fields are editable through authorized native APIs, so private folders and Suitelet checks
+alone do not prove snapshot integrity against a caller with native write access or a later role
+change. That threat requires account permission tests and an explicit hardening decision before
+release. No local implementation in this document establishes production readiness.
 
 ## Connected acceptance and evidence
 

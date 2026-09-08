@@ -12,6 +12,7 @@ import {
 import type { AppState } from '../../src/state/app-state';
 import { createDefaultPage } from '../../src/models/page';
 import { createDefaultPagination } from '../../src/models/template';
+import { AppStore } from '../../src/state/store';
 
 // ─── Test Helpers ───
 
@@ -259,6 +260,57 @@ describe('Pagination Service', () => {
       clearPaginationCache();
       const result2 = computePagination(state);
       expect(result1).not.toBe(result2);
+    });
+
+    it('invalidates for an unsampled Thai row edit and a wrapping column width edit', () => {
+      const store = new AppStore();
+      store.dispatch((d) => {
+        const table = createTableElement('items');
+        table.columns[0].overflow = 'wrap';
+        table.columns[0].maxLines = 0;
+        d.elements = [table];
+        d.jsonData = { items: Array.from({ length: 10 }, () => ({ name: 'สินค้า' })) };
+        d.pagination.mode = 'height';
+        d.pagination.orphanWidowMinRows = 0;
+      });
+      const original = computePagination(store.state);
+      store.dispatch((d) => {
+        (d.jsonData!.items as { name: string }[])[2].name = 'น้ำดื่มเพื่อสุขภาพ '.repeat(150);
+      });
+      const edited = computePagination(store.state);
+      clearPaginationCache();
+      expect(edited).toEqual(computePagination(store.state));
+      expect(edited.totalPages).toBeGreaterThan(original.totalPages);
+
+      store.dispatch((d) => {
+        if (d.elements[0].type === 'table') d.elements[0].columns[0].width = 450;
+      });
+      const wider = computePagination(store.state);
+      clearPaginationCache();
+      expect(wider).toEqual(computePagination(store.state));
+      expect(wider.pagesData).not.toEqual(edited.pagesData);
+    });
+
+    it('reuses immutable input branches across UI-only edits', () => {
+      const store = new AppStore();
+      store.dispatch((d) => { d.jsonData = { items: [] }; });
+      const original = computePagination(store.state);
+      store.dispatch((d) => { d.zoom = 150; d.currentPage = 1; });
+      expect(computePagination(store.state)).toBe(original);
+    });
+
+    it('mutable callers detect changes beyond the first 50 characters', () => {
+      const table = createTableElement('items');
+      table.columns[0].overflow = 'wrap';
+      table.columns[0].maxLines = 0;
+      const items = Array.from({ length: 10 }, () => ({ name: 'สินค้า' }));
+      const state = createMockState({ elements: [table], jsonData: { items },
+        pagination: { ...createDefaultPagination(), mode: 'height', orphanWidowMinRows: 0 } });
+      computePagination(state);
+      items[2].name = 'ก'.repeat(3000);
+      const edited = computePagination(state);
+      clearPaginationCache();
+      expect(edited).toEqual(computePagination(state));
     });
   });
 

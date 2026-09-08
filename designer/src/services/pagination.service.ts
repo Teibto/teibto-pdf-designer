@@ -68,62 +68,21 @@ export interface PageElement {
 }
 
 // ═══════════════════════════════════════
-// CACHE  [PERF-1] Fast fingerprint hash
+// CACHE — complete immutable inputs, never sampled document content
 // ═══════════════════════════════════════
 
+type PaginationInputs = Pick<AppState, 'elements' | 'pagination' | 'page' | 'jsonData'>;
 let _cache: {
-  key: string;
+  inputs: PaginationInputs;
+  mutableKey: string | null;
   result: PaginationResult;
 } | null = null;
 
-function cacheKey(state: Readonly<AppState>): string {
-  const p = state.pagination;
-  const parts = [
-    state.elements.length,
-    state.elements.map((e) => `${e.id}:${e.role}:${e.h}:${e.binding || ''}`).join(','),
-    p.mode, p.rowsPerPage, p.baseRowHeight, p.lineHeightPx,
-    p.orphanWidowMinRows ?? 2, p.summaryBreak ?? 'auto',
-    (p.forceBreakBeforeRows ?? []).join(','),
-    p.keepTogetherField ?? '',
-    p.headerMode ?? 'all',
-    p.columnSpanField ?? '',
-    state.page.height,
-    state.jsonData ? fastJsonHash(state.jsonData) : '0',
-  ];
-  return parts.join('|');
-}
-
-/**
- * [PERF-1] Fast O(1) fingerprint for JSON data.
- * Instead of serialising every row*column we hash: array length + first + mid + last row.
- */
-function fastJsonHash(obj: Record<string, unknown>, prefix = ''): string {
-  const parts: string[] = [];
-  for (const key of Object.keys(obj).sort()) {
-    const fullKey = prefix ? `${prefix}.${key}` : key;
-    const val = obj[key];
-    if (Array.isArray(val)) {
-      const len = val.length;
-      const first = len > 0 ? rowFingerprint(val[0]) : '';
-      const last = len > 1 ? rowFingerprint(val[len - 1]) : '';
-      const mid = len > 2 ? rowFingerprint(val[Math.floor(len / 2)]) : '';
-      parts.push(`${fullKey}[${len}]:${first}|${mid}|${last}`);
-    } else if (val && typeof val === 'object') {
-      parts.push(fastJsonHash(val as Record<string, unknown>, fullKey));
-    } else {
-      parts.push(`${fullKey}=${String(val ?? '')}`);
-    }
-  }
-  return parts.join(';');
-}
-
-function rowFingerprint(item: unknown): string {
-  if (item && typeof item === 'object') {
-    return Object.values(item as Record<string, unknown>)
-      .map((v) => String(v ?? '').slice(0, 50))
-      .join(',');
-  }
-  return String(item ?? '').slice(0, 50);
+// Immer freezes the store's input branches. Reference equality detects every
+// edit while keeping UI-only selection/zoom cache hits O(1). Mutable callers
+// use a complete key: sampling rows or truncating text can return stale pages.
+function paginationInputs(state: Readonly<AppState>): PaginationInputs {
+  return { elements: state.elements, pagination: state.pagination, page: state.page, jsonData: state.jsonData };
 }
 
 // ═══════════════════════════════════════
@@ -131,15 +90,21 @@ function rowFingerprint(item: unknown): string {
 // ═══════════════════════════════════════
 
 export function computePagination(state: Readonly<AppState>): PaginationResult {
-  const key = cacheKey(state);
-  if (_cache && _cache.key === key) return _cache.result;
+  const inputs = paginationInputs(state);
+  const immutable = Object.values(inputs).every((value) => value === null || Object.isFrozen(value));
+  const mutableKey = immutable ? null : JSON.stringify(inputs);
+  if (_cache && (immutable
+    ? _cache.mutableKey === null && _cache.inputs.elements === inputs.elements &&
+      _cache.inputs.pagination === inputs.pagination && _cache.inputs.page === inputs.page &&
+      _cache.inputs.jsonData === inputs.jsonData
+    : _cache.mutableKey === mutableKey)) return _cache.result;
 
   const result =
     state.pagination.mode === 'rows'
       ? computeRowBased(state)
       : computeHeightBased(state);
 
-  _cache = { key, result };
+  _cache = { inputs, mutableKey, result };
   return result;
 }
 

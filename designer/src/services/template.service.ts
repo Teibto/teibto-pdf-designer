@@ -370,7 +370,7 @@ export function importTemplateJson(
   try {
     raw = JSON.parse(json);
   } catch (err) {
-    throw new Error(`Invalid JSON: ${(err as Error).message}`);
+    throw new Error(`Invalid JSON: ${(err as Error).message}`, { cause: err });
   }
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {

@@ -76,7 +76,7 @@ scripts/deploy.sh --dryrun           # preview ก่อน ไม่ deploy จ
 scripts/deploy.sh acc1-sb1 acc2-sb1  # เจาะจง authid (แทน targets file)
 ```
 
-`deploy.sh` วนทีละ account: stamp version → เขียน `defaultAuthId` ใหม่ → `suitecloud project:deploy`
+`deploy.sh` build และตรวจ manifest ก่อน stage/stamp แล้ววนทีละ account: เขียน `defaultAuthId` ใหม่ → `suitecloud project:deploy`
 → สรุปผล PASS/FAIL ต่อ account (account ที่พังไม่ทำให้ตัวอื่นหยุด) → คืน `project.json` เป็นค่าเดิมเสมอ
 
 > `project:deploy` ไม่มี flag `--authid` — มันอ่าน `defaultAuthId` จาก `project.json` เท่านั้น
@@ -87,6 +87,19 @@ scripts/deploy.sh acc1-sb1 acc2-sb1  # เจาะจง authid (แทน targ
 `engine/VERSION` เป็น source of truth. ทุกครั้งที่ `deploy.sh` รัน มัน stamp
 `version + git short sha (+dirty ถ้า working tree ไม่ clean) + UTC` ลงไฟล์
 `pld_version.txt` ใน File Cabinet (ไฟล์นี้เป็น build artifact — gitignore ไว้ generate ใหม่ทุก deploy)
+
+Candidate #199 adds `bundleBuilt`, `bundleSha256` and `enginePayload` (sorted file hashes and
+aggregate hash for engine JavaScript, Objects XML, VERSION, SDF manifest and SuiteCloud config).
+The engine hash excludes fonts, account metadata and generated deploy scope/stamp; SPA assets
+have their own manifest digest. `+dirty` includes staged and untracked changes.
+
+`npm run build:netsuite` writes `designer/dist-netsuite/pld-build-manifest.json`. Deployment
+verifies source/config/lockfile/environment and every asset before staging and again before
+stamping. `--no-build` now rejects missing, stale or altered bundles; rebuild to recover.
+Environment values are hashed, not stored as plaintext. This is consistency evidence, not a
+signature or proof that an account has the same files. Compare the deployed stamp and actual
+assets during sandbox acceptance. `--dryrun` still invokes SuiteCloud against the named account;
+it is not an offline test. Project metadata and deploy scope are restored byte-for-byte on exit.
 
 ตรวจ version ที่ deploy ไปบน account:
 ```
@@ -368,7 +381,7 @@ Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Admini
 | Name | PLD - Batch Print (Map/Reduce) |
 | ID | `customscript_pld_batch_mr` |
 | Script File | `pld_mr_batch_print.js` |
-| Parameter | `custscript_pld_mr_job` — File Cabinet id ของ job spec (หน้าจอเขียนให้เอง) |
+| Parameter | `custscript_pld_mr_job` — ID ของ `customrecord_pld_batch_job` (schema v3; หน้าจอเขียนให้เอง) |
 
 **Deploy:**
 
@@ -378,9 +391,26 @@ Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Admini
 | ID | `customdeploy_pld_batch_mr` |
 | Status | Not Scheduled (สั่งงานผ่าน `N/task` จากหน้าจอเท่านั้น) |
 
-ไม่ต้องตั้งค่าอะไรต่อ account: หน้าจอสร้างโฟลเดอร์ `pld-batch` ใต้โฟลเดอร์ของ engine เองในครั้งแรกที่ใช้
-(หาจากไฟล์ `pld_version.txt` ที่ `deploy.sh` stamp ไว้) · ไฟล์รวมเก็บที่โฟลเดอร์นั้น และดูย้อนหลังได้จาก
-หน้าจอ batch print → `?action=files`
+Candidate #199 requires `customrecord_pld_batch_job`. Its `USEPERMISSIONLIST` starts with no
+account-specific grants. Configure selected caller roles with EDIT and VIEWANDEDIT restrictions
+on the record/role permission lists, plus the minimum File Cabinet and scheduling permissions.
+Native VIEWANDEDIT includes creator/subordinates; application checks also require exact job
+owner, requester and role. UI access and UI owner changes are disabled. Custom fields retain
+native write access needed by the worker; do not assume this makes snapshots tamper-proof.
+
+Each request creates a private `pld-job-<job ID>` folder under the engine folder found via
+`pld_version.txt`. Owner, parent and `isprivate` are read back before sensitive files are written.
+The file list now lists the caller's jobs. Status/download routes accept `job=<ID>` and recheck
+ownership; download requires a committed result in that private folder, with `isOnline=false`.
+Notifications link to authenticated Suitelet routes, not raw File Cabinet URLs.
+
+Drain existing tasks before deploying schema v3; the parameter no longer accepts a job-file ID.
+Test two users, supervisors, subsidiaries, a weaker role of the same user, direct Cabinet/native
+API access and Company-Wide Usage before enabling callers. Folder owners/admins retain native
+access; same-user role revocation and snapshot integrity are not established by route checks.
+Failed merge/commit retains private inputs for operator recovery. Automatic orphan recovery,
+retention, a deployment pool and chunked outputs are still pending; this remains a sandbox
+candidate, not a validated production queue.
 
 ---
 
