@@ -62,6 +62,7 @@ function buildMr({ job = JOB, failIds = [], emailFails = false } = {}) {
   const files = fileSystemStub({
     files: job
       ? {
+          '/SuiteScripts/pdf-layout-designer/pld_version.txt': { folder: '55' },
           900: {
             name: "pld_job_501.json",
             get size() { return Buffer.byteLength(signedSnapshot || ""); },
@@ -77,8 +78,9 @@ function buildMr({ job = JOB, failIds = [], emailFails = false } = {}) {
   const tasks = [];
   const taskModule = {
     TaskType: { MAP_REDUCE: "MAP_REDUCE" },
-    create() {
+    create(options = {}) {
       return {
+        scriptId: options.scriptId, deploymentId: options.deploymentId, params: options.params,
         submit() {
           tasks.push({
             scriptId: this.scriptId,
@@ -437,7 +439,8 @@ test("failure details use the original ordered selection for partial and all-fai
     assert.equal(html.includes('<td>1</td><td>11</td>'), allFailed);
     assert.match(html, /action=status/);
     assert.equal(html.includes('กลับไปดูสถานะงานและไฟล์ PDF ที่สร้างสำเร็จ'), !allFailed);
-    assert.doesNotMatch(html, /media\.nl|<td>99<\/td>|<form/);
+    assert.doesNotMatch(html, /media\.nl|<td>99<\/td>/);
+    assert.match(html, /action=retry_failed/);
     assert.equal(JSON.stringify([...f.rows]), before);
     assert.equal(f.render.calls.renderedAsString, renders); assert.equal(f.tasks.length, tasks);
   }
@@ -453,6 +456,173 @@ test("failure details reject changed snapshot identity without leaking source se
   sl.onRequest(details.context);
   assert.doesNotMatch(details.response.state.body, /<td>12<\/td>|<caption>/);
   assert.match(details.response.state.body, /ไม่สำเร็จ|ข้อผิดพลาด/);
+});
+
+function linkedFixture(allFailed = false) {
+  const failIds = allFailed ? ["11", "12"] : ["12"];
+  const f = buildMr({ job: { ...JOB, ids: ["11", "12", "12"] }, failIds });
+  runRender(f); if (!allFailed) runMerge(f);
+  f.stubs["N/xml"] = require("./helpers/ns-stubs").xmlStub;
+  return { ...f, failIds, retry: loadAmd("./pld_lib_batch_retry", f.stubs) };
+}
+test("linked retry submits one child, preserves original results and renders original failed occurrences", () => {
+  for (const allFailed of [false, true]) {
+    const f = linkedFixture(allFailed), before = JSON.stringify(f.rows.get("501")), tasks = f.tasks.length;
+    const token = f.retry.token("501"), result = f.retry.run("501", token), child = result.job;
+    assert.notEqual(child.id, "501"); assert.notEqual(child.folder, "77");
+    assert.equal(f.retry.run("501", token).job.id, child.id); assert.equal(f.tasks.length, tasks + 1);
+    const snapshot = f.files.integrity.open("snapshot", f.files.module.load({ id: child.snapshot }).getContents());
+    assert.deepEqual(Array.from(snapshot.ids), allFailed ? ["11", "12", "12"] : ["12", "12"]);
+    assert.equal(snapshot.templateSnapshot.xml, TPL_XML);
+    assert.deepEqual(JSON.parse(JSON.stringify(snapshot.templateSnapshot.copies)), JOB.templateSnapshot.copies);
+    assert.deepEqual(Array.from(snapshot.lineage.sequences), allFailed ? [0, 1, 2] : [1, 2]);
+    assert.equal(snapshot.lineage.sourceJobId, "501");
+    f.failIds.splice(0);
+    Object.assign(f.stubs["N/runtime"], runtimeStub({ script: { getParameter: () => child.id } }));
+    runRender(f); runMerge(f);
+    assert.equal(f.jobs.load(child.id).status, "COMPLETE");
+    assert.equal(f.jobs.load(child.id).printed, allFailed ? "3" : "2");
+    assert.ok(f.jobs.download(child.id, 0).getContents());
+    assert.equal(JSON.stringify(f.rows.get("501")), before);
+    assert.equal(f.files.deleted.length, 0);
+    assert.equal(f.retry.run("501", token).job.id, child.id);
+    const origin = f.retry.origin(child.id);
+    assert.equal(origin.jobId, "501"); assert.deepEqual(Array.from(origin.sequences), allFailed ? [0, 1, 2] : [1, 2]);
+    const helpers = require("./helpers/ns-stubs"), status = helpers.contextStub({ parameters: { action: "status", job: child.id } });
+    loadAmd("./pld_sl_batch_print", f.stubs).onRequest(status.context);
+    assert.match(status.response.state.body, /งานต้นฉบับ/);
+    assert.match(status.response.state.body, allFailed ? /ลำดับในงานต้นฉบับ: 1, 2, 3/ : /ลำดับในงานต้นฉบับ: 2, 3/);
+  }
+});
+
+test("lost linked submission-claim acknowledgement stays pending and never resubmits blindly", () => {
+  const f = linkedFixture(), token = f.retry.token("501"), tasks = f.tasks.length;
+  f.rows.afterSave = ({ fields }) => {
+    if (fields.externalid && fields.custrecord_pld_job_phase === "RENDER_SUBMITTING") {
+      f.rows.afterSave = null; throw new Error("lost submission claim acknowledgement");
+    }
+  };
+  const result = f.retry.run("501", token);
+  assert.equal(result.job.phase, "RENDER_SUBMITTING"); assert.equal(result.job.task, "");
+  assert.equal(f.tasks.length, tasks);
+  assert.equal(f.retry.run("501", token).job.id, result.job.id); assert.equal(f.tasks.length, tasks);
+  const helpers = require("./helpers/ns-stubs"), status = helpers.contextStub({ parameters: { action: "status", job: result.job.id } });
+  loadAmd("./pld_sl_batch_print", f.stubs).onRequest(status.context);
+  assert.match(status.response.state.body, /ยังไม่ยืนยันว่าเริ่มประมวลผลแล้ว/);
+});
+
+test("linked retry cannot replace an altered retained snapshot or downgrade a worker that started", () => {
+  const f = linkedFixture(), token = f.retry.token("501"), create = f.stubs["N/task"].create;
+  f.stubs["N/task"].create = () => { throw new Error("prepare interrupted"); };
+  assert.throws(() => f.retry.run("501", token), /prepare interrupted/);
+  const childId = [...f.rows].find(([, row]) => row.externalid)?.[0], child = f.jobs.load(childId);
+  const contents = f.files.contents[child.snapshot]; f.files.contents[child.snapshot] = "X" + contents.slice(1);
+  f.stubs["N/task"].create = create;
+  assert.throws(() => f.retry.run("501", token), /snapshot integrity/);
+  f.files.contents[child.snapshot] = contents;
+  f.stubs["N/task"].create = () => ({ submit() {
+    f.jobs.update(childId, { status: "RUNNING", phase: "RENDERING" });
+    const error = new Error("rejected after synthetic worker progress"); error.name = "FAILED_TO_SUBMIT_JOB_REQUEST_1"; throw error;
+  } });
+  const result = f.retry.run("501", token);
+  assert.equal(result.job.status, "RUNNING"); assert.equal(result.job.phase, "RENDERING");
+});
+
+test("a failed child can create its own linked retry without another child from the original source", () => {
+  const f = linkedFixture(), token = f.retry.token("501"), child = f.retry.run("501", token).job;
+  Object.assign(f.stubs["N/runtime"], runtimeStub({ script: { getParameter: () => child.id } }));
+  runRender(f);
+  assert.equal(f.jobs.load(child.id).status, "FAILED");
+  const next = f.retry.run(child.id, f.retry.token(child.id)).job;
+  assert.notEqual(next.id, child.id); assert.equal(f.retry.origin(next.id).jobId, child.id);
+  assert.equal(f.retry.run("501", token).job.id, child.id);
+});
+
+test("invalid or inaccessible source lineage shows a notice while valid child PDFs remain downloadable", () => {
+  for (const mutation of ["parent plan", "parent role", "child snapshot"]) {
+    const f = linkedFixture(), child = f.retry.run("501", f.retry.token("501")).job;
+    f.failIds.splice(0); Object.assign(f.stubs["N/runtime"], runtimeStub({ script: { getParameter: () => child.id } }));
+    runRender(f); runMerge(f);
+    if (mutation === "parent plan") f.jobs.update("501", { plan: f.files.integrity.seal("plan", {}) });
+    if (mutation === "parent role") {
+      f.rows.get("501").custrecord_pld_job_role = "4";
+      require("./helpers/batch-store").signJob(f.stubs, "501", f.rows.get("501"));
+    }
+    if (mutation === "child snapshot") f.files.contents[child.snapshot] = "changed";
+    assert.throws(() => f.retry.origin(child.id));
+    const helpers = require("./helpers/ns-stubs"), status = helpers.contextStub({ parameters: { action: "status", job: child.id } });
+    loadAmd("./pld_sl_batch_print", f.stubs).onRequest(status.context);
+    assert.match(status.response.state.body, /ยังแสดงข้อมูลเชื่อมโยงงานต้นฉบับไม่ได้/);
+    assert.doesNotMatch(status.response.state.body, /งานต้นฉบับ <a/);
+    assert.match(status.response.state.body, /action=download/);
+    assert.ok(f.jobs.download(child.id, 0).getContents());
+  }
+});
+
+test("linked retry rejects missing, stale, cross-action and wrong-actor tokens before child creation", () => {
+  const f = linkedFixture(), token = f.retry.token("501"), count = f.rows.size;
+  for (const value of [undefined, "", token + " ", f.files.integrity.seal("recovery", {})]) assert.throws(() => f.retry.run("501", value));
+  f.jobs.update("501", { task: "changed-authoritative-task" });
+  assert.throws(() => f.retry.run("501", token), /token identity/);
+  Object.assign(f.stubs["N/runtime"], runtimeStub({ user: { id: 10, role: 3 } }));
+  assert.throws(() => f.retry.run("501", token), /unavailable/);
+  assert.equal(f.rows.size, count);
+});
+
+test("linked retry resumes snapshot and task preparation interruptions using one child", () => {
+  for (const interruption of ["snapshot", "task preparation"]) {
+    const f = linkedFixture(), token = f.retry.token("501"), create = f.stubs["N/task"].create;
+    if (interruption === "snapshot") {
+      const original = f.files.module.create;
+      f.files.module.create = opts => {
+        const out = original(opts), save = out.save;
+        out.save = function () { save.call(this); f.files.module.create = original; throw new Error("lost snapshot acknowledgement"); };
+        return out;
+      };
+    } else f.stubs["N/task"].create = () => { throw new Error("task preparation interrupted"); };
+    if (interruption === "task preparation") assert.throws(() => f.retry.run("501", token), /preparation interrupted/);
+    else f.retry.run("501", token);
+    const childIds = [...f.rows].filter(([, row]) => row.externalid?.startsWith("pld-retry-")).map(([id]) => id);
+    assert.equal(childIds.length, 1);
+    const files = f.files.created.length;
+    f.stubs["N/task"].create = create;
+    const result = f.retry.run("501", token);
+    assert.equal(result.job.id, childIds[0]); assert.equal(f.files.created.length, files);
+    assert.equal(result.job.status, "QUEUED");
+  }
+});
+
+test("linked retry fences duplicate posts during submission and preserves ambiguous or deferred outcomes", () => {
+  for (const outcome of ["unknown", "rejected", "empty", "accepted"]) {
+    const f = linkedFixture(), token = f.retry.token("501"); let submits = 0;
+    f.stubs["N/task"].create = () => ({ submit() {
+      submits++;
+      const competing = f.retry.run("501", token);
+      assert.equal(competing.job.phase, "RENDER_SUBMITTING");
+      if (outcome === "accepted") return "CHILD_TASK";
+      if (outcome === "empty") return " ";
+      const error = new Error("synthetic submit response");
+      if (outcome === "rejected") error.name = "FAILED_TO_SUBMIT_JOB_REQUEST_1";
+      throw error;
+    } });
+    const result = f.retry.run("501", token);
+    assert.equal(submits, 1);
+    assert.equal(f.retry.run("501", token).job.id, result.job.id); assert.equal(submits, 1);
+    assert.equal(result.job.phase, outcome === "accepted" ? "RENDER_SUBMITTING" : outcome === "rejected" ? "RENDER_WAITING" : "RENDER_SUBMIT_UNKNOWN");
+    assert.ok(f.files.module.load({ id: result.job.snapshot }).getContents());
+  }
+});
+
+test("linked retry Suitelet requires POST and connects the source details form to the child status", () => {
+  const f = linkedFixture(), helpers = require("./helpers/ns-stubs"), sl = loadAmd("./pld_sl_batch_print", f.stubs);
+  const get = helpers.contextStub({ parameters: { action: "retry_failed", job: "501" } }); sl.onRequest(get.context);
+  assert.match(get.response.state.body, /requires POST/);
+  const details = helpers.contextStub({ parameters: { action: "failures", job: "501" } }); sl.onRequest(details.context);
+  const encoded = /name="token" value="([^"]+)"/.exec(details.response.state.body)[1];
+  const token = encoded.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const post = helpers.contextStub({ method: "POST", parameters: { action: "retry_failed", job: "501", token } }); sl.onRequest(post.context);
+  assert.match(post.response.state.body, /ติดตามงานลูกนี้/);
+  assert.match(post.response.state.body, /กลับไปดูงานต้นฉบับ/);
 });
 
 test("render recovery reuses committed parts and the immutable snapshot after an input-stage failure", () => {

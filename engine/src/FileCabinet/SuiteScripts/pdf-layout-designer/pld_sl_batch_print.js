@@ -32,8 +32,8 @@ define([
   'N/record',
   'N/task',
   './pld_lib_render',
-  './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity', './pld_lib_batch_cleanup', './pld_lib_batch_selection'
-], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs, integrity, cleanup, selection) {
+  './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity', './pld_lib_batch_cleanup', './pld_lib_batch_selection', './pld_lib_batch_retry'
+], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs, integrity, cleanup, selection, retry) {
 
   /** หน่วย governance ที่กันไว้ให้ขั้นตอนรวมไฟล์ + ส่ง response ตอนท้าย */
   var RESERVE_UNITS = 100;
@@ -71,6 +71,10 @@ define([
         if (request.method !== 'POST') throw new Error('Recovery requires POST');
         return recoverJob(context, tel);
       }
+      if (request.parameters.action === 'retry_failed') {
+        if (request.method !== 'POST') throw new Error('Linked retry requires POST');
+        return retryFailed(context);
+      }
       if (request.parameters.action === 'cleanup') {
         if (request.method !== 'POST') throw new Error('Cleanup requires POST');
         return cleanJobInputs(context, tel);
@@ -86,6 +90,7 @@ define([
       logBatchError(tel, e);
       if (request.parameters.action === 'cleanup') return writeCleanupError(context, tel, e);
       if (request.parameters.action === 'recover') return writeRecoveryError(context, tel, e);
+      if (request.parameters.action === 'retry_failed') return writeRecoveryError(context, tel, e);
       writeErrorPage(context.response, tel, e);
     }
   }
@@ -454,6 +459,9 @@ define([
         '<p>ใช้ผลรายเอกสารและไฟล์ส่วนที่ตรวจสอบแล้ว ไม่สร้างงานพิมพ์ใหม่</p></form>';
     }
     if (job.phase === 'MERGE_SUBMIT_UNKNOWN' || job.phase === 'RENDER_SUBMIT_UNKNOWN') text += '<p class="warn">ยังยืนยันการส่งงานประมวลผลไม่ได้ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงานและไม่ต้องส่งซ้ำ</p>';
+    if ((job.phase === 'RENDER_SUBMITTING' && !job.task) || (job.phase === 'MERGE_SUBMITTING' && !job.mergetask)) {
+      text += '<p class="warn">กำลังรอยืนยันการส่งงาน ยังไม่ยืนยันว่าเริ่มประมวลผลแล้ว หากสถานะค้างให้แจ้งผู้ดูแลพร้อมหมายเลขงาน ไม่ต้องสร้างงานใหม่</p>';
+    }
     if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.outputs) {
       var outputs = jobs.results(job.id);
       text += outputs.map(function (output) {
@@ -484,20 +492,44 @@ define([
       '<table><caption>เอกสารที่ยังไม่มีในผลพิมพ์ของงานนี้</caption><thead><tr><th scope="col">ลำดับในงานเดิม</th>' +
       '<th scope="col">รหัสรายการ (Internal ID)</th><th scope="col">ผลการสร้างเอกสาร</th></tr></thead><tbody>' + rows + '</tbody></table>' +
       '<p>แจ้งผู้ดูแลพร้อมหมายเลขงานและลำดับที่ไม่สำเร็จเพื่อตรวจสอบสาเหตุ</p>' +
+      '<form method="POST" action="' + esc(jobs.route(source.job.id, 'retry_failed')) + '">' +
+      '<input type="hidden" name="action" value="retry_failed"><input type="hidden" name="job" value="' + esc(source.job.id) + '">' +
+      '<input type="hidden" name="token" value="' + esc(retry.token(source.job.id)) + '">' +
+      '<button type="submit">พิมพ์ใหม่เฉพาะรายการที่ไม่สำเร็จ</button></form>' +
+      '<p>สร้างงานลูกด้วยแบบฟอร์มและชุดสำเนาของงานเดิม แต่ใช้ข้อมูลรายการ ณ เวลาพิมพ์ใหม่ ' +
+      'ผลพิมพ์เดิมยังอยู่ กดซ้ำจะกลับไปงานลูกเดิม</p>' +
       '<p><a href="' + esc(jobs.route(source.job.id)) + '">' +
       (Number(source.job.printed) > 0 ? 'กลับไปดูสถานะงานและไฟล์ PDF ที่สร้างสำเร็จ' : 'กลับไปดูสถานะงาน') + '</a></p>';
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
     context.response.write(pageShell('รายการที่ไม่สำเร็จ', html));
   }
+  function retryFailed(context) {
+    var result = retry.run(context.request.parameters.job, context.request.parameters.token);
+    var html = '<h1>งานพิมพ์เฉพาะรายการที่ไม่สำเร็จ</h1>' + jobSummary(result.job) +
+      (result.warning ? '<p class="warn">' + esc(result.warning) + '</p>' : '') +
+      '<p><a href="' + esc(jobs.route(result.job.id)) + '">ติดตามงานลูกนี้</a></p>' +
+      '<p><a href="' + esc(jobs.route(context.request.parameters.job)) + '">กลับไปดูงานต้นฉบับ</a></p>';
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('งานพิมพ์เฉพาะรายการที่ไม่สำเร็จ', html));
+  }
   function writeJobStatus(context) {
     var job = jobs.load(context.request.parameters.job);
+    var lineage = '';
+    try {
+      var origin = retry.origin(job.id);
+      if (origin) lineage = '<p>งานต้นฉบับ <a href="' + esc(jobs.route(origin.jobId)) + '">' + esc(origin.jobId) + '</a>' +
+        ' · ลำดับในงานต้นฉบับ: ' + origin.sequences.map(function (seq) { return seq + 1; }).join(', ') + '</p>';
+    } catch (originError) {
+      log.error({ title: 'PLD retry lineage unavailable', details: { jobId: job.id, message: originError.message } });
+      lineage = '<p class="warn">ยังแสดงข้อมูลเชื่อมโยงงานต้นฉบับไม่ได้ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงานนี้</p>';
+    }
     var clean = '';
     if (['COMPLETE', 'PARTIAL'].indexOf(job.status) >= 0 && job.outputs) {
       clean = '<h2>จัดการไฟล์ชั่วคราว</h2><p>ล้างไฟล์ต้นทางของเอกสารที่รวมเป็น PDF สำเร็จแล้ว เพื่อลดพื้นที่จัดเก็บ ' +
         'ไฟล์ PDF และรายละเอียดงานยังคงอยู่ เปิดหน้านี้ไว้จนล้างเสร็จ</p>' + cleanupForm(job.id, cleanup.token(job.id), 'ล้างไฟล์ชั่วคราว');
     }
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
-    context.response.write(pageShell('สถานะงานพิมพ์', '<h1>สถานะงานพิมพ์</h1>' + jobSummary(job) + clean));
+    context.response.write(pageShell('สถานะงานพิมพ์', '<h1>สถานะงานพิมพ์</h1>' + lineage + jobSummary(job) + clean));
   }
   function cleanupForm(jobId, token, label) {
     return '<form id="pld-cleanup" method="POST" action="' + esc(jobs.route(jobId, 'cleanup')) + '">' +
@@ -546,6 +578,8 @@ define([
     var rows = jobs.list();
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
     context.response.write(pageShell('งานพิมพ์ของฉัน', '<h1>งานพิมพ์ของฉัน</h1>' +
+      (rows.provisioningCount ? '<p class="warn">พบงานลูกที่ยังเตรียมข้อมูลไม่ครบ ' + rows.provisioningCount +
+        ' งานในรายการที่ตรวจ กลับไปหน้ารายการที่ไม่สำเร็จของงานต้นฉบับแล้วกดพิมพ์ใหม่เฉพาะรายการที่ไม่สำเร็จเพื่อทำการเตรียมงานเดิมต่อ</p>' : '') +
       (rows.length ? rows.map(function (job) {
         return '<section><a href="' + esc(jobs.route(job.id)) + '">ดูสถานะงาน</a>' + jobSummary(job) + '</section>';
       }).join('') : '<p>ยังไม่มีงานพิมพ์ในบทบาทนี้</p>')));

@@ -192,10 +192,20 @@ Failure-selection verification: **291/291** engine tests pass, including nine ne
 and 44 worker integration tests. The Thai failure-details page validates the original snapshot,
 exact plan/manifest partition, owner/role and terminal state; duplicate record IDs retain their
 original positions. Tampered storage, inconsistent partitions and mid-read state changes fail
-closed. Opening details performs no render or task submission. This read-only foundation does not
-close linked retry after a sealed plan: child identity and interrupted provisioning must become
-recoverable before that action is enabled. The preceding `09f78a3` orphan candidate passed
+closed. Opening details performs no render or task submission. This slice established the read-only foundation; the linked-retry implementation is described below. The preceding `09f78a3` orphan candidate passed
 [full CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34279116442).
+
+Linked retry candidate: **314/314** engine tests pass, including 14 provisioning tests and 53
+worker integration tests. Signed creation reservations survive interrupted saves/promotion/folder
+binding, preserve legacy empty-key jobs and fence native key collisions. End-to-end tests produce
+downloadable child PDFs from partial/all-failed selections with original template/copies and
+repeated IDs, preserve original results, reuse one child on duplicate POSTs and support child chains.
+Snapshot/task-preparation interruption, stale/wrong tokens, ambiguous submission claims, advanced
+workers and inaccessible lineage are covered. Read-only review found no blocking defect and
+requested the now-added lineage-negative regression. Native uniqueness, folder search visibility,
+permissions, crash behavior and measured governance remain sandbox gates. Retention policy remains
+unanswered; no PDF/snapshot retention deletion is enabled. The preceding `1020917` passed
+[full CI](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34280259094).
 
 Use these as task/objective text when assigning agents; they are not assumed CLI syntax.
 Assign non-overlapping file ownership per task, preserve other agents' work, and return exact

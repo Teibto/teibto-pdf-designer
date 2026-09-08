@@ -17,13 +17,13 @@ define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url', 'N/log', './pld_
   var AUTH = 'custrecord_pld_job_auth';
   function canonical(input) {
     var out = {};
-    ['id', 'owner'].concat(Object.keys(F)).forEach(function (k) {
+    ['id', 'owner', 'externalid'].concat(Object.keys(F)).forEach(function (k) {
       out[k] = input[k] == null ? '' : String(input[k]);
     });
     return out;
   }
   function values(rec) {
-    var out = { id: String(rec.id), owner: String(rec.getValue({ fieldId: 'owner' })) };
+    var out = { id: String(rec.id), owner: String(rec.getValue({ fieldId: 'owner' })), externalid: rec.getValue({fieldId:'externalid'}) };
     Object.keys(F).forEach(function (k) { out[k] = rec.getValue({ fieldId: F[k] }); });
     return canonical(out);
   }
@@ -35,6 +35,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url', 'N/log', './pld_
   function authenticated(rec) {
     var persisted = values(rec);
     var sealed = integrity.open('job', rec.getValue({ fieldId: AUTH }));
+    if (sealed && persisted.externalid === '' && !Object.prototype.hasOwnProperty.call(sealed, 'externalid')) sealed.externalid = '';
     if (!sealed || typeof sealed !== 'object' || Object.keys(sealed).length !== Object.keys(persisted).length ||
       Object.keys(persisted).some(function (k) { return sealed[k] !== persisted[k]; })) throw new Error('Batch job integrity mismatch');
     return authorized(persisted);
@@ -110,11 +111,134 @@ define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url', 'N/log', './pld_
       throw setupError;
     }
   }
+  function reservationKey(key) {
+    if (typeof key !== 'string' || !/^pld-retry-[a-f0-9]{64}$/.test(key)) throw new Error('Invalid batch reservation key');
+    return key;
+  }
+  function ranges(type, filters) {
+    return search.create({type:type, filters:filters, columns:['internalid']}).run().getRange({start:0,end:2});
+  }
+  function reservedRows(key) { return ranges(TYPE,[['externalidstring','is',reservationKey(key)]]); }
+  function optimistic(error) { return !!error && (error.name === 'RCRD_HAS_BEEN_CHANGED' || error.code === 'RCRD_HAS_BEEN_CHANGED'); }
+  function authenticatedInit(rec, key) {
+    reservationKey(key);
+    var state=values(rec), initial=Object.assign({},state); delete initial.id;
+    var sealed=integrity.open('job-init',rec.getValue({fieldId:AUTH}));
+    if (!sealed || Object.keys(sealed).length !== Object.keys(initial).length || Object.keys(initial).some(function(k){return initial[k]!==sealed[k];}) ||
+      state.externalid!==key || state.status!=='PREPARING' || state.phase!=='PROVISIONING' || !/^[1-9][0-9]*$/.test(state.parent) ||
+      !Number.isInteger(Number(state.requested)) || Number(state.requested)<1 || Number(state.requested)>500 || state.printed!=='0' || state.failed!=='0' ||
+      ['folder','snapshot','result','task','resultseal','snapshotdigest','plan','mergetask','outputs'].some(function(k){return state[k]!=='';})) throw new Error('Batch reservation initialization integrity mismatch');
+    authorized(state);
+    return state;
+  }
+  function promote(jobId, key) {
+    for (var attempt=0; attempt<3; attempt++) {
+      var rec=record.load({type:TYPE,id:id(jobId)}), job;
+      try { job=authenticated(rec); }
+      catch (normalError) {
+        var state=authenticatedInit(rec,key);
+        rec.setValue({fieldId:AUTH,value:integrity.seal('job',state)});
+        try { rec.save(); }
+        catch(error) {
+          // A save acknowledgment may be lost after the normal seal is durable.
+          try { var winner=load(jobId); if(winner.externalid===key)return winner; } catch(readError) { /* Still init or unavailable: retain original failure. */ }
+          if(optimistic(error) && attempt<2)continue;
+          throw error;
+        }
+        job=load(jobId);
+      }
+      if(job.externalid!==key)throw new Error('Batch reservation identity mismatch');
+      return job;
+    }
+  }
+  function findReserved(key) {
+    var rows=reservedRows(key);
+    if(rows.length>1)throw new Error('Duplicate batch reservation key');
+    return rows.length ? promote(rows[0].id,key) : null;
+  }
+  function checkedReservedFolder(job, folderId) {
+    var candidate=Object.assign({},job,{folder:id(folderId)}); assertFolder(candidate);
+    var folder=record.load({type:'folder',id:candidate.folder});
+    if(folder.getValue({fieldId:'name'})!=='pld-job-'+job.id)throw new Error('Batch reserved folder name mismatch');
+    return candidate.folder;
+  }
+  function resumeFolder(job) {
+    var filters=[['name','is','pld-job-'+job.id],'AND',['parent','anyof',job.parent]];
+    var found=ranges('folder',filters), folderId;
+    if(job.folder) {
+      if(found.length!==1 || String(found[0].id)!==job.folder)throw new Error('Duplicate or missing batch reserved folder');
+      checkedReservedFolder(job,job.folder); return job;
+    }
+    if(job.status!=='PREPARING' || job.phase!=='PROVISIONING')throw new Error('Batch reservation is not provisioning');
+    if(found.length>1)throw new Error('Duplicate batch reserved folders');
+    if(found.length)folderId=checkedReservedFolder(job,found[0].id);
+    else {
+      var folder=record.create({type:'folder'});
+      folder.setValue({fieldId:'name',value:'pld-job-'+job.id});
+      folder.setValue({fieldId:'parent',value:Number(job.parent)});
+      folder.setValue({fieldId:'owner',value:Number(job.requester)});
+      folder.setValue({fieldId:'isprivate',value:true});
+      try { folderId=id(folder.save()); }
+      catch(error) {
+        found=ranges('folder',filters);
+        if(found.length>1)throw new Error('Duplicate batch reserved folders');
+        if(!found.length)throw error;
+        folderId=checkedReservedFolder(job,found[0].id);
+      }
+      // Folder names are not unique. A competing creation must be visible,
+      // never resolved by choosing a convenient native ID.
+      found=ranges('folder',filters);
+      if(found.length!==1 || String(found[0].id)!==folderId)throw new Error('Duplicate or missing batch reserved folder');
+      checkedReservedFolder(job,folderId);
+    }
+    try { job=update(job.id,{folder:folderId},job); }
+    catch(error) {
+      var current=load(job.id);
+      if(!current.folder)throw error;
+      checkedReservedFolder(current,current.folder);
+      if(current.folder!==folderId)throw new Error('Batch reserved folder binding changed');
+      return current;
+    }
+    checkedReservedFolder(job,job.folder);return job;
+  }
+  function createReserved(requested,key) {
+    reservationKey(key);
+    if(!Number.isInteger(requested) || requested<1 || requested>500)throw new Error('Invalid batch reservation count');
+    var job=findReserved(key);
+    if(!job) {
+      var u=actor(), parent=id(file.load({id:'/SuiteScripts/pdf-layout-designer/pld_version.txt'}).folder);
+      var initial=canonical({owner:u.requester,externalid:key,requester:u.requester,role:u.role,parent:parent,status:'PREPARING',phase:'PROVISIONING',requested:requested,printed:0,failed:0});
+      delete initial.id;
+      var rec=record.create({type:TYPE});
+      rec.setValue({fieldId:'name',value:'Batch retry '+key.slice(-16)});
+      rec.setValue({fieldId:'owner',value:Number(u.requester)});rec.setValue({fieldId:'externalid',value:key});
+      Object.keys(F).forEach(function(k){rec.setValue({fieldId:F[k],value:initial[k]});});
+      rec.setValue({fieldId:AUTH,value:integrity.seal('job-init',initial)});
+      try { rec.save(); }
+      catch(error) { job=findReserved(key);if(!job)throw error; }
+      if(!job)job=findReserved(key);
+      if(!job)throw new Error('Batch reservation readback missing');
+    }
+    if(Number(job.requested)!==requested)throw new Error('Batch reservation count mismatch');
+    return resumeFolder(job);
+  }
   function list() {
     var u = actor();
-    return search.create({ type: TYPE, filters: [[F.requester,'is',u.requester], 'AND', [F.role,'is',u.role], 'AND', ['owner','anyof',u.requester]],
+    var results = search.create({ type: TYPE, filters: [[F.requester,'is',u.requester], 'AND', [F.role,'is',u.role], 'AND', ['owner','anyof',u.requester]],
       columns: [search.createColumn({ name: 'internalid', sort: search.Sort.DESC })]
-    }).run().getRange({ start: 0, end: 40 }).map(function (r) { return load(r.id); });
+    }).run().getRange({ start: 0, end: 40 });
+    var out = []; out.provisioningCount = 0;
+    results.forEach(function (result) {
+      var rec=record.load({type:TYPE,id:id(result.id)});
+      try { out.push(authenticated(rec)); }
+      catch(error) {
+        // An authenticated first-save reservation is recoverable by explicit
+        // POST, but listing must neither promote it nor hide corrupt records.
+        authenticatedInit(rec,String(rec.getValue({fieldId:'externalid'})));
+        out.provisioningCount++;
+      }
+    });
+    return out;
   }
   function route(jobId, action, chunk) {
     var params = { action: action || 'status', job: id(jobId) };
@@ -196,5 +320,5 @@ define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url', 'N/log', './pld_
     return file.create({ name: pdf.name, fileType: file.Type.PDF, contents: contents, isOnline: false });
 
   }
-  return { create: create, load: load, update: update, assertFolder: assertFolder, loadFile: loadFile, list: list, route: route, download: download, results: results, failedSequences: failedSequences };
+  return { create: create, createReserved: createReserved, findReserved: findReserved, load: load, update: update, assertFolder: assertFolder, loadFile: loadFile, list: list, route: route, download: download, results: results, failedSequences: failedSequences };
 });

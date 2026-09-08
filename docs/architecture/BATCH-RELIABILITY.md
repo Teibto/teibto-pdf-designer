@@ -7,8 +7,8 @@ Issue #199 remains open. Schema v5 implements authenticated PART/CHUNK publicati
 rendering, metadata-only planning/finalization, a separate bounded merge reduce phase and guarded
 PDF-byte downloads. Owner-triggered merge recovery verifies the prior task is terminal and claims
 the job atomically. These are local implementations, not native-account security or capacity proof.
-Owner-triggered render recovery before plan publication is implemented locally. Recovery after
-an immutable render plan is sealed, age-based retention and native capacity QA remain unfinished.
+Owner-triggered render recovery before plan publication is implemented locally. Failed sequences after a sealed plan can create a linked child job locally.
+Age-based retention and native capacity QA remain unfinished.
 Bounded orphan adoption is implemented locally for PART and CHUNK retries.
 Owner-triggered cleanup of published XML inputs is bounded and implemented locally.
 
@@ -241,19 +241,36 @@ Failures must match original snapshot IDs and supported producer codes. Duplicat
 remain separate sequence occurrences. A final authenticated job reread rejects concurrent changes.
 
 The status page links to Thai failure details for these jobs. Details expose the original position,
-record ID and bounded reason label; request parameters cannot choose IDs or files. No transactions
-or PDF bytes are read, no current template is resolved and no work is submitted by this page.
+record ID and bounded reason label; request parameters cannot choose IDs or files. Opening details
+reads no transactions or PDF bytes, resolves no current template and submits no work. Submission
+requires the separate signed POST from its retry button.
 Snapshot/plan integrity failures stop the details view without changing the original result.
 
-Linked child-job retry remains unfinished. It must preserve the original job/PDFs and reuse the
-original template/copies while explaining that missing documents read current transaction data.
-One deterministic child identity per source failure set must survive duplicate POSTs, ambiguous
-record saves and provisioning interruptions. Current job creation saves an ID before sealing and
-creating its folder: adding a lookup or parent pointer alone does not close those crash windows.
-Implement an authenticated creation reservation and recoverable folder/snapshot provisioning
-before enabling a retry button. Submission must still use guarded WAITING/UNKNOWN transitions;
-existing-child lookup must never itself resubmit. Bind source state, sequence selection and lineage
-to action tokens and child snapshots without invalidating existing authenticated job envelopes.
+Linked retry is now implemented locally. The explicit signed POST creates one deterministic child
+per source job, immutable snapshot/plan/output digests and failed sequence set. The key excludes
+transient task metadata and signing-key identity. Repeated POSTs return the existing child; failed
+children can create their own children. The source job and its PDFs remain unchanged. Child
+snapshots retain source positions and template/copy labels; transactions are read again at render
+time, as the UI explains. Dedicated child status shows authorized parent lineage; inaccessible or
+invalid lineage shows a notice while independently verified child PDF links remain available.
+
+Reserved creation atomically saves native external ID, owner, strict initial fields and a
+`job-init` seal before the native ID is known. Same-record optimistic promotion binds the returned
+ID in a normal job seal. Ordinary job reads reject initialization seals. The job list authenticates
+and counts pending initialization rows without mutating them or discarding corrupt rows. Normal
+job seals now bind native external ID; older seals are accepted only when both stored and sealed
+external IDs were absent/empty. Drain old workers before upgrading or rolling back this contract.
+
+Provisioning resumes exact private folders and JSON snapshots with bounded searches and actual
+owner/privacy/name/size/hash verification. Folder names are not assumed unique: ambiguous matches
+stop visibly, and surplus folders/files remain retained. A snapshot is attached by guarded save.
+The submit claim is guarded separately, then uses fixed render script parameters and native
+selection. Definite native rejection becomes WAITING; generic or missing responses stay UNKNOWN.
+A crash after the submit claim but before the call cannot be distinguished from accepted work:
+repeat POST returns the same pending child and the UI requests operator reconciliation. No timer
+or retry action treats that window as proof of nonacceptance.
+[Folder fields and filters](https://www.netsuite.com/help/helpcenter/en_US/srbrowser/Browser2016_2/script/record/folder.html),
+[Native optimistic locking](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_N2877583.html).
 
 ## Bounded cleanup of published inputs
 

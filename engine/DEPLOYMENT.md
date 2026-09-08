@@ -525,9 +525,28 @@ users/roles and unrelated account workloads. Before rolling back to pinned deplo
 new submissions, finish/reconcile jobs using both secondary slots and disable the secondary
 deployments; do not remove an active deployment or its inputs.
 
-Age-based retention, recovery after a sealed plan and
+Age-based retention and
 pool saturation/capacity QA remain pending. Size limits are safety bounds; measure actual BFO usage, output
 size and Thai layout before setting release capacity.
+
+#### Linked retries and reserved creation
+
+`action=retry_failed` requires a source-bound signed POST and creates one child for the original
+failed sequence set. Original jobs/PDFs remain unchanged. Child JSON retains original XML/copies
+and lineage, while transaction data is read at the new render time. Repeated POSTs find the same
+child. Existing failed-worker recovery and WAITING/UNKNOWN handling still apply to that child.
+
+Drain older workers before this update: normal job seals now bind native `externalid`; new
+`job-init` initialization seals and `retry` action tokens require the updated libraries. Older
+empty-key job seals remain readable only when the actual external ID is empty. No new SDF field
+or script deployment is added. Do not roll back while initialization/provisioning rows or new
+normal seals require the updated reader. Preserve reservations, private folders and snapshots.
+
+Validate native external-ID uniqueness and search visibility, concurrent creation/promotion,
+private folder-name ambiguity, lost folder/snapshot acknowledgements, duplicate POSTs and both
+worker stages under restricted roles. A crash between the submission claim and external submit
+remains an operator reconciliation case; do not clear its key or resubmit based on elapsed time.
+Local tests do not establish native uniqueness, governance limits or caller identity.
 
 ---
 

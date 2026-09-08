@@ -6,7 +6,7 @@
  */
 define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
     'use strict';
-    const DOMAINS = ['job', 'snapshot', 'part', 'result', 'artifact', 'plan', 'manifest', 'cleanup', 'recovery'];
+    const DOMAINS = ['job', 'job-init', 'retry', 'snapshot', 'part', 'result', 'artifact', 'plan', 'manifest', 'cleanup', 'recovery'];
     const HEX = /^[0-9a-f]{64}$/;
     const SECRET = 'custsecret_pld_batch_v1';
     const fail = () => { throw new Error('ไม่สามารถยืนยันความถูกต้องของงานพิมพ์ (Batch integrity verification failed) — ติดต่อผู้ดูแลเพื่อตรวจสอบการตั้งค่าและสิทธิ์'); };
