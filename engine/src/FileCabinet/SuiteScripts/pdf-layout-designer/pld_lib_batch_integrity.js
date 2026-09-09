@@ -12,7 +12,7 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
     const fail = (stage) => { throw new Error('ไม่สามารถยืนยันความถูกต้องของงานพิมพ์ (Batch integrity verification failed) — ติดต่อผู้ดูแลเพื่อตรวจสอบการตั้งค่าและสิทธิ์' + (stage ? ' [crypto:' + stage + ']' : '')); };
 
     function validText(value) {
-        if (typeof value !== 'string') fail();
+        if (typeof value !== 'string') fail('text-type');
         // Reject unpaired surrogates, which UTF-8 conversion would replace silently.
         for (let i = 0; i < value.length; i++) {
             const c = value.charCodeAt(i);
@@ -29,24 +29,24 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
         if (value === null || typeof value === 'boolean') return JSON.stringify(value);
         if (typeof value === 'string') return JSON.stringify(validText(value));
         if (typeof value === 'number') {
-            if (!Number.isFinite(value) || Object.is(value, -0)) fail();
+            if (!Number.isFinite(value) || Object.is(value, -0)) fail('canonical-number');
             return JSON.stringify(value);
         }
-        if (typeof value !== 'object' || ancestors.indexOf(value) !== -1 || ancestors.length >= 128) fail();
+        if (typeof value !== 'object' || ancestors.indexOf(value) !== -1 || ancestors.length >= 128) fail('canonical-object');
         const proto = Object.getPrototypeOf(value);
         if (!Array.isArray(value) && proto !== null &&
             (Object.getPrototypeOf(proto) !== null || !Object.prototype.hasOwnProperty.call(proto, 'constructor') ||
-                proto.constructor.name !== 'Object')) fail();
+                proto.constructor.name !== 'Object')) fail('canonical-prototype');
         const keys = Reflect.ownKeys(value);
-        if (keys.some(key => typeof key !== 'string' || ['__proto__', 'prototype', 'constructor'].indexOf(key) !== -1)) fail();
+        if (keys.some(key => typeof key !== 'string' || ['__proto__', 'prototype', 'constructor'].indexOf(key) !== -1)) fail('canonical-keys');
         const next = ancestors.concat([value]);
         const read = key => {
             const descriptor = Object.getOwnPropertyDescriptor(value, key);
-            if (!descriptor || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) fail();
+            if (!descriptor || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) fail('canonical-descriptor');
             return canonical(descriptor.value, next);
         };
         if (Array.isArray(value)) {
-            if (keys.length !== value.length + 1) fail();
+            if (keys.length !== value.length + 1) fail('canonical-array');
             const entries = [];
             for (let i = 0; i < value.length; i++) entries.push(read(String(i)));
             return '[' + entries.join(',') + ']';
@@ -81,7 +81,7 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
 
     // Native HEX output may use uppercase; persisted envelopes stay canonical lowercase.
     function nativeHex(result) {
-        if (typeof result !== 'string' || !/^[0-9a-f]{64}$/i.test(result)) fail();
+        if (typeof result !== 'string' || !/^[0-9a-f]{64}$/i.test(result)) fail('hex');
         return result.toLowerCase();
     }
 
@@ -94,20 +94,20 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
     function open(domain, text) {
         const expected = context(domain);
         let envelope;
-        try { envelope = JSON.parse(validText(text)); } catch (_) { fail(); }
+        try { envelope = JSON.parse(validText(text)); } catch (_) { fail('open-json'); }
         if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope) ||
-            Object.keys(envelope).sort().join(',') !== 'accountId,data,domain,environment,keyId,mac,version') fail();
+            Object.keys(envelope).sort().join(',') !== 'accountId,data,domain,environment,keyId,mac,version') fail('open-schema');
         // Only our canonical wire format is accepted, including unique JSON keys.
-        if (canonical(envelope) !== text) fail();
-        for (const key of Object.keys(expected)) if (envelope[key] !== expected[key]) fail();
-        if (typeof envelope.mac !== 'string' || !HEX.test(envelope.mac)) fail();
+        if (canonical(envelope) !== text) fail('open-canonical');
+        for (const key of Object.keys(expected)) if (envelope[key] !== expected[key]) fail('open-context');
+        if (typeof envelope.mac !== 'string' || !HEX.test(envelope.mac)) fail('open-mac-format');
         const received = envelope.mac;
         delete envelope.mac;
         const computed = mac(canonical(envelope));
         // Fixed-length comparison visits every character; JS does not promise constant timing.
         let difference = 0;
         for (let i = 0; i < 64; i++) difference |= received.charCodeAt(i) ^ computed.charCodeAt(i);
-        if (difference !== 0) fail();
+        if (difference !== 0) fail('open-mac-mismatch');
         return envelope.data;
     }
 
