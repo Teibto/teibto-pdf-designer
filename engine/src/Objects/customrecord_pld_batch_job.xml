@@ -12,9 +12,16 @@
   <includename>T</includename>
   <showowner>T</showowner>
   <showownerallowchange>F</showownerallowchange>
-  <!-- Deny by default. Grant selected caller roles EDIT with VIEWANDEDIT restrictions,
+  <!-- Administrator bootstrap is required for native permission-list deployment.
+       Grant selected caller roles EDIT with VIEWANDEDIT restrictions,
        mirrored on those roles. Native restrictions include subordinates; application
        checks also require exact requester and role. -->
+  <permissions>
+    <permission>
+      <permittedrole>ADMINISTRATOR</permittedrole>
+      <permittedlevel>FULL</permittedlevel>
+    </permission>
+  </permissions>
   <customrecordcustomfields>
     <customrecordcustomfield scriptid="custrecord_pld_job_snapshotdigest">
       <label>Snapshot Digest</label><fieldtype>TEXT</fieldtype>

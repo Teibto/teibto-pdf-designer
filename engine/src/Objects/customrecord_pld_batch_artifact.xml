@@ -12,9 +12,16 @@
   <includename>T</includename>
   <showowner>T</showowner>
   <showownerallowchange>F</showownerallowchange>
-  <!-- Deny by default. Selected caller roles require owner-restricted permissions.
+  <!-- Administrator bootstrap is required for native permission-list deployment.
+       Selected caller roles require owner-restricted permissions.
        Prove native externalid uniqueness/concurrent create behavior in sandbox.
        Seal binds deterministic externalid and native owner before atomic creation. -->
+  <permissions>
+    <permission>
+      <permittedrole>ADMINISTRATOR</permittedrole>
+      <permittedlevel>FULL</permittedlevel>
+    </permission>
+  </permissions>
   <customrecordcustomfields>
     <customrecordcustomfield scriptid="custrecord_pld_art_job">
       <label>Job</label><fieldtype>TEXT</fieldtype>
