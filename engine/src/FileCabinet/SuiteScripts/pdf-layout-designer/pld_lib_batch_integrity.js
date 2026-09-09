@@ -75,9 +75,14 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
             stage = 'digest';
             const result = hmac.digest({ outputEncoding: encode.Encoding.HEX });
             stage = 'format';
-            if (typeof result !== 'string' || !HEX.test(result)) fail();
-            return result;
+            return nativeHex(result);
         } catch (_) { fail(stage); }
+    }
+
+    // Native HEX output may use uppercase; persisted envelopes stay canonical lowercase.
+    function nativeHex(result) {
+        if (typeof result !== 'string' || !/^[0-9a-f]{64}$/i.test(result)) fail();
+        return result.toLowerCase();
     }
 
     function seal(domain, data) {
@@ -111,8 +116,7 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
         const digest = crypto.createHash({ algorithm: crypto.HashAlg.SHA256 });
         digest.update({ input: text, inputEncoding });
         const result = digest.digest({ outputEncoding: encode.Encoding.HEX });
-        if (typeof result !== 'string' || !HEX.test(result)) fail();
-        return result;
+        return nativeHex(result);
     }
 
     function digest(text) { return hash(text, encode.Encoding.UTF_8); }

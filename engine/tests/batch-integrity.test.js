@@ -26,6 +26,25 @@ test('native crypto failures expose only a fixed stage, never the underlying err
     error.message.includes('[crypto:hmac]') && !error.message.includes('sensitive-native-error-content'));
 });
 
+test('uppercase native HEX is normalized for hashes and HMAC without relaxing wire canonicality', () => {
+  const { api, stubs } = fixture();
+  for (const method of ['createHmac', 'createHash']) {
+    const create = stubs['N/crypto'][method];
+    stubs['N/crypto'][method] = options => {
+      const native = create(options), digest = native.digest;
+      native.digest = options => digest(options).toUpperCase();
+      return native;
+    };
+  }
+  const sealed = api.seal('job', { id: '501' });
+  assert.equal(api.open('job', sealed).id, '501');
+  assert.match(JSON.parse(sealed).mac, /^[0-9a-f]{64}$/);
+  assert.equal(api.digest('Thai ไทย'), crypto.createHash('sha256').update('Thai ไทย').digest('hex'));
+  const altered = JSON.parse(sealed);
+  altered.mac = altered.mac.toUpperCase();
+  assert.throws(() => api.open('job', wire(altered)), /integrity/);
+});
+
 test('all domains round-trip deterministic canonical JSON without changing Thai, Unicode, or whitespace', () => {
   const { api } = fixture();
   const data = { z: ['ใบกำกับภาษี\r\n กำ กํา 😀', null, true, 12.5], a: { y: 2, x: 1 } };
