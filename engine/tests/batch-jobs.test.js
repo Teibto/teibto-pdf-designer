@@ -173,6 +173,26 @@ test('initial state seal precedes private folder creation and binds only origina
   assert.equal(hostile.files.created.length, 0);
 });
 
+test('a native create-only handle is never reused to update the saved job', () => {
+  const f = fixture(); f.rows.clear();
+  const create = f.stubs['N/record'].create;
+  f.stubs['N/record'].create = options => {
+    const rec = create(options);
+    if (options.type === 'customrecord_pld_batch_job') {
+      const save = rec.save; let saved = false;
+      rec.save = () => {
+        if (saved) throw new Error('Native create handle cannot update the saved identity');
+        saved = true; return save();
+      };
+    }
+    return rec;
+  };
+  const job = f.jobs.create(1);
+  assert.equal(job.id, '501');
+  assert.equal(f.jobs.load(job.id).status, 'PREPARING');
+  assert.equal(f.rows.size, 2, 'one job and one private folder');
+});
+
 test('updates reseal authenticated prior state and cannot launder concurrent native edits', () => {
   const f = fixture();
   const before = f.job.custrecord_pld_job_auth;

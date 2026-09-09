@@ -92,6 +92,13 @@ define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url', 'N/log', './pld_
       // Bind only the initial values selected by this invocation, never values
       // reread from a mutable native row. Until this succeeds the row is inert.
       var initialState = canonical(Object.assign({ id: jobId, owner: u.requester }, initial));
+      // A native create handle must not be reused as an update after save().
+      // Reload the returned ID, but sign only the original expected values.
+      rec = record.load({ type: TYPE, id: jobId });
+      var persistedInitial = values(rec);
+      if (Object.keys(initialState).some(function (key) { return persistedInitial[key] !== initialState[key]; })) {
+        throw new Error('Batch initial state changed before sealing');
+      }
       rec.setValue({ fieldId: AUTH, value: integrity.seal('job', initialState) });
       rec.save();
       load(jobId);
