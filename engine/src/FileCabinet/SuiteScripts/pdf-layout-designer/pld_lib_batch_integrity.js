@@ -9,7 +9,7 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
     const DOMAINS = ['job', 'job-init', 'retry', 'snapshot', 'part', 'result', 'artifact', 'plan', 'manifest', 'cleanup', 'recovery'];
     const HEX = /^[0-9a-f]{64}$/;
     const SECRET = 'custsecret_pld_batch_v1';
-    const fail = () => { throw new Error('ไม่สามารถยืนยันความถูกต้องของงานพิมพ์ (Batch integrity verification failed) — ติดต่อผู้ดูแลเพื่อตรวจสอบการตั้งค่าและสิทธิ์'); };
+    const fail = (stage) => { throw new Error('ไม่สามารถยืนยันความถูกต้องของงานพิมพ์ (Batch integrity verification failed) — ติดต่อผู้ดูแลเพื่อตรวจสอบการตั้งค่าและสิทธิ์' + (stage ? ' [crypto:' + stage + ']' : '')); };
 
     function validText(value) {
         if (typeof value !== 'string') fail();
@@ -63,15 +63,21 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
     }
 
     function mac(text) {
+        // Fixed stage labels diagnose native failures without exposing secret/error contents.
+        let stage = 'key';
         try {
             const key = crypto.createSecretKey({ secret: SECRET, encoding: encode.Encoding.UTF_8 });
             if (!key) fail();
+            stage = 'hmac';
             const hmac = crypto.createHmac({ algorithm: crypto.HashAlg.SHA256, key });
+            stage = 'update';
             hmac.update({ input: text, inputEncoding: encode.Encoding.UTF_8 });
+            stage = 'digest';
             const result = hmac.digest({ outputEncoding: encode.Encoding.HEX });
+            stage = 'format';
             if (typeof result !== 'string' || !HEX.test(result)) fail();
             return result;
-        } catch (_) { fail(); }
+        } catch (_) { fail(stage); }
     }
 
     function seal(domain, data) {

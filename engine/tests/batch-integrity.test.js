@@ -19,6 +19,13 @@ function wire(value) {
   return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + wire(value[k])).join(',') + '}';
 }
 
+test('native crypto failures expose only a fixed stage, never the underlying error contents', () => {
+  const { api, stubs } = fixture();
+  stubs['N/crypto'].createHmac = () => { throw new Error('sensitive-native-error-content'); };
+  assert.throws(() => api.seal('job', { id: '501' }), error =>
+    error.message.includes('[crypto:hmac]') && !error.message.includes('sensitive-native-error-content'));
+});
+
 test('all domains round-trip deterministic canonical JSON without changing Thai, Unicode, or whitespace', () => {
   const { api } = fixture();
   const data = { z: ['ใบกำกับภาษี\r\n กำ กํา 😀', null, true, 12.5], a: { y: 2, x: 1 } };
