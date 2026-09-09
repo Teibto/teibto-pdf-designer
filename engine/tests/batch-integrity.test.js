@@ -45,6 +45,20 @@ test('uppercase native HEX is normalized for hashes and HMAC without relaxing wi
   assert.throws(() => api.open('job', wire(altered)), /integrity/);
 });
 
+test('empty bytes hash correctly when native Hash.update rejects empty input', () => {
+  const { api, stubs } = fixture();
+  const create = stubs['N/crypto'].createHash;
+  stubs['N/crypto'].createHash = options => {
+    const native = create(options), update = native.update;
+    native.update = options => {
+      assert.notEqual(options.input, '', 'native update requires nonempty input');
+      return update(options);
+    };
+    return native;
+  };
+  assert.equal(api.digest(''), crypto.createHash('sha256').digest('hex'));
+});
+
 test('all domains round-trip deterministic canonical JSON without changing Thai, Unicode, or whitespace', () => {
   const { api } = fixture();
   const data = { z: ['ใบกำกับภาษี\r\n กำ กํา 😀', null, true, 12.5], a: { y: 2, x: 1 } };

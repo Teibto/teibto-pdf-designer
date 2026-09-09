@@ -114,7 +114,8 @@ define(['N/crypto', 'N/encode', 'N/runtime'], (crypto, encode, runtime) => {
     function hash(text, inputEncoding) {
         validText(text);
         const digest = crypto.createHash({ algorithm: crypto.HashAlg.SHA256 });
-        digest.update({ input: text, inputEncoding });
+        // NetSuite rejects an empty update input; a fresh hash already represents empty bytes.
+        if (text !== '') digest.update({ input: text, inputEncoding });
         const result = digest.digest({ outputEncoding: encode.Encoding.HEX });
         return nativeHex(result);
     }
