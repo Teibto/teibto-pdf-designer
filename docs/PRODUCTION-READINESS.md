@@ -15,7 +15,7 @@ Local test doubles do not execute FreeMarker/BFO or establish NetSuite role perm
 | P1 | Download differs from current preview; stale responses after reopen | Implemented locally; download displayed blob and discard superseded responses. Three component regressions. Live save/reload/print parity still required. |
 | P1 | Wrong subsidiary config and unusable Thai fonts silently print | Implemented locally; require matching/global config and valid File Cabinet fonts for render, retain setup inspection. Live missing-font and subsidiary tests required. |
 | P1 | All-role Suitelets execute as Administrator | Candidate emits empty runasrole and disables anonymous Suitelet access. User-facing overrides need SDF/readback; MR caller-role inheritance depends on programmatic submission, not its fixed Administrator UI field. Restricted-user execution matrix remains a release blocker; XML tests alone do not prove runtime authorization. |
-| P1 | Shared batch folder exposes job JSON/XML and other users' output | Local candidate adds durable requester/role/owner identity, per-job private folder readback and job-authorized download. Native record/file permissions, direct URLs, weaker-role access and retention remain release blockers; local stubs cannot establish account privacy. |
+| P1 | Shared batch folder exposes job JSON/XML and other users' output | Local candidate adds durable requester/role/owner identity, per-job private folder readback and job-authorized download. My Files now isolates loaded unsigned/corrupt rows without disclosing them or masking an account-wide crypto outage. Native record/file permissions, direct URLs, weaker-role access and retention remain release blockers; local stubs cannot establish account privacy. |
 | P1 | Batch input/merge errors skip cleanup and notification | Authenticated PART/CHUNK commits survive lost MR output and successful chunks are reused. Failure notifications include the job reference. Owner-triggered cleanup verifies terminal tasks and published PDFs, then deletes committed XML inputs in bounded signed continuations. Snapshot/orphans/unpublished inputs remain retained; bounded PART/CHUNK orphan adoption is implemented locally; age-based retention remains open. |
 | P1 | Accepted queue task reported as rejected after metadata failure | Enqueue separates preparation failure cleanup from the submit boundary. Once submit is attempted, thrown/empty responses retain snapshot/status and report uncertainty; a guarded update cannot downgrade an advanced worker. Accepted-task ID/link failures preserve work and show tracking. Connected task/role behavior remains required. |
 | P2 | Repeated transaction reads per copy | Implemented request-local frozen snapshot; copy titles/labels remain independent. Measure real governance and latency before capacity claims. |
@@ -91,10 +91,17 @@ that promotes old job fields into v5 authority. Native historical file access, r
 old state, permission revocation, secret/script restrictions and retention policy still require
 account tests and policy decisions. No local implementation establishes production readiness.
 
-Current branch local evidence (2026-09-11): **326/326 engine tests passed** with
+Current branch local evidence (2026-09-11): **328/328 engine tests passed** with
 `node --test --test-isolation=none "engine/tests/**/*.test.js"`. This is current local Node evidence
 only: no SDF validation, NetSuite deployment, native crypto/file/search execution, role matrix or
 BFO/PDF inspection was performed by this run.
+
+The current engine candidate also fixes two live-observed gaps. Synthetic customer-payment rows now
+carry paid amounts that sum exactly to the receipt payment while keeping document totals distinct.
+My Files returns authenticated jobs even when another successfully loaded row is unsigned or corrupt,
+counts that row only in a generic safety warning, and logs its identity internally. A fixed HMAC
+readiness probe runs before search/load so missing secret or native crypto access still fails globally;
+direct status/download access to an invalid row remains rejected.
 
 Current designer evidence: **634/634 unit tests passed**, both production and NetSuite builds
 completed, Storybook 10.6.0 built successfully and `npm audit` reports zero vulnerabilities after
@@ -119,10 +126,11 @@ and 527 pages. Observed request/output/latency for the largest probe was 4,821,8
 The deployed designer loaded with no captured console errors, both font weights resolved to File
 Cabinet URLs, Thai text input round-tripped through the accessibility tree, and the named shortcuts
 dialog closed with Escape and restored focus. Live QA also exposed the batch search form dropping
-Suitelet routing parameters; the branch fix now gives every form an explicit resolved action and
-preserves `script`/`deploy` on GET. Final deployment/retest evidence for that fix belongs with the PR
-record. Restricted-role/subsidiary A/B, native batch privacy/queue/cleanup and retention policy
-remain release blockers.
+Suitelet routing parameters. Clean deployment `b0a641e` and runtime readback passed; replaying the
+GET filter retained `script=3359&deploy=1`, returned the result controls and no longer produced
+NetSuite's missing-parameter Notice. The later receipt/My Files candidate still requires its own
+deployment/readback evidence in the PR record. Restricted-role/subsidiary A/B, native batch
+privacy/queue/cleanup and retention policy remain release blockers.
 
 Redacted local screenshots: [live unsaved preview](../qa-evidence/issue-199/be8ac6d-live-unsaved-template42.png),
 [saved/reloaded preview](../qa-evidence/issue-199/be8ac6d-saved-template42.png),

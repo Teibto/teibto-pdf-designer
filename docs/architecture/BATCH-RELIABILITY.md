@@ -294,3 +294,13 @@ delete without document contents. Counts are per request, not durable cumulative
 Snapshot, ledger rows, unpublished inputs, orphan files and PDFs remain retained. Age-based
 retention still needs a policy and separate implementation. Native file checks and deletion are
 not atomic; concurrent Cabinet edits and account permissions require sandbox validation.
+
+## Bounded My Files isolation
+
+My Files inspects at most 40 jobs selected by requester, current role and native owner. A normal job
+must pass its complete job seal; an interrupted first-save reservation must pass the exact `job-init`
+seal. A loaded row that proves neither shape is omitted, counted in a generic warning and logged only
+for operators. Its fields, links and error details are never rendered, and direct status/download
+still reject it. Native record-load failures remain fatal. Before search, one fixed non-persisted HMAC
+probe verifies account-wide secret/crypto readiness so a systemic outage cannot be misreported as a
+set of independent corrupt rows. Listing never signs, promotes, repairs or deletes stored rows.

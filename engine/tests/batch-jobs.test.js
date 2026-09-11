@@ -10,6 +10,7 @@ const { runtimeStub, fileSystemStub, xmlStub, contextStub, logStub } = require('
 const { batchStore, signJob } = require('./helpers/batch-store');
 function fixture() {
   const user = { id: 9, role: 3 };
+  const log = logStub();
   const files = fileSystemStub({ files: {
     '/SuiteScripts/pdf-layout-designer/pld_version.txt': { folder: '55' },
     '900': { name: 'pld_job_501.json', folder: '77', isOnline: false, getContents: () => '{}' },
@@ -20,7 +21,7 @@ function fixture() {
   let filters;
   const stubs = {
     'N/runtime': runtimeStub({ user }), 'N/file': files.module, 'N/xml': xmlStub,
-    'N/log': logStub().module, 'N/task': {}, 'N/format': {},
+    'N/log': log.module, 'N/task': {}, 'N/format': {},
     'N/record': { load() { throw new Error('Record unavailable'); } },
     'N/search': { Sort: { DESC: 'DESC' }, createColumn: (x) => x, create(opts) {
       filters = opts.filters;
@@ -36,7 +37,7 @@ function fixture() {
   job.custrecord_pld_job_resultseal = integrity.seal('result', { jobId: '501', folder: '77', fileId: '901', name: 'batch_invoice_1_501.pdf',
     contentsHash: integrity.digestPdf(Buffer.from('%PDF-1.4 synthetic QA').toString('base64')), size: 21, printed: 1, failed: 0, sequences: [0] });
   signJob(stubs, '501', job);
-  return { integrity, user, files, rows, job, stubs, jobs: loadAmd('./pld_lib_batch_jobs', stubs), filters: () => filters };
+  return { integrity, user, files, rows, job, stubs, log, jobs: loadAmd('./pld_lib_batch_jobs', stubs), filters: () => filters };
 }
 
 test('two users cannot read each other job metadata, snapshot, or PDF, including administrator role', () => {
@@ -98,6 +99,30 @@ test('files page searches only requester plus role plus native owner and never e
   const forbidden = contextStub({ parameters: { action: 'status', job: '501' } }); sl.onRequest(forbidden.context);
   assert.match(forbidden.response.state.body, /unavailable/);
   assert.doesNotMatch(forbidden.response.state.body, /batch_invoice/);
+});
+
+test('files page keeps authenticated jobs visible and generically warns about hidden corrupt rows', () => {
+  const f = fixture();
+  f.rows.set('502', { ...f.job, custrecord_pld_job_auth: '' });
+  const create = f.stubs['N/search'].create;
+  f.stubs['N/search'].create = (opts) => opts.type === 'customrecord_pld_batch_job' &&
+    opts.filters && opts.filters[0][0] === 'custrecord_pld_job_requester'
+    ? { run: () => ({ getRange: () => [{ id: '501' }, { id: '502' }] }) }
+    : create(opts);
+  const sl = loadAmd('./pld_sl_batch_print', f.stubs);
+  const page = contextStub({ parameters: { action: 'files' } });
+
+  sl.onRequest(page.context);
+
+  assert.match(page.response.state.body, /งาน 501/);
+  assert.match(page.response.state.body, /ตรวจสอบความถูกต้องไม่ได้ 1 งาน/);
+  assert.match(page.response.state.body, /ซ่อนงานเหล่านี้ไว้เพื่อความปลอดภัย/);
+  assert.doesNotMatch(page.response.state.body, /งาน 502|job=502|integrity|authentication|custrecord/i,
+    'warning must disclose neither corrupt IDs nor verification details');
+  const errors = f.log.entries.filter((entry) => entry.title === 'PLD batch list row unavailable');
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].details.jobId, '502', 'internal log retains the row needed for diagnosis');
+  assert.ok(errors[0].details.message, 'internal log retains the verification failure');
 });
 
 test('private folder must pass readback before create returns authority to write snapshot', () => {

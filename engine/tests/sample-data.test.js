@@ -107,6 +107,18 @@ test('ใบเสร็จรับเงินได้แถวเป็น�
   assert.ok(sample.items[0].refnum, 'แถวของใบเสร็จคือเลขที่เอกสารที่ตัดชำระ');
   assert.equal(sample.items[0].item, '', 'ช่องสินค้าต้องว่าง แต่ต้องมี key อยู่');
   assert.ok(sample.paymentText, 'ยอดที่รับมาต้องมีค่า');
+  sample.apply.forEach((row) => {
+    assert.notEqual(row.amount, '', 'ทุกเอกสารที่ตัดชำระต้องมียอดรับชำระ');
+    assert.ok(Number(row.amount) > 0, 'ยอดรับชำระของแต่ละแถวต้องเป็นจำนวนบวก');
+    assert.ok(row.amountText, 'template พิมพ์ paid amount จาก amountText');
+  });
+  const paid = sample.apply.reduce((sum, row) => sum + Number(row.amount), 0);
+  assert.equal(paid, sample.payment, 'ยอดรับชำระรายแถวต้องรวมตรงกับ payment');
+  assert.equal(sample.paymentText, '160,500.00');
+  assert.ok(sample.apply.some((row) => Number(row.total) !== Number(row.amount)),
+    'document total ต้องยังแยกจาก paid amount เพื่อครอบเคสชำระบางส่วน');
+  assert.notEqual(sample.apply.reduce((sum, row) => sum + Number(row.total), 0), sample.payment,
+    'ห้ามเอาผลรวม document total มาใช้เป็นยอดรับชำระ');
 });
 
 test('rectype ที่ engine ไม่รู้จัก ยังได้เอกสารตัวอย่างที่ใช้ออกแบบได้', () => {

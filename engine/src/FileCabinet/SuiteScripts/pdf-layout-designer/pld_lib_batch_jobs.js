@@ -230,19 +230,38 @@ define(['N/record', 'N/search', 'N/runtime', 'N/file', 'N/url', 'N/log', './pld_
     return resumeFolder(job);
   }
   function list() {
+    // Global crypto/secret readiness is a page-level prerequisite, not a row
+    // defect. Probe before search/load so an unavailable signing key cannot make
+    // every valid job look like an independently corrupt legacy row. The probe
+    // is deliberately fixed and never persisted or returned.
+    integrity.seal('job', { purpose: 'list-readiness' });
     var u = actor();
     var results = search.create({ type: TYPE, filters: [[F.requester,'is',u.requester], 'AND', [F.role,'is',u.role], 'AND', ['owner','anyof',u.requester]],
       columns: [search.createColumn({ name: 'internalid', sort: search.Sort.DESC })]
     }).run().getRange({ start: 0, end: 40 });
-    var out = []; out.provisioningCount = 0;
+    var out = []; out.provisioningCount = 0; out.unavailableCount = 0;
     results.forEach(function (result) {
+      // A systemic/native load failure remains fatal; only a row that was loaded
+      // successfully but cannot prove either supported authentication shape is
+      // isolated from the rest of the listing.
       var rec=record.load({type:TYPE,id:id(result.id)});
       try { out.push(authenticated(rec)); }
       catch(error) {
-        // An authenticated first-save reservation is recoverable by explicit
-        // POST, but listing must neither promote it nor hide corrupt records.
-        authenticatedInit(rec,String(rec.getValue({fieldId:'externalid'})));
-        out.provisioningCount++;
+        try {
+          // A valid first-save reservation remains visible only as a generic
+          // provisioning count. It is never promoted by this read-only listing.
+          authenticatedInit(rec,String(rec.getValue({fieldId:'externalid'})));
+          out.provisioningCount++;
+        } catch(initError) {
+          // A caller-scoped search row is not authority to disclose it. Legacy
+          // unsigned or corrupt rows stay fail-closed while one bad row cannot
+          // deny access to the caller's other authenticated jobs.
+          out.unavailableCount++;
+          log.error({
+            title: 'PLD batch list row unavailable',
+            details: { jobId: String(result && result.id || ''), message: (initError && initError.message) || String(initError) }
+          });
+        }
       }
     });
     return out;

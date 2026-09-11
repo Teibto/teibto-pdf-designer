@@ -30,7 +30,7 @@
 | E2E | `npx playwright test` | 87 passed (branch ปัจจุบัน 2026-09-11) |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
-| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 326 passed (branch ปัจจุบัน 2026-09-11) |
+| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 328 passed (branch ปัจจุบัน 2026-09-11) |
 | Template pack (จาก repo root) | `bash scripts/validate-templates.sh` | ✅ ผ่านทุกไฟล์ |
 
 CI `quality-gate` รัน lint + vitest + e2e + template validator + engine unit test + secret-scan — ตั้งแต่ #155 **ครอบ `engine/` ด้วย** (`node --check` ทุกไฟล์ + `node --test`) ไม่ต้องเช็ค syntax มือแล้ว แต่ change ที่แตะ BFO output ยังต้อง QA สดบน SB2 เหมือนเดิม

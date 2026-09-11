@@ -11,10 +11,11 @@ const {batchStore,signJob}=require('./helpers/batch-store');
 const KEY='pld-retry-'+'a'.repeat(64);
 function fixture() {
   const user={id:9,role:3},files=fileSystemStub({files:{'/SuiteScripts/pdf-layout-designer/pld_version.txt':{folder:'55'}}});
-  const stubs={'N/runtime':runtimeStub({user}),'N/file':files.module,'N/log':logStub().module,
+  const log=logStub();
+  const stubs={'N/runtime':runtimeStub({user}),'N/file':files.module,'N/log':log.module,
     'N/record':{load(){throw new Error('Missing record');}},'N/search':{Sort:{DESC:'DESC'},createColumn:opts=>opts,create(){throw new Error('Unexpected search');}}};
   const rows=batchStore(stubs,files),integrity=loadAmd('./pld_lib_batch_integrity',stubs),jobs=loadAmd('./pld_lib_batch_jobs',stubs);
-  return {user,files,stubs,rows,integrity,jobs};
+  return {user,files,stubs,rows,integrity,jobs,log};
 }
 function initOnly(f) {
   f.rows.beforeSave=({fresh,type})=>{if(!fresh && type==='customrecord_pld_batch_job')throw new Error('promotion interrupted');};
@@ -152,12 +153,41 @@ test('synthetic reserved allocation never overwrites existing source records',()
 });
 
 
-test('listing skips only authenticated init with a visible count and never promotes on GET',()=>{
+test('listing keeps valid jobs, counts authenticated init, and hides corrupt rows without aborting',()=>{
   const f=fixture(),id=initOnly(f),search=f.stubs['N/search'].create;
+  const validId='700',corruptId='701';
+  f.rows.set(validId,{owner:'9',externalid:'',custrecord_pld_job_requester:'9',custrecord_pld_job_role:'3',
+    custrecord_pld_job_status:'QUEUED',custrecord_pld_job_requested:'2',custrecord_pld_job_printed:'0',custrecord_pld_job_failed:'0'});
+  signJob(f.stubs,validId,f.rows.get(validId));
+  f.rows.set(corruptId,{...f.rows.get(validId),custrecord_pld_job_auth:''});
   f.stubs['N/search'].create=opts=>opts.type==='customrecord_pld_batch_job' && opts.filters[0][0]==='custrecord_pld_job_requester'
-    ? {run:()=>({getRange:()=>[{id}]})}:search(opts);
+    ? {run:()=>({getRange:()=>[{id:validId},{id},{id:corruptId}]})}:search(opts);
   let writes=0;f.rows.beforeSave=()=>{writes++;};
-  const listed=f.jobs.list();assert.equal(listed.length,0);assert.equal(listed.provisioningCount,1);assert.equal(writes,0);
+  const listed=f.jobs.list();assert.deepEqual(Array.from(listed,job=>job.id),[validId]);
+  assert.equal(listed.provisioningCount,1);assert.equal(listed.unavailableCount,1);assert.equal(writes,0);
+  assert.equal(f.log.entries.filter(entry=>entry.title==='PLD batch list row unavailable').length,1);
   assert.throws(()=>f.jobs.load(id),/integrity/);
-  f.rows.get(id).custrecord_pld_job_requested='99';assert.throws(()=>f.jobs.list(),/integrity/);assert.equal(writes,0);
+  f.rows.get(id).custrecord_pld_job_requested='99';
+  const afterTamper=f.jobs.list();assert.deepEqual(Array.from(afterTamper,job=>job.id),[validId]);
+  assert.equal(afterTamper.provisioningCount,0);assert.equal(afterTamper.unavailableCount,2);assert.equal(writes,0);
+});
+
+test('listing does not mask systemic record load failures as corrupt rows',()=>{
+  const f=fixture(),search=f.stubs['N/search'].create;
+  f.stubs['N/search'].create=opts=>opts.type==='customrecord_pld_batch_job' && opts.filters[0][0]==='custrecord_pld_job_requester'
+    ? {run:()=>({getRange:()=>[{id:'999'}]})}:search(opts);
+  assert.throws(()=>f.jobs.list(),/Missing record/);
+  assert.equal(f.log.entries.filter(entry=>entry.title==='PLD batch list row unavailable').length,0);
+});
+
+test('listing crypto readiness failure aborts globally before any row is hidden',()=>{
+  const f=fixture();let loads=0;
+  const load=f.stubs['N/record'].load;
+  f.stubs['N/record'].load=opts=>{loads++;return load(opts);};
+  f.stubs['N/crypto'].createHmac=()=>{throw new Error('native HMAC denied');};
+
+  assert.throws(()=>f.jobs.list(),/Batch integrity verification failed.*crypto:hmac/);
+  assert.equal(loads,0,'readiness probe must run before per-row handling');
+  assert.equal(f.log.entries.filter(entry=>entry.title==='PLD batch list row unavailable').length,0,
+    'global crypto outage must not be misreported as row corruption');
 });

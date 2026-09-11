@@ -617,6 +617,8 @@ define([
     context.response.write(pageShell('งานพิมพ์ของฉัน', '<h1>งานพิมพ์ของฉัน</h1>' +
       (rows.provisioningCount ? '<p class="warn">พบงานลูกที่ยังเตรียมข้อมูลไม่ครบ ' + rows.provisioningCount +
         ' งานในรายการที่ตรวจ กลับไปหน้ารายการที่ไม่สำเร็จของงานต้นฉบับแล้วกดพิมพ์ใหม่เฉพาะรายการที่ไม่สำเร็จเพื่อทำการเตรียมงานเดิมต่อ</p>' : '') +
+      (rows.unavailableCount ? '<p class="warn">พบงานพิมพ์ที่ตรวจสอบความถูกต้องไม่ได้ ' + rows.unavailableCount +
+        ' งาน ระบบซ่อนงานเหล่านี้ไว้เพื่อความปลอดภัย กรุณาแจ้งผู้ดูแลระบบหากต้องการตรวจสอบ</p>' : '') +
       (rows.length ? rows.map(function (job) {
         return '<section><a href="' + esc(jobs.route(job.id)) + '">ดูสถานะงาน</a>' + jobSummary(job) + '</section>';
       }).join('') : '<p>ยังไม่มีงานพิมพ์ในบทบาทนี้</p>')));

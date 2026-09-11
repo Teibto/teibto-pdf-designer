@@ -741,9 +741,12 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         quantity: 1, units: 'งาน', rate: 130000, amount: 130000 })
     ];
     // ใบเสร็จรับเงินไม่มีบรรทัดสินค้า — แถวของมันคือเอกสารที่ตัดชำระ (#170)
+    // `total` คือยอดเต็มของเอกสารอ้างอิง ส่วน `amount` คือยอดที่รับชำระในครั้งนี้;
+    // ทุกแถวต้องมี amount และผลรวมต้องตรงกับ payment ด้านล่าง โดยตั้งใจให้ใบแรก
+    // ถูกชำระบางส่วนเพื่อกันไม่ให้ sample เผลอใช้ document total แทน paid amount.
     var applyRows = [
-      sampleRow({ refnum: 'INV-2026-0107', applydate: '17/07/2026', total: 160500 }),
-      sampleRow({ refnum: 'INV-2026-0092', applydate: '02/07/2026', total: 32100 })
+      sampleRow({ refnum: 'INV-2026-0107', applydate: '17/07/2026', total: 160500, amount: 128400 }),
+      sampleRow({ refnum: 'INV-2026-0092', applydate: '02/07/2026', total: 32100, amount: 32100 })
     ];
     var rows = isPayment ? applyRows : itemRows;
 
