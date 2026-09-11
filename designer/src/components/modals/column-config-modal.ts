@@ -57,7 +57,7 @@ export class PldColumnConfigModal extends LitElement {
     .col-list-header h3 {
       font-size: 12px;
       font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       margin: 0;
     }
 
@@ -69,10 +69,10 @@ export class PldColumnConfigModal extends LitElement {
     .icon-btn {
       width: 26px;
       height: 26px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 5px;
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
+      background: var(--c-surface-2);
+      color: var(--c-text-subtle);
       font-size: 13px;
       cursor: pointer;
       display: flex;
@@ -82,9 +82,9 @@ export class PldColumnConfigModal extends LitElement {
     }
 
     .icon-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-accent, #4f6ef7);
-      border-color: var(--color-accent, #4f6ef7);
+      background: var(--c-surface-3);
+      color: var(--c-brand);
+      border-color: var(--c-brand);
     }
 
     .col-list {
@@ -99,10 +99,10 @@ export class PldColumnConfigModal extends LitElement {
       width: 100%;
       margin-top: 6px;
       padding: 8px;
-      border: 1px dashed var(--color-border, #2a2c3a);
+      border: 1px dashed var(--c-border);
       border-radius: 8px;
       background: transparent;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       font-size: 12px;
       font-family: inherit;
       cursor: pointer;
@@ -110,9 +110,9 @@ export class PldColumnConfigModal extends LitElement {
     }
 
     .add-col-btn:hover {
-      border-color: var(--color-accent, #4f6ef7);
-      color: var(--color-accent, #4f6ef7);
-      background: rgba(79, 110, 247, 0.06);
+      border-color: var(--c-brand);
+      color: var(--c-brand);
+      background: var(--c-brand-soft);
     }
 
     .col-item {
@@ -120,8 +120,8 @@ export class PldColumnConfigModal extends LitElement {
       align-items: center;
       gap: 8px;
       padding: 8px 10px;
-      background: var(--color-bg-card, #1a1b25);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-surface-2);
+      border: 1px solid var(--c-border);
       border-radius: 6px;
       cursor: pointer;
       transition: all 0.15s;
@@ -129,16 +129,16 @@ export class PldColumnConfigModal extends LitElement {
     }
 
     .col-item:hover {
-      border-color: var(--color-text-muted, #5c5e72);
+      border-color: var(--c-text-muted);
     }
 
     .col-item.active {
-      border-color: var(--color-accent, #4f6ef7);
-      background: rgba(79, 110, 247, 0.08);
+      border-color: var(--c-brand);
+      background: var(--c-brand-soft);
     }
 
     .col-item.drag-over {
-      border-color: var(--color-accent2, #22d3a7);
+      border-color: var(--c-success);
       border-style: dashed;
     }
 
@@ -148,7 +148,7 @@ export class PldColumnConfigModal extends LitElement {
 
     .drag-handle {
       cursor: grab;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       font-size: 10px;
       flex-shrink: 0;
     }
@@ -160,7 +160,7 @@ export class PldColumnConfigModal extends LitElement {
     .col-name {
       flex: 1;
       font-size: 12px;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -169,15 +169,15 @@ export class PldColumnConfigModal extends LitElement {
     .col-key {
       font-family: var(--font-mono, monospace);
       font-size: 9px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       padding: 1px 5px;
-      background: var(--color-bg-deep, #0a0b10);
+      background: var(--c-bg);
       border-radius: 3px;
     }
 
     .col-width-badge {
       font-size: 9px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       min-width: 35px;
       text-align: right;
     }
@@ -194,14 +194,14 @@ export class PldColumnConfigModal extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       font-size: 12px;
     }
 
     .props-title {
       font-size: 12px;
       font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       margin-bottom: 14px;
     }
 
@@ -214,7 +214,7 @@ export class PldColumnConfigModal extends LitElement {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       margin-bottom: 8px;
     }
 
@@ -233,16 +233,16 @@ export class PldColumnConfigModal extends LitElement {
 
     .prop-field label {
       font-size: 10px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     .prop-field input,
     .prop-field select {
       padding: 6px 8px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 5px;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       font-size: 12px;
       font-family: inherit;
       outline: none;
@@ -251,7 +251,7 @@ export class PldColumnConfigModal extends LitElement {
 
     .prop-field input:focus,
     .prop-field select:focus {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
     }
 
     .prop-field input[type="number"] {
@@ -271,12 +271,12 @@ export class PldColumnConfigModal extends LitElement {
       align-items: center;
       gap: 6px;
       font-size: 11.5px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       cursor: pointer;
     }
 
     .check-item input[type="checkbox"] {
-      accent-color: var(--color-accent, #4f6ef7);
+      accent-color: var(--c-brand);
       width: 14px;
       height: 14px;
       cursor: pointer;
@@ -286,7 +286,7 @@ export class PldColumnConfigModal extends LitElement {
     .presets-overlay {
       position: absolute;
       inset: 0;
-      background: var(--color-bg-panel, #12131a);
+      background: var(--c-surface);
       z-index: 10;
       display: flex;
       flex-direction: column;
@@ -304,7 +304,7 @@ export class PldColumnConfigModal extends LitElement {
     .presets-header h3 {
       font-size: 14px;
       font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       margin: 0;
     }
 
@@ -318,16 +318,16 @@ export class PldColumnConfigModal extends LitElement {
 
     .preset-card {
       padding: 14px;
-      background: var(--color-bg-card, #1a1b25);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-surface-2);
+      border: 1px solid var(--c-border);
       border-radius: 8px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .preset-card:hover {
-      border-color: var(--color-accent, #4f6ef7);
-      background: var(--color-bg-hover, #222430);
+      border-color: var(--c-brand);
+      background: var(--c-surface-3);
       transform: translateY(-1px);
     }
 
@@ -339,18 +339,18 @@ export class PldColumnConfigModal extends LitElement {
     .preset-name {
       font-size: 12px;
       font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       margin-bottom: 2px;
     }
 
     .preset-desc {
       font-size: 10px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     .preset-cols {
       font-size: 9px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       margin-top: 4px;
       font-family: var(--font-mono, monospace);
     }
@@ -379,18 +379,18 @@ export class PldColumnConfigModal extends LitElement {
     }
 
     .preview-table th {
-      background: var(--color-bg-element, #282a38);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
       padding: 5px 8px;
       text-align: left;
-      border: 0.5px solid var(--color-border, #2a2c3a);
+      border: 0.5px solid var(--c-border);
       font-weight: 600;
     }
 
     .preview-table td {
       padding: 4px 8px;
-      border: 0.5px solid var(--color-border, #2a2c3a);
-      color: var(--color-text-dim, #8a8ca0);
+      border: 0.5px solid var(--c-border);
+      color: var(--c-text-subtle);
     }
 
     /* ─── Footer buttons ─── */
@@ -403,9 +403,9 @@ export class PldColumnConfigModal extends LitElement {
     .btn {
       padding: 7px 16px;
       border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a);
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text, #e8e9f0);
+      border: 1px solid var(--c-border);
+      background: var(--c-surface-2);
+      color: var(--c-text);
       font-size: 12.5px;
       font-family: inherit;
       cursor: pointer;
@@ -414,12 +414,12 @@ export class PldColumnConfigModal extends LitElement {
     }
 
     .btn:hover {
-      background: var(--color-bg-hover, #222430);
+      background: var(--c-surface-3);
     }
 
     .btn-primary {
-      background: var(--color-accent, #4f6ef7);
-      border-color: var(--color-accent, #4f6ef7);
+      background: var(--c-brand);
+      border-color: var(--c-brand);
       color: #fff;
     }
 
@@ -428,12 +428,12 @@ export class PldColumnConfigModal extends LitElement {
     }
 
     .btn-danger {
-      color: var(--color-danger, #ef4444);
+      color: var(--c-danger);
     }
 
     .btn-danger:hover {
-      background: rgba(239, 68, 68, 0.12);
-      border-color: var(--color-danger, #ef4444);
+      background: var(--c-danger-soft);
+      border-color: var(--c-danger);
     }
   `;
 

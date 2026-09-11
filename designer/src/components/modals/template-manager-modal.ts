@@ -64,9 +64,9 @@ export class PldTemplateManagerModal extends LitElement {
       gap: 4px;
       margin-bottom: 16px;
       padding: 3px;
-      background: var(--color-bg-deep, #0a0b10);
+      background: var(--c-bg);
       border-radius: 8px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
     }
 
     .tab {
@@ -75,7 +75,7 @@ export class PldTemplateManagerModal extends LitElement {
       text-align: center;
       border: none;
       background: transparent;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       font-size: 12px;
       cursor: pointer;
       border-radius: 6px;
@@ -85,13 +85,13 @@ export class PldTemplateManagerModal extends LitElement {
     }
 
     .tab.active {
-      background: var(--color-accent, #4f6ef7);
+      background: var(--c-brand);
       color: #fff;
     }
 
     .tab:hover:not(.active) {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     .template-grid {
@@ -104,8 +104,8 @@ export class PldTemplateManagerModal extends LitElement {
 
     .template-card {
       padding: 16px;
-      background: var(--color-bg-card, #1a1b25);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-surface-2);
+      border: 1px solid var(--c-border);
       border-radius: 10px;
       cursor: pointer;
       transition: all 0.2s;
@@ -113,21 +113,21 @@ export class PldTemplateManagerModal extends LitElement {
     }
 
     .template-card:hover {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
       transform: translateY(-1px);
-      box-shadow: 0 4px 16px rgba(79, 110, 247, 0.12);
+      box-shadow: var(--sh-md);
     }
 
     .tpl-name {
       font-size: 13px;
       font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       margin-bottom: 4px;
     }
 
     .tpl-meta {
       font-size: 10px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       display: flex;
       flex-direction: column;
       gap: 2px;
@@ -136,7 +136,7 @@ export class PldTemplateManagerModal extends LitElement {
     .tpl-elements {
       font-family: var(--font-mono, monospace);
       font-size: 9px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       margin-top: 6px;
     }
 
@@ -148,10 +148,10 @@ export class PldTemplateManagerModal extends LitElement {
 
     .tpl-btn {
       padding: 4px 10px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 4px;
-      background: var(--color-bg-deep, #0a0b10);
-      color: var(--color-text-dim, #8a8ca0);
+      background: var(--c-bg);
+      color: var(--c-text-subtle);
       font-size: 10px;
       cursor: pointer;
       font-family: inherit;
@@ -159,18 +159,18 @@ export class PldTemplateManagerModal extends LitElement {
     }
 
     .tpl-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     .tpl-btn.danger:hover {
-      color: var(--color-danger, #ef4444);
-      border-color: var(--color-danger, #ef4444);
+      color: var(--c-danger);
+      border-color: var(--c-danger);
     }
 
     .tpl-btn.primary {
-      background: var(--color-accent, #4f6ef7);
-      border-color: var(--color-accent, #4f6ef7);
+      background: var(--c-brand);
+      border-color: var(--c-brand);
       color: #fff;
     }
 
@@ -184,10 +184,10 @@ export class PldTemplateManagerModal extends LitElement {
     .import-area textarea {
       width: 100%;
       min-height: 250px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 8px;
-      color: var(--color-accent2, #22d3a7);
+      color: var(--c-success);
       font-family: var(--font-mono, monospace);
       font-size: 11px;
       line-height: 1.6;
@@ -198,7 +198,7 @@ export class PldTemplateManagerModal extends LitElement {
     }
 
     .import-area textarea:focus {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
     }
 
     .import-actions {
@@ -210,9 +210,9 @@ export class PldTemplateManagerModal extends LitElement {
     .btn {
       padding: 7px 16px;
       border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a);
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text, #e8e9f0);
+      border: 1px solid var(--c-border);
+      background: var(--c-surface-2);
+      color: var(--c-text);
       font-size: 12.5px;
       font-family: inherit;
       cursor: pointer;
@@ -221,19 +221,19 @@ export class PldTemplateManagerModal extends LitElement {
     }
 
     .btn:hover {
-      background: var(--color-bg-hover, #222430);
+      background: var(--c-surface-3);
     }
 
     .btn-primary {
-      background: var(--color-accent, #4f6ef7);
-      border-color: var(--color-accent, #4f6ef7);
+      background: var(--c-brand);
+      border-color: var(--c-brand);
       color: #fff;
     }
 
     .empty-msg {
       text-align: center;
       padding: 40px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       font-size: 12px;
     }
 
@@ -247,9 +247,9 @@ export class PldTemplateManagerModal extends LitElement {
     .tpl-btn:disabled:hover {
       opacity: 0.4;
       cursor: not-allowed;
-      background: var(--color-bg-deep, #0a0b10);
-      color: var(--color-text-dim, #8a8ca0);
-      border-color: var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      color: var(--c-text-subtle);
+      border-color: var(--c-border);
     }
 
     /* ─── Version history (#189) ─── */
@@ -266,13 +266,13 @@ export class PldTemplateManagerModal extends LitElement {
 
     .history {
       margin-top: 10px;
-      border-top: 1px solid var(--color-border, #2a2c3a);
+      border-top: 1px solid var(--c-border);
       padding-top: 8px;
     }
 
     .history-note {
       font-size: 10.5px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       margin-bottom: 6px;
       line-height: 1.5;
     }
@@ -283,13 +283,13 @@ export class PldTemplateManagerModal extends LitElement {
       gap: 8px;
       padding: 4px 0;
       font-size: 10.5px;
-      color: var(--color-text-dim, #8a8ca0);
-      border-bottom: 1px solid var(--color-bg-deep, #0a0b10);
+      color: var(--c-text-subtle);
+      border-bottom: 1px solid var(--c-bg);
     }
 
     .history-row .ver {
       font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       min-width: 34px;
     }
 
@@ -299,10 +299,10 @@ export class PldTemplateManagerModal extends LitElement {
     .ns-no-default-warning {
       padding: 10px 12px;
       margin-bottom: 10px;
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid var(--color-danger, #ef4444);
+      background: var(--c-danger-soft);
+      border: 1px solid var(--c-danger);
       border-radius: 8px;
-      color: var(--color-danger, #ef4444);
+      color: var(--c-danger);
       font-size: 11.5px;
       line-height: 1.5;
     }
@@ -590,7 +590,7 @@ export class PldTemplateManagerModal extends LitElement {
   private _renderImportExport() {
     return html`
       <div class="import-area">
-        <div style="font-size: 12px; color: var(--color-text-dim, #8a8ca0); margin-bottom: 4px;">
+        <div style="font-size: 12px; color: var(--c-text-subtle); margin-bottom: 4px;">
           Paste template JSON to import, or export current template:
         </div>
         <textarea

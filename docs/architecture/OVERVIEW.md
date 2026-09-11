@@ -44,6 +44,7 @@
 | Pagination | `services/pagination.service.ts` | row/height-based, role-aware |
 | Server preview | `services/netsuite-adapter.service.ts`, `components/modals/preview-modal.ts` | ส่ง XML ปัจจุบันไป `preview-live` และแสดง PDF blob ที่ BFO render จริง |
 | Editor | `components/canvas/band-view.ts`, `components/flow/flow-view.ts` | band/flow design surface |
+| UX system | `tokens/`, `components/layout/`, [`REDWOOD-UX.md`](REDWOOD-UX.md) | Oracle Redwood tokens, workspace shell, responsive rails and accessibility contract |
 | Models | `models/element.ts`, `models/template.ts` | 8 element types, 6 roles |
 
 ## สถานะ architecture ปัจจุบันและหลักฐานที่ยังขาด
@@ -60,3 +61,6 @@
 5. **ข้อจำกัด BFO ถูกกันที่ exporter/lint/validator**: ห้าม C-ternary, binding ที่ไม่ null-safe
    หรือไม่ escape, `counter(page)`, `object-fit` และ `text-overflow`. การผ่าน local test ไม่แทน
    FreeMarker/BFO render จริงบน sandbox.
+6. **Designer UX ใช้ Oracle Redwood contract**: light theme เป็นค่าเริ่มต้น, shell แยก top bar /
+   context bar / tool rail / canvas / inspector และจอ `1023px` ลงไปเปลี่ยน rail เป็น drawer.
+   Lit + shadow DOM ยังเป็น runtime เดิมและไม่มีการนำ generator หรือ render path ใหม่เข้ามา.

@@ -8,25 +8,25 @@
 /* ─── Tailwind Theme Extensions ─── */
 @theme {
   /* Surface colors */
-  --color-surface-deep:    #0a0b10;
-  --color-surface-panel:   #12131a;
-  --color-surface-card:    #1a1b25;
-  --color-surface-hover:   #222430;
-  --color-surface-element: #282a38;
+  --color-surface-deep:    #f5f4f2;
+  --color-surface-panel:   #ffffff;
+  --color-surface-card:    #fbf9f8;
+  --color-surface-hover:   #f1efed;
+  --color-surface-element: #f1efed;
 
   /* Accent colors */
-  --color-accent:       #4f6ef7;
-  --color-accent-green: #22d3a7;
-  --color-accent-orange:#f59e42;
-  --color-accent-pink:  #e74c8b;
+  --color-accent:       #36677d;
+  --color-accent-green: #436b1d;
+  --color-accent-orange:#8f520a;
+  --color-accent-pink:  #b3311f;
 
   /* Text colors */
-  --color-txt:       #e8e9f0;
-  --color-txt-dim:   #8a8ca0;
-  --color-txt-muted: #5c5e72;
+  --color-txt:       #161513;
+  --color-txt-dim:   #4f4b47;
+  --color-txt-muted: #5f5b57;
 
   /* Font families */
-  --font-sans:  'DM Sans', system-ui, sans-serif;
+  --font-sans:  'Oracle Sans', 'Noto Sans Thai', 'Leelawadee UI', system-ui, sans-serif;
   --font-mono:  'JetBrains Mono', monospace;
   --font-serif: 'Playfair Display', serif;
   --font-thai:  'Sarabun', sans-serif;

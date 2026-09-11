@@ -33,9 +33,9 @@ const TYPE_ICONS: Record<ElementType, string> = {
 
 /** Role badge colors */
 const ROLE_COLORS: Record<ElementRoleType, string> = {
-  header:    '#4f6ef7',
-  content:   '#22d3a7',
-  table:     '#f59e42',
+  header:    '#36677d',
+  content:   '#436b1d',
+  table:     '#8f520a',
   summary:   '#8b5cf6',
   footer:    '#64748b',
   watermark: '#94a3b8',
@@ -127,13 +127,13 @@ export class PldLayersPanel extends LitElement {
     }
 
     .layer-item.selected {
-      background: rgba(79, 110, 247, 0.06);
+      background: var(--c-brand-soft);
       border-left-color: var(--color-accent);
     }
 
     .layer-item.multi-selected {
-      background: rgba(79, 110, 247, 0.04);
-      border-left-color: rgba(79, 110, 247, 0.4);
+      background: var(--c-brand-soft);
+      border-left-color: var(--c-brand);
     }
 
     .layer-item.locked {
@@ -181,14 +181,13 @@ export class PldLayersPanel extends LitElement {
       transition: background 0.15s;
     }
 
-    .type-icon.header  { background: rgba(79, 110, 247, 0.18);  color: var(--color-accent); }
-    .type-icon.text    { background: rgba(79, 110, 247, 0.12);  color: var(--color-accent); }
-    .type-icon.image   { background: rgba(34, 211, 167, 0.15);  color: var(--color-accent2); }
-    .type-icon.table   { background: rgba(245, 158, 66, 0.15);  color: var(--color-accent3); }
-    .type-icon.shape   { background: rgba(231, 76, 139, 0.15);  color: var(--color-accent4); }
+    .type-icon.header, .type-icon.text { background: var(--c-brand-soft); color: var(--c-brand); }
+    .type-icon.image { background: var(--c-success-soft); color: var(--c-success); }
+    .type-icon.table { background: var(--c-warning-soft); color: var(--c-warning); }
+    .type-icon.shape { background: var(--c-danger-soft); color: var(--c-danger); }
     .type-icon.line    { background: rgba(138, 140, 160, 0.18);  color: var(--color-text-dim); }
-    .type-icon.barcode { background: rgba(245, 158, 66, 0.18);  color: var(--color-accent3); }
-    .type-icon.list    { background: rgba(34, 211, 167, 0.18);  color: var(--color-accent2); }
+    .type-icon.barcode { background: var(--c-warning-soft); color: var(--c-warning); }
+    .type-icon.list { background: var(--c-success-soft); color: var(--c-success); }
 
     /* ─── Layer Info ─── */
     .layer-info {

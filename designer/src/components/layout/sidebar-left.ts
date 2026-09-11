@@ -41,40 +41,38 @@ export class PldSidebarLeft extends LitElement {
 
   static styles = css`
     :host {
-      width: 280px;
-      background: var(--color-bg-panel);
-      border-right: 1px solid var(--color-border);
+      width: 100%;
+      background: var(--c-sidebar);
+      color: var(--c-sidebar-text);
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
       overflow: hidden;
-      animation: fadeIn 0.35s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
     }
 
     /* ─── Tab Bar ─── */
     .tab-bar {
       display: flex;
-      border-bottom: 1px solid var(--color-border);
+      min-height: 60px;
+      border-bottom: 1px solid var(--c-sidebar-border);
       flex-shrink: 0;
     }
 
     .tab {
       flex: 1;
-      padding: 8px 4px;
+      min-width: 0;
+      padding: var(--s-2) var(--s-1);
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
       text-align: center;
       cursor: pointer;
       font-size: 9px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.8px;
-      color: var(--color-text-muted);
-      border-bottom: 2px solid transparent;
-      transition: all 0.2s;
+      color: rgba(255, 255, 255, 0.72);
+      transition: background var(--transition-fast), color var(--transition-fast);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -83,13 +81,14 @@ export class PldSidebarLeft extends LitElement {
     }
 
     .tab:hover {
-      color: var(--color-text-dim);
-      background: var(--color-bg-hover);
+      color: var(--c-sidebar-text);
+      background: var(--c-sidebar-hover);
     }
 
     .tab.active {
-      color: var(--color-accent);
-      border-bottom-color: var(--color-accent);
+      color: var(--c-sidebar-text);
+      border-bottom-color: var(--c-sidebar-text);
+      background: var(--c-sidebar-active);
     }
 
     .tab-icon {
@@ -103,43 +102,44 @@ export class PldSidebarLeft extends LitElement {
       overflow-y: auto;
       overflow-x: hidden;
       min-height: 0;
+      background: var(--c-surface);
+      color: var(--c-text);
     }
 
     /* ─── Section ─── */
     .section {
-      padding: 14px;
-      border-bottom: 1px solid var(--color-border);
+      padding: var(--s-4);
+      border-bottom: 1px solid var(--c-border);
     }
 
     .section-title {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1.2px;
-      color: var(--color-text-muted);
-      margin-bottom: 10px;
+      font-size: var(--t-sm);
+      font-weight: var(--w-bold);
+      color: var(--c-text-subtle);
+      margin-bottom: var(--s-3);
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: var(--s-2);
     }
 
     /* ─── Element Grid ─── */
     .element-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 6px;
+      gap: var(--s-2);
     }
 
     .element-item {
-      padding: 10px 8px;
-      background: var(--color-bg-card);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
+      min-height: 64px;
+      padding: var(--s-2);
+      background: var(--c-surface-2);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-md);
       cursor: grab;
-      transition: all 0.2s;
+      transition: background var(--transition-fast), border-color var(--transition-fast);
       text-align: center;
       font-size: 11.5px;
-      color: var(--color-text-dim);
+      color: var(--c-text-subtle);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -148,67 +148,63 @@ export class PldSidebarLeft extends LitElement {
     }
 
     .element-item:hover {
-      border-color: var(--color-accent);
-      background: var(--color-bg-hover);
-      color: var(--color-text);
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(79, 110, 247, 0.15);
+      border-color: var(--c-brand);
+      background: var(--c-brand-soft);
+      color: var(--c-text);
     }
 
     .element-item:active {
       cursor: grabbing;
-      transform: scale(0.96);
+      background: var(--c-surface-3);
     }
 
     .el-icon {
       width: 28px;
       height: 28px;
-      border-radius: 6px;
+      border-radius: var(--r-md);
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 14px;
     }
 
-    .el-icon.header  { background: rgba(79, 110, 247, 0.2);  color: var(--color-accent); }
-    .el-icon.text    { background: rgba(79, 110, 247, 0.15); color: var(--color-accent); }
-    .el-icon.image   { background: rgba(34, 211, 167, 0.15); color: var(--color-accent2); }
-    .el-icon.table   { background: rgba(245, 158, 66, 0.15); color: var(--color-accent3); }
-    .el-icon.shape   { background: rgba(231, 76, 139, 0.15); color: var(--color-accent4); }
-    .el-icon.line    { background: rgba(138, 140, 160, 0.2); color: var(--color-text-dim); }
-    .el-icon.barcode { background: rgba(245, 158, 66, 0.2);  color: var(--color-accent3); }
-    .el-icon.list    { background: rgba(34, 211, 167, 0.2);  color: var(--color-accent2); }
+    .el-icon.header, .el-icon.text { background: var(--c-brand-soft); color: var(--c-brand); }
+    .el-icon.image, .el-icon.list { background: var(--c-success-soft); color: var(--c-success); }
+    .el-icon.table, .el-icon.barcode { background: var(--c-warning-soft); color: var(--c-warning); }
+    .el-icon.shape { background: var(--c-danger-soft); color: var(--c-danger); }
+    .el-icon.line { background: var(--c-surface-3); color: var(--c-text-subtle); }
 
     /* ─── Page Size Buttons ─── */
     .page-sizes {
       display: flex;
-      gap: 6px;
+      gap: var(--s-2);
       flex-wrap: wrap;
     }
 
     .page-size-btn {
-      padding: 5px 10px;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      background: var(--color-bg-card);
-      color: var(--color-text-dim);
-      font-size: 11px;
+      min-height: var(--btn-h);
+      padding: 0 var(--s-3);
+      border: 1px solid var(--c-border-control);
+      border-radius: var(--r-md);
+      background: var(--c-surface);
+      color: var(--c-text-subtle);
+      font-size: var(--t-sm);
       cursor: pointer;
-      transition: all 0.15s;
+      transition: background var(--transition-fast), border-color var(--transition-fast);
       font-family: inherit;
     }
 
     .page-size-btn.active,
     .page-size-btn:hover {
-      border-color: var(--color-accent);
-      color: var(--color-accent);
-      background: rgba(79, 110, 247, 0.08);
+      border-color: var(--c-brand);
+      color: var(--c-brand);
+      background: var(--c-brand-soft);
     }
 
     .orient-row {
       display: flex;
       gap: 8px;
-      margin-top: 10px;
+      margin-top: var(--s-3);
     }
 
     .orient-row .page-size-btn {
@@ -217,16 +213,30 @@ export class PldSidebarLeft extends LitElement {
 
     /* ─── Settings/Data Panel ─── */
     .panel-section {
-      padding: 14px;
-      border-bottom: 1px solid var(--color-border);
+      padding: var(--s-4);
+      border-bottom: 1px solid var(--c-border);
     }
 
     .data-panel {
-      padding: 14px;
+      padding: var(--s-4);
       flex: 1;
       display: flex;
       flex-direction: column;
       min-height: 0;
+    }
+
+    .tab:focus-visible,
+    .page-size-btn:focus-visible,
+    .element-item:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring-inverse);
+    }
+
+    .element-item:focus-visible,
+    .page-size-btn:focus-visible { box-shadow: var(--focus-ring); }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; }
     }
   `;
 
@@ -242,20 +252,22 @@ export class PldSidebarLeft extends LitElement {
   render() {
     return html`
       <!-- Tab Bar -->
-      <div class="tab-bar">
+      <div class="tab-bar" role="tablist" aria-label="เครื่องมือออกแบบ">
         ${TABS.map((t) => html`
-          <div
+          <button type="button"
             class="tab ${this.activeTab === t.id ? 'active' : ''}"
+            role="tab"
+            aria-selected=${this.activeTab === t.id}
             @click=${() => (this.activeTab = t.id)}
           >
-            <span class="tab-icon">${t.icon}</span>
+            <span class="tab-icon" aria-hidden="true">${t.icon}</span>
             ${t.label}
-          </div>
+          </button>
         `)}
       </div>
 
       <!-- Tab Content -->
-      <div class="tab-content">
+      <div class="tab-content" role="tabpanel">
         ${this._renderTabContent()}
       </div>
     `;
@@ -355,7 +367,8 @@ export class PldSidebarLeft extends LitElement {
 
   private _elItem(type: ElementType, icon: string, label: string) {
     return html`
-      <div class="element-item" draggable="true"
+      <div class="element-item" draggable="true" tabindex="0" role="button"
+        aria-label="ลาก ${label} ไปยังพื้นที่ออกแบบ"
         @dragstart=${(e: DragEvent) => this._onDragStart(e, type)}>
         <div class="el-icon ${type}">${icon}</div>
         <span>${label}</span>

@@ -68,22 +68,22 @@ export class PldBandView extends LitElement {
   }
 
   static styles = css`
-    :host { display: block; overflow: auto; height: 100%; padding: 20px; background: var(--color-bg-deep, #0a0b10); }
+    :host { display: block; overflow: auto; height: 100%; padding: 20px; background: var(--c-bg); }
     .doc { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
     .toolbar { display: flex; justify-content: flex-end; }
     .band { border: 1px solid var(--band-color, #2a2c3a); border-radius: 8px; overflow: hidden; }
     .band-head { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: color-mix(in srgb, var(--band-color) 16%, transparent); font-size: 12px; font-weight: 600; color: var(--band-color); }
     .band-head .sp { flex: 1; }
-    .band-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--color-bg-card, #1a1b25); }
+    .band-body { padding: var(--s-3); display: flex; flex-direction: column; gap: var(--s-2); background: var(--c-surface-2); }
     .rowwrap { display: flex; align-items: stretch; gap: 6px; }
     .row { display: flex; gap: 8px; flex: 1; }
     .rowtools { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
     .row-h {
       width: 48px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 4px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       font-size: 10px;
       padding: 2px 4px;
       font-family: inherit;
@@ -96,45 +96,45 @@ export class PldBandView extends LitElement {
       transition: background 0.1s;
     }
     .col-resizer:hover, .col-resizer:active {
-      background: var(--color-accent, #4f6ef7);
+      background: var(--c-brand);
     }
 
-    .cell { border: 1px dashed var(--color-border, #2a2c3a); border-radius: 6px; padding: 8px; min-height: 34px; display: flex; flex-direction: column; gap: 4px; }
-    .cell.drop { border-color: var(--band-color, #4f6ef7); border-style: solid; background: color-mix(in srgb, var(--band-color) 10%, transparent); }
+    .cell { border: 1px dashed var(--c-border); border-radius: 6px; padding: 8px; min-height: 34px; display: flex; flex-direction: column; gap: 4px; }
+    .cell.drop { border-color: var(--band-color, var(--c-brand)); border-style: solid; background: color-mix(in srgb, var(--band-color) 10%, transparent); }
     .cell.drop-deny, .empty-slot.drop-deny {
-      outline: 2px dashed var(--color-danger, #ef4444);
+      outline: 2px dashed var(--c-danger);
       outline-offset: -2px;
       cursor: not-allowed;
     }
-    .cell-w { display: flex; align-items: center; gap: 6px; font-size: 10px; font-family: var(--font-mono, monospace); color: var(--color-text-dim, #8a8ca0); }
+    .cell-w { display: flex; align-items: center; gap: 6px; font-size: 10px; font-family: var(--font-mono, monospace); color: var(--c-text-subtle); }
     .cell-w .sp { flex: 1; }
-    button { width: 22px; height: 22px; line-height: 1; border: 1px solid var(--color-border, #2a2c3a); border-radius: 4px; background: var(--color-bg-hover, #222430); color: var(--color-text, #e8e9f0); cursor: pointer; padding: 0; font-size: 12px; transition: background 0.1s, border-color 0.1s; }
-    button:hover:not(:disabled) { background: color-mix(in srgb, var(--band-color, #4f6ef7) 24%, var(--color-bg-hover, #222430)); border-color: var(--band-color, #4f6ef7); }
+    button { width: 22px; height: 22px; line-height: 1; border: 1px solid var(--c-border); border-radius: 4px; background: var(--c-surface-3); color: var(--c-text); cursor: pointer; padding: 0; font-size: 12px; transition: background 0.1s, border-color 0.1s; }
+    button:hover:not(:disabled) { background: color-mix(in srgb, var(--band-color, var(--c-brand)) 24%, var(--c-surface-3)); border-color: var(--band-color, var(--c-brand)); }
     button:disabled { opacity: .3; cursor: default; }
     button.wide { width: auto; padding: 0 10px; height: 24px; font-size: 11px; }
     /* Segmented groups (#124): width −/%/+ and the column merge/split ops read as
        two distinct control clusters instead of a dense button row. */
-    .wgroup, .cgroup { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--color-border, #2a2c3a); border-radius: 6px; background: var(--color-bg-deep, #0a0b10); }
+    .wgroup, .cgroup { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--c-border); border-radius: 6px; background: var(--c-bg); }
     .wgroup .pct { min-width: 32px; text-align: center; font-size: 10px; }
     .cell-w button { width: 20px; height: 20px; font-size: 11px; }
-    .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text, #e8e9f0); background: var(--color-bg-hover, #222430); border-radius: 4px; padding: 2px 4px 2px 6px; cursor: grab; border: 1px solid transparent; }
-    .chip.sel { border-color: var(--band-color, #4f6ef7); background: color-mix(in srgb, var(--band-color) 22%, transparent); }
+    .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--c-text); background: var(--c-surface-3); border-radius: 4px; padding: 2px 4px 2px 6px; cursor: grab; border: 1px solid transparent; }
+    .chip.sel { border-color: var(--band-color, var(--c-brand)); background: color-mix(in srgb, var(--band-color) 22%, transparent); }
     .chip[dragging] { opacity: .4; }
-    .chip .del { width: 18px; height: 18px; font-size: 10px; border-color: transparent; background: transparent; color: var(--color-text-dim, #8a8ca0); }
-    .chip .del:hover { color: #fff; background: #e74c8b; border-color: #e74c8b; }
+    .chip .del { width: 18px; height: 18px; font-size: 10px; border-color: transparent; background: transparent; color: var(--c-text-subtle); }
+    .chip .del:hover { color: var(--c-brand-on); background: var(--c-danger); border-color: var(--c-danger); }
     /* Destructive controls flush danger on hover, not on the neutral band tint. */
-    button.danger:hover:not(:disabled) { background: var(--color-danger, #ef4444); border-color: var(--color-danger, #ef4444); color: #fff; }
-    .chip .t { color: var(--color-text-dim, #8a8ca0); font-family: var(--font-mono, monospace); font-size: 10px; }
-    .empty { color: var(--color-text-dim, #8a8ca0); font-size: 13px; text-align: center; padding: 40px; }
+    button.danger:hover:not(:disabled) { background: var(--c-danger); border-color: var(--c-danger); color: #fff; }
+    .chip .t { color: var(--c-text-subtle); font-family: var(--font-mono, monospace); font-size: 10px; }
+    .empty { color: var(--c-text-subtle); font-size: 13px; text-align: center; padding: 40px; }
     .empty-slot { border-style: dashed; opacity: .7; }
     .empty-slot.drop { opacity: 1; border-style: solid; background: color-mix(in srgb, var(--band-color) 10%, transparent); }
-    .empty-slot .slot-hint { padding: 12px; text-align: center; font-size: 11px; color: var(--color-text-dim, #8a8ca0); }
+    .empty-slot .slot-hint { padding: 12px; text-align: center; font-size: 11px; color: var(--c-text-subtle); }
 
     /* Blank-doc onboarding CTA (#124) */
     .cta {
-      border: 1px solid var(--color-accent, #4f6ef7);
+      border: 1px solid var(--c-brand);
       border-radius: 10px;
-      background: color-mix(in srgb, var(--color-accent, #4f6ef7) 10%, transparent);
+      background: var(--c-brand-soft);
       padding: 20px 22px;
       display: flex;
       flex-direction: column;
@@ -142,15 +142,15 @@ export class PldBandView extends LitElement {
       align-items: center;
       text-align: center;
     }
-    .cta h3 { margin: 0; font-size: 15px; color: var(--color-text, #e8e9f0); }
-    .cta p { margin: 0 0 8px; font-size: 12px; color: var(--color-text-dim, #8a8ca0); max-width: 460px; }
+    .cta h3 { margin: 0; font-size: 15px; color: var(--c-text); }
+    .cta p { margin: 0 0 8px; font-size: 12px; color: var(--c-text-subtle); max-width: 460px; }
     .cta-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
     .cta button {
       width: auto; height: auto; padding: 8px 16px; font-size: 13px; border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a); background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0); cursor: pointer;
+      border: 1px solid var(--c-border); background: var(--c-surface-3);
+      color: var(--c-text); cursor: pointer;
     }
-    .cta button.primary { border-color: var(--color-accent, #4f6ef7); background: var(--color-accent, #4f6ef7); color: #fff; font-weight: 600; }
+    .cta button.primary { border-color: var(--c-brand); background: var(--c-brand); color: var(--c-brand-on); font-weight: var(--w-semibold); }
     .cta button:hover { filter: brightness(1.1); }
   `;
 

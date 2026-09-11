@@ -17,27 +17,28 @@ export class ErrorBoundary extends LitElement {
       align-items: center;
       justify-content: center;
       padding: 12px;
-      background: #1a1a2e;
-      border: 1px dashed #e74c3c;
-      border-radius: 6px;
-      color: #e74c3c;
-      font-size: 11px;
-      font-family: monospace;
+      background: var(--c-danger-soft);
+      border: 1px solid var(--c-danger);
+      border-radius: var(--r-md);
+      color: var(--c-danger);
+      font-size: var(--t-sm);
+      font-family: var(--f-sans);
       gap: 8px;
       min-height: 40px;
     }
     .error-fallback button {
       padding: 4px 8px;
       background: transparent;
-      border: 1px solid #e74c3c;
-      border-radius: 4px;
-      color: #e74c3c;
+      min-height: var(--btn-h);
+      border: 1px solid var(--c-danger);
+      border-radius: var(--r-md);
+      color: var(--c-danger);
       cursor: pointer;
       font-size: 11px;
     }
     .error-fallback button:hover {
-      background: #e74c3c;
-      color: white;
+      background: var(--c-danger);
+      color: var(--c-brand-on);
     }
   `;
 

@@ -24,7 +24,7 @@ export class PldDataForm extends LitElement {
     /* ─── Group (section) ─── */
     .group {
       padding: 10px 0;
-      border-bottom: 1px solid var(--color-border, #2a2c3a);
+      border-bottom: 1px solid var(--c-border);
     }
 
     .group:last-child {
@@ -36,7 +36,7 @@ export class PldDataForm extends LitElement {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       margin-bottom: 8px;
       display: flex;
       align-items: center;
@@ -46,7 +46,7 @@ export class PldDataForm extends LitElement {
     }
 
     .group-title:hover {
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     /* ─── Field rows ─── */
@@ -66,16 +66,16 @@ export class PldDataForm extends LitElement {
 
     .field label {
       font-size: 10px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       text-transform: capitalize;
     }
 
     input, textarea {
       padding: 5px 8px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: var(--radius-sm, 4px);
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       font-size: 11px;
       font-family: var(--font-mono, monospace);
       outline: none;
@@ -84,7 +84,7 @@ export class PldDataForm extends LitElement {
     }
 
     input:focus, textarea:focus {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
     }
 
     textarea {
@@ -107,9 +107,9 @@ export class PldDataForm extends LitElement {
 
     .array-table th {
       padding: 4px 6px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
-      color: var(--color-text-dim, #8a8ca0);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
+      color: var(--c-text-subtle);
       font-weight: 600;
       text-transform: capitalize;
       text-align: left;
@@ -120,7 +120,7 @@ export class PldDataForm extends LitElement {
 
     .array-table td {
       padding: 2px 3px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       vertical-align: top;
     }
 
@@ -133,13 +133,13 @@ export class PldDataForm extends LitElement {
     }
 
     .array-table input:focus {
-      background: var(--color-bg-deep, #0a0b10);
+      background: var(--c-bg);
       border: none;
-      outline: 1px solid var(--color-accent, #4f6ef7);
+      outline: 1px solid var(--c-brand);
     }
 
     .row-num {
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       font-size: 9px;
       text-align: center;
       width: 24px;
@@ -149,7 +149,7 @@ export class PldDataForm extends LitElement {
     .del-btn {
       background: none;
       border: none;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       cursor: pointer;
       font-size: 11px;
       padding: 2px 4px;
@@ -159,8 +159,8 @@ export class PldDataForm extends LitElement {
     }
 
     .del-btn:hover {
-      color: var(--color-danger, #ef4444);
-      background: rgba(239, 68, 68, 0.1);
+      color: var(--c-danger);
+      background: var(--c-danger-soft);
     }
 
     .array-actions {
@@ -171,10 +171,10 @@ export class PldDataForm extends LitElement {
 
     .small-btn {
       padding: 3px 10px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 4px;
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
+      background: var(--c-surface-2);
+      color: var(--c-text-subtle);
       font-size: 10px;
       cursor: pointer;
       font-family: inherit;
@@ -182,15 +182,15 @@ export class PldDataForm extends LitElement {
     }
 
     .small-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     /* ─── Empty state ─── */
     .empty {
       text-align: center;
       padding: 30px 14px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       font-size: 11px;
       line-height: 1.6;
     }
@@ -199,14 +199,14 @@ export class PldDataForm extends LitElement {
     .sample-btn {
       padding: 6px 12px;
       border-radius: 6px;
-      border: 1px solid var(--color-accent, #4f6ef7);
+      border: 1px solid var(--c-brand);
       background: transparent;
-      color: var(--color-accent, #4f6ef7);
+      color: var(--c-brand);
       font-family: inherit;
       font-size: 12px;
       cursor: pointer;
     }
-    .sample-btn:hover { background: rgba(79, 110, 247, 0.12); }
+    .sample-btn:hover { background: var(--c-brand-soft); }
 
     .top-field {
       padding: 6px 0;
@@ -277,7 +277,7 @@ export class PldDataForm extends LitElement {
                   <textarea
                     readonly
                     .value=${JSON.stringify(subVal, null, 2)}
-                    style="min-height: 50px; color: var(--color-text-muted, #5c5e72);"
+                    style="min-height: 50px; color: var(--c-text-muted);"
                   ></textarea>
                 </div>
               </div>

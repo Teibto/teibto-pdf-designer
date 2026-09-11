@@ -48,7 +48,7 @@ export class PldPaginationPanel extends LitElement {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1.2px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       margin-bottom: 8px;
       display: flex;
       align-items: center;
@@ -60,9 +60,9 @@ export class PldPaginationPanel extends LitElement {
       gap: 4px;
       margin-bottom: 10px;
       padding: 2px;
-      background: var(--color-bg-deep, #0a0b10);
+      background: var(--c-bg);
       border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
     }
 
     .mode-btn {
@@ -71,7 +71,7 @@ export class PldPaginationPanel extends LitElement {
       text-align: center;
       border: none;
       background: transparent;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       font-size: 10.5px;
       cursor: pointer;
       border-radius: 4px;
@@ -80,7 +80,7 @@ export class PldPaginationPanel extends LitElement {
     }
 
     .mode-btn.active {
-      background: var(--color-accent, #4f6ef7);
+      background: var(--c-brand);
       color: #fff;
     }
 
@@ -100,21 +100,21 @@ export class PldPaginationPanel extends LitElement {
 
     .field label {
       font-size: 9px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     .field label[title] {
       cursor: help;
-      border-bottom: 1px dotted var(--color-text-dim, #8a8ca0);
+      border-bottom: 1px dotted var(--c-text-subtle);
       display: inline;
     }
 
     .field input {
       padding: 5px 6px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 4px;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       font-size: 11px;
       font-family: var(--font-mono, monospace);
       outline: none;
@@ -122,7 +122,7 @@ export class PldPaginationPanel extends LitElement {
     }
 
     .field input:focus {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
     }
 
     .check-item {
@@ -130,29 +130,29 @@ export class PldPaginationPanel extends LitElement {
       align-items: center;
       gap: 6px;
       font-size: 10.5px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       cursor: pointer;
       margin-top: 6px;
     }
 
     .check-item input {
-      accent-color: var(--color-accent, #4f6ef7);
+      accent-color: var(--c-brand);
       width: 13px;
       height: 13px;
       cursor: pointer;
     }
 
     .divider {
-      border-top: 1px solid var(--color-border, #2a2c3a);
+      border-top: 1px solid var(--c-border);
       margin: 10px 0 8px;
     }
 
     .field select {
       padding: 5px 6px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 4px;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       font-size: 11px;
       font-family: inherit;
       outline: none;
@@ -161,7 +161,7 @@ export class PldPaginationPanel extends LitElement {
     }
 
     .field select:focus {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
     }
 
     .section-header {
@@ -180,7 +180,7 @@ export class PldPaginationPanel extends LitElement {
     .collapse-icon {
       font-size: 8px;
       transition: transform 0.15s;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     .collapse-icon.open {
@@ -306,7 +306,7 @@ export class PldPaginationPanel extends LitElement {
       <div class="field-row">
         <button class="mode-btn" @click=${this._addCopy}>+ เพิ่มสำเนา</button>
         ${!(this.store.state.copies ?? []).length
-          ? html`<span style="font-size:10px; color: var(--color-text-muted, #5c5e72); align-self:center;">
+          ? html`<span style="font-size:10px; color: var(--c-text-muted); align-self:center;">
               default: invoice = ต้นฉบับ+สำเนา, อื่น ๆ = ชุดเดียว</span>`
           : nothing}
       </div>

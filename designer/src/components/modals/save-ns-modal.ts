@@ -46,18 +46,18 @@ export class PldSaveNsModal extends LitElement {
 
   static styles = css`
     .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-    label { font-size: 13px; font-weight: 600; color: var(--color-text, #e8e9f0); }
+    label { font-size: 13px; font-weight: 600; color: var(--c-text); }
     select {
       padding: 8px 10px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 6px;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       font-family: inherit;
       font-size: 13px;
     }
     .check-item { display: flex; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
-    .hint { font-size: 12px; color: var(--color-text-dim, #8a8ca0); line-height: 1.5; }
+    .hint { font-size: 12px; color: var(--c-text-subtle); line-height: 1.5; }
     .no-default-hint {
       font-size: 12px;
       line-height: 1.5;
@@ -80,11 +80,11 @@ export class PldSaveNsModal extends LitElement {
     }
     .footer-btns { display: flex; gap: 8px; justify-content: flex-end; }
     .btn {
-      padding: 8px 16px; border-radius: 6px; border: 1px solid var(--color-border, #2a2c3a);
-      background: var(--color-bg-hover, #222430); color: var(--color-text, #e8e9f0);
+      padding: 8px 16px; border-radius: 6px; border: 1px solid var(--c-border);
+      background: var(--c-surface-3); color: var(--c-text);
       cursor: pointer; font-size: 13px; font-family: inherit;
     }
-    .btn-primary { background: var(--color-accent, #4f6ef7); border-color: var(--color-accent, #4f6ef7); color: #fff; }
+    .btn-primary { background: var(--c-brand); border-color: var(--c-brand); color: #fff; }
     .btn:disabled { opacity: .5; cursor: default; }
   `;
 

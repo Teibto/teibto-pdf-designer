@@ -65,9 +65,9 @@ export class PldBfoExportModal extends LitElement {
       line-height: 1.6;
     }
     .lint-box.err {
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid var(--color-danger, #ef4444);
-      color: var(--color-danger, #ef4444);
+      background: var(--c-danger-soft);
+      border: 1px solid var(--c-danger);
+      color: var(--c-danger);
     }
     .lint-box.warn {
       background: rgba(245, 166, 35, 0.1);
@@ -77,22 +77,22 @@ export class PldBfoExportModal extends LitElement {
     .lint-box.ok {
       background: rgba(34, 197, 94, 0.08);
       border: 1px solid rgba(34, 197, 94, 0.5);
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
     .lint-box h4 { margin: 0 0 6px; font-size: 12px; }
     .lint-box ul { margin: 0; padding-left: 18px; }
     .lint-box li { margin-bottom: 4px; }
-    .lint-box .fix { color: var(--color-text-dim, #8a8ca0); }
+    .lint-box .fix { color: var(--c-text-subtle); }
     .lint-box code { font-size: 11px; }
 
     /* ฟอนต์ไทยไม่ได้ตั้งใน config (#156) — เตือนก่อนที่ผู้ใช้จะไปเจอ PDF ที่ไทยหาย */
     .font-warn {
       margin: 0 0 16px;
       padding: 10px 12px;
-      border: 1px solid var(--color-accent3, #f59e42);
+      border: 1px solid var(--c-warning);
       border-radius: 6px;
-      background: rgba(245, 158, 66, 0.08);
-      color: var(--color-accent3, #f59e42);
+      background: var(--c-warning-soft);
+      color: var(--c-warning);
       font-size: 12px;
       line-height: 1.6;
     }
@@ -106,7 +106,7 @@ export class PldBfoExportModal extends LitElement {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       margin-bottom: 8px;
     }
 
@@ -126,15 +126,15 @@ export class PldBfoExportModal extends LitElement {
 
     .config-field label {
       font-size: 10px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     .config-field select {
       padding: 8px 10px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 6px;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       font-size: 12px;
       font-family: inherit;
       outline: none;
@@ -142,7 +142,7 @@ export class PldBfoExportModal extends LitElement {
     }
 
     .config-field select:focus {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
     }
 
     .check-group {
@@ -155,12 +155,12 @@ export class PldBfoExportModal extends LitElement {
       align-items: center;
       gap: 6px;
       font-size: 11.5px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       cursor: pointer;
     }
 
     .check-item input {
-      accent-color: var(--color-accent, #4f6ef7);
+      accent-color: var(--c-brand);
       width: 14px;
       height: 14px;
       cursor: pointer;
@@ -181,7 +181,7 @@ export class PldBfoExportModal extends LitElement {
     .xml-toolbar h3 {
       font-size: 12px;
       font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       margin: 0;
     }
 
@@ -192,10 +192,10 @@ export class PldBfoExportModal extends LitElement {
 
     .small-btn {
       padding: 4px 10px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 5px;
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
+      background: var(--c-surface-2);
+      color: var(--c-text-subtle);
       font-size: 10px;
       cursor: pointer;
       font-family: inherit;
@@ -203,18 +203,18 @@ export class PldBfoExportModal extends LitElement {
     }
 
     .small-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     .xml-code {
       width: 100%;
       min-height: 350px;
       max-height: 450px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 8px;
-      color: var(--color-accent2, #22d3a7);
+      color: var(--c-success);
       font-family: var(--font-mono, monospace);
       font-size: 11px;
       line-height: 1.6;
@@ -230,14 +230,14 @@ export class PldBfoExportModal extends LitElement {
     .info-panel {
       margin-top: 12px;
       padding: 10px 14px;
-      background: rgba(79, 110, 247, 0.06);
-      border: 1px solid rgba(79, 110, 247, 0.15);
+      background: var(--c-brand-soft);
+      border: 1px solid var(--c-brand);
       border-radius: 8px;
     }
 
     .info-panel p {
       font-size: 11px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       margin: 4px 0;
       line-height: 1.6;
     }
@@ -245,8 +245,8 @@ export class PldBfoExportModal extends LitElement {
     .info-panel code {
       font-family: var(--font-mono, monospace);
       font-size: 10px;
-      color: var(--color-accent, #4f6ef7);
-      background: var(--color-bg-deep, #0a0b10);
+      color: var(--c-brand);
+      background: var(--c-bg);
       padding: 1px 4px;
       border-radius: 3px;
     }
@@ -261,9 +261,9 @@ export class PldBfoExportModal extends LitElement {
     .btn {
       padding: 7px 16px;
       border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a);
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text, #e8e9f0);
+      border: 1px solid var(--c-border);
+      background: var(--c-surface-2);
+      color: var(--c-text);
       font-size: 12.5px;
       font-family: inherit;
       cursor: pointer;
@@ -271,10 +271,10 @@ export class PldBfoExportModal extends LitElement {
       transition: all 0.15s;
     }
 
-    .btn:hover { background: var(--color-bg-hover, #222430); }
+    .btn:hover { background: var(--c-surface-3); }
 
     .btn-bfo {
-      background: linear-gradient(135deg, #f59e42, #e74c8b);
+      background: var(--c-brand);
       border: none;
       color: #fff;
     }

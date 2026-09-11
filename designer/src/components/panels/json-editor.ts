@@ -88,7 +88,7 @@ export class PldJsonEditor extends LitElement {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1.2px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
     }
 
     .badge {
@@ -99,21 +99,21 @@ export class PldJsonEditor extends LitElement {
     }
 
     .badge.valid {
-      background: rgba(34, 211, 167, 0.12);
-      color: var(--color-accent2, #22d3a7);
-      border: 1px solid rgba(34, 211, 167, 0.2);
+      background: var(--c-success-soft);
+      color: var(--c-success);
+      border: 1px solid var(--c-success);
     }
 
     .badge.invalid {
-      background: rgba(239, 68, 68, 0.12);
-      color: var(--color-danger, #ef4444);
-      border: 1px solid rgba(239, 68, 68, 0.2);
+      background: var(--c-danger-soft);
+      color: var(--c-danger);
+      border: 1px solid var(--c-danger);
     }
 
     .badge.keys {
-      background: rgba(79, 110, 247, 0.1);
-      color: var(--color-accent, #4f6ef7);
-      border: 1px solid rgba(79, 110, 247, 0.2);
+      background: var(--c-brand-soft);
+      color: var(--c-brand);
+      border: 1px solid var(--c-brand);
     }
 
     .actions {
@@ -123,10 +123,10 @@ export class PldJsonEditor extends LitElement {
 
     .small-btn {
       padding: 3px 8px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 4px;
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
+      background: var(--c-surface-2);
+      color: var(--c-text-subtle);
       font-size: 9px;
       cursor: pointer;
       font-family: inherit;
@@ -134,8 +134,8 @@ export class PldJsonEditor extends LitElement {
     }
 
     .small-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     /* ─── View Toggle ─── */
@@ -144,9 +144,9 @@ export class PldJsonEditor extends LitElement {
       gap: 2px;
       margin-bottom: 8px;
       padding: 2px;
-      background: var(--color-bg-deep, #0a0b10);
+      background: var(--c-bg);
       border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
     }
 
     .view-btn {
@@ -154,7 +154,7 @@ export class PldJsonEditor extends LitElement {
       padding: 5px 8px;
       border: none;
       background: transparent;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       font-size: 10px;
       font-weight: 500;
       cursor: pointer;
@@ -164,23 +164,23 @@ export class PldJsonEditor extends LitElement {
     }
 
     .view-btn.active {
-      background: var(--color-accent, #4f6ef7);
+      background: var(--c-brand);
       color: #fff;
     }
 
     .view-btn:hover:not(.active) {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     /* ─── JSON textarea ─── */
     textarea {
       width: 100%;
       min-height: 120px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 6px;
-      color: var(--color-accent2, #22d3a7);
+      color: var(--c-success);
       font-family: var(--font-mono, monospace);
       font-size: 10.5px;
       line-height: 1.6;
@@ -191,11 +191,11 @@ export class PldJsonEditor extends LitElement {
     }
 
     textarea:focus {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
     }
 
     textarea.invalid {
-      border-color: var(--color-danger, #ef4444);
+      border-color: var(--c-danger);
     }
 
     .expand-toggle {
@@ -203,12 +203,12 @@ export class PldJsonEditor extends LitElement {
       padding: 4px;
       cursor: pointer;
       font-size: 10px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
       transition: color 0.15s;
     }
 
     .expand-toggle:hover {
-      color: var(--color-accent, #4f6ef7);
+      color: var(--c-brand);
     }
 
     /* ─── Form scroll area ─── */

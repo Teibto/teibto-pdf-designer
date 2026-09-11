@@ -1,8 +1,10 @@
 /**
- * <pld-header>
- * Application header toolbar with view switcher and action buttons.
+ * <pld-header> — Oracle Redwood workspace top bar.
+ * Keeps editor actions and events stable while presenting one primary action,
+ * a compact view switcher and a disclosure menu for secondary tools.
  *
  * @author Wichit Wongta
+ * @since 2026-09-11
  */
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
@@ -18,248 +20,298 @@ export class PldHeader extends LitElement {
   private store!: AppStore;
 
   @state() private activeView: 'design' | 'flow' = 'design';
-
   @state() private theme: Theme = getTheme();
 
-  /**
-   * บทบาทนี้แก้เทมเพลตบน NetSuite ไม่ได้ (#189) — ปิดปุ่มที่จะถูกปฏิเสธอยู่ดี
-   * แทนที่จะให้ผู้ใช้ออกแบบเสร็จแล้วค่อยเจอ error ตอนกดบันทึก
-   */
   private get readOnly(): boolean {
     return isNetSuiteEnv() && !canEditNsTemplates();
   }
 
   static styles = css`
     :host {
+      min-height: var(--layout-topbar);
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 0 20px;
-      height: 54px;
-      background: var(--color-bg-panel);
-      border-bottom: 1px solid var(--color-border);
+      gap: var(--s-3);
+      padding: 0 var(--s-4);
+      background: var(--c-surface);
+      color: var(--c-text);
+      border-bottom: 1px solid var(--c-border);
+      box-shadow: var(--sh-sm);
       flex-shrink: 0;
       z-index: var(--z-overlay);
+      font-family: var(--f-sans);
     }
 
-    .logo-area {
+    button, summary {
+      font: inherit;
+      color: inherit;
+    }
+
+    .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: var(--s-2);
+      min-width: 214px;
     }
 
-    .logo-icon {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, var(--color-accent), var(--color-accent2));
-      border-radius: 8px;
+    .mark {
+      width: var(--s-8);
+      height: var(--s-8);
+      flex: none;
+      display: grid;
+      place-items: center;
+      border-radius: var(--r-md);
+      background: var(--c-brand);
+      color: var(--c-brand-on);
+      font-size: var(--t-sm);
+      font-weight: var(--w-bold);
+      letter-spacing: -0.02em;
+    }
+
+    .brand-copy {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      font-size: 14px;
-      color: #fff;
-      letter-spacing: -0.5px;
-    }
-
-    .logo-text {
-      font-family: var(--font-serif);
-      font-size: 18px;
-      font-weight: 700;
-      background: linear-gradient(135deg, var(--color-text), var(--color-accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    /* Tab Group */
-    .tab-group {
-      display: flex;
-      background: var(--color-bg-card);
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--color-border);
-      overflow: hidden;
-    }
-
-    .tab-btn {
-      padding: 7px 16px;
-      background: transparent;
-      border: none;
-      color: var(--color-text-dim);
-      font-size: 12.5px;
-      font-family: inherit;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-weight: 500;
-    }
-
-    .tab-btn.active {
-      color: var(--color-text);
-      background: var(--color-accent);
-    }
-
-    .tab-btn:hover:not(.active) {
-      color: var(--color-text);
-      background: var(--color-bg-hover);
-    }
-
-    /* Action Buttons */
-    .actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .btn {
-      padding: 7px 16px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--color-border);
-      background: var(--color-bg-card);
-      color: var(--color-text);
-      font-size: 12.5px;
-      font-family: inherit;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 500;
-    }
-
-    .btn:hover {
-      background: var(--color-bg-hover);
-      border-color: var(--color-text-muted);
-    }
-
-    .btn-sm {
-      padding: 5px 10px;
-      font-size: 11.5px;
-    }
-
-    .btn:disabled,
-    .btn:disabled:hover {
-      opacity: 0.45;
-      cursor: not-allowed;
-      background: var(--color-bg-card);
-      border-color: var(--color-border);
-    }
-
-    .read-only-badge {
-      display: flex;
-      align-items: center;
-      padding: 5px 10px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--color-border);
-      color: var(--color-text-muted);
-      font-size: 11.5px;
-      cursor: help;
+      flex-direction: column;
+      line-height: var(--lh-tight);
       white-space: nowrap;
     }
 
-    .btn-primary {
-      background: var(--color-accent);
-      border-color: var(--color-accent);
-      color: #fff;
+    .brand-copy strong { font-size: var(--t-md); font-weight: var(--w-bold); }
+    .brand-copy small { font-size: var(--t-xs); color: var(--c-text-muted); }
+
+    .iconbtn {
+      width: var(--tap-min);
+      height: var(--tap-min);
+      flex: none;
+      display: inline-grid;
+      place-items: center;
+      border: 0;
+      border-radius: var(--r-md);
+      background: transparent;
+      cursor: pointer;
+      font-size: var(--t-lg);
     }
 
-    .btn-primary:hover {
-      background: #3d5ce5;
+    .iconbtn:hover { background: var(--c-surface-3); }
+
+    .view-tabs {
+      display: inline-flex;
+      align-self: stretch;
+      gap: var(--s-1);
+      margin-left: var(--s-2);
     }
 
-    .btn-success {
-      background: var(--color-accent2);
-      border-color: var(--color-accent2);
-      color: #0a0b10;
+    .tab {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--s-2);
+      padding: 0 var(--s-3);
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--c-text-muted);
+      font-size: var(--t-base);
+      font-weight: var(--w-semibold);
+      cursor: pointer;
+      white-space: nowrap;
     }
 
-    .btn-success:hover {
-      opacity: 0.9;
+    .tab:hover { color: var(--c-text); background: var(--c-surface-2); }
+    .tab[aria-selected="true"] { color: var(--c-brand); border-bottom-color: var(--c-brand); }
+
+    .actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+      min-width: 0;
     }
 
-    .btn-bfo {
-      background: linear-gradient(135deg, #f59e42, #e74c8b);
-      border: none;
-      color: #fff;
+    .btn {
+      height: var(--btn-h);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--s-2);
+      padding: 0 var(--btn-px);
+      border: var(--bw-control) solid var(--c-border-control);
+      border-radius: var(--r-md);
+      background: var(--c-surface);
+      color: var(--c-text);
+      font-size: var(--t-sm);
+      font-weight: var(--w-semibold);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn:hover:not(:disabled) { background: var(--c-surface-3); }
+    .btn.primary { background: var(--c-brand); border-color: var(--c-brand); color: var(--c-brand-on); }
+    .btn.primary:hover:not(:disabled) { background: var(--c-brand-strong); border-color: var(--c-brand-strong); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .readonly {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 var(--s-2);
+      border-radius: var(--r-pill);
+      background: var(--c-surface-3);
+      color: var(--c-text-muted);
+      font-size: var(--t-xs);
+      white-space: nowrap;
+    }
+
+    details { position: relative; }
+    summary { list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+    .menu {
+      position: absolute;
+      z-index: var(--z-dropdown);
+      top: calc(100% + var(--s-1));
+      right: 0;
+      width: 248px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: var(--s-1);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-md);
+      background: var(--c-surface);
+      box-shadow: var(--sh-md);
+    }
+
+    .menu button {
+      min-height: var(--tap-min);
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+      padding: 0 var(--s-3);
+      border: 0;
+      border-radius: var(--r-sm);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font-size: var(--t-base);
+    }
+
+    .menu button:hover:not(:disabled) { background: var(--c-surface-3); }
+    .menu button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .menu-separator { height: 1px; margin: var(--s-1); background: var(--c-border); }
+    .mobile-only { display: none; }
+    .preview-short { display: none; }
+
+    button:focus-visible, summary:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    @media (max-width: 1180px) {
+      .brand { min-width: auto; }
+      .brand-copy small, .actions > .theme .label { display: none; }
+      .actions > .theme { width: var(--btn-h); padding: 0; }
+    }
+
+    @media (max-width: 860px) {
+      :host { padding: 0 var(--s-2); gap: var(--s-1); }
+      .mobile-only { display: inline-grid; }
+      .brand-copy { display: none; }
+      .view-tabs { margin-left: 0; }
+      .tab { padding: 0 var(--s-2); }
+      .actions > .templates, .actions > .save { display: none; }
+      .actions { gap: var(--s-1); }
+      .btn { padding-inline: var(--s-2); }
+    }
+
+    @media (max-width: 520px) {
+      .tab small, .actions > .theme { display: none; }
+      .tab { padding-inline: var(--s-2); font-size: var(--t-sm); }
+      .actions > .primary { width: var(--tap-min); min-width: var(--tap-min); padding: 0; }
+      .preview-full { display: none; }
+      .preview-short { display: inline; font-size: var(--t-lg); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
     }
   `;
 
   connectedCallback() {
     super.connectedCallback();
     this.store.addEventListener('state-changed', (e: Event) => {
-      const state = (e as StateChangedEvent).state;
-      this.activeView = state.view;
+      this.activeView = (e as StateChangedEvent).state.view;
     });
   }
 
   render() {
     return html`
-      <!-- Logo -->
-      <div class="logo-area">
-        <div class="logo-icon">PD</div>
-        <span class="logo-text">PDF Layout Designer</span>
+      <button class="iconbtn mobile-only" type="button" title="เครื่องมือ (Tools)"
+        aria-label="เปิดเครื่องมือ (Open tools)" @click=${() => this._emit('pld-toggle-left-panel')}>☰</button>
+
+      <div class="brand" aria-label="PDF Layout Designer">
+        <div class="mark" aria-hidden="true">PD</div>
+        <span class="brand-copy"><strong>PDF Layout Designer</strong><small>Oracle Redwood workspace</small></span>
       </div>
 
-      <!-- View Tabs -->
-      <div class="tab-group">
-        <button
-          class="tab-btn ${this.activeView === 'design' ? 'active' : ''}"
-          @click=${() => switchView(this.store, 'design')}
-        >
-          ◇ ออกแบบ
-        </button>
-        <button
-          class="tab-btn ${this.activeView === 'flow' ? 'active' : ''}"
-          @click=${() => switchView(this.store, 'flow')}
-        >
-          ⟁ ผังข้อมูล
-        </button>
+      <div class="view-tabs" role="tablist" aria-label="มุมมอง (Views)">
+        <button class="tab" role="tab" aria-selected=${this.activeView === 'design'}
+          @click=${() => switchView(this.store, 'design')}>ออกแบบ <small>Design</small></button>
+        <button class="tab" role="tab" aria-selected=${this.activeView === 'flow'}
+          @click=${() => switchView(this.store, 'flow')}>ผังข้อมูล <small>Flow</small></button>
       </div>
 
-      <!-- Actions -->
       <div class="actions">
-        <button class="btn btn-sm" @click=${this._onToggleTheme}
-          title="สลับธีม Dark / Light">
-          ${this.theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+        ${this.readOnly ? html`<span class="readonly read-only-badge" title=${READ_ONLY_REASON}>อ่านอย่างเดียว · Read only</span>` : nothing}
+        <button class="btn theme" type="button" @click=${this._onToggleTheme} title="สลับธีม (Toggle theme)">
+          <span aria-hidden="true">${this.theme === 'dark' ? '☀' : '◐'}</span>
+          <span class="label">${this.theme === 'dark' ? 'Light' : 'Dark'}</span>
         </button>
-        <button class="btn btn-sm" @click=${this._onTemplates}>📁 เทมเพลต</button>
-        <button class="btn btn-sm" @click=${this._onSave}
-          ?disabled=${this.readOnly}
-          title=${this.readOnly ? READ_ONLY_REASON : 'บันทึกเทมเพลต'}>
-          💾 บันทึก
+        <button class="btn templates" type="button" @click=${this._onTemplates}>เทมเพลต</button>
+        <button class="btn save" type="button" @click=${this._onSave} ?disabled=${this.readOnly}
+          title=${this.readOnly ? READ_ONLY_REASON : 'บันทึกเทมเพลต'}>บันทึก</button>
+        <button class="btn primary" type="button" aria-label="พรีวิว (Preview)" @click=${this._onPreview}>
+          <span class="preview-full">พรีวิว · Preview</span><span class="preview-short" aria-hidden="true">▷</span>
         </button>
-        ${isNetSuiteEnv() ? html`
-          <button class="btn btn-sm" ?disabled=${this.readOnly}
-            title=${this.readOnly ? READ_ONLY_REASON : 'เลือก record type + ตั้งเป็น default template'}
-            @click=${this._onSaveSettings}>⚙ ตั้งค่าการบันทึก</button>
-        ` : nothing}
-        ${this.readOnly ? html`
-          <span class="read-only-badge" title=${READ_ONLY_REASON}>🔒 อ่านอย่างเดียว</span>
-        ` : nothing}
-        <button class="btn btn-sm" @click=${this._onExportJson}>⟨/⟩ JSON</button>
-        <button class="btn btn-sm" @click=${this._onSample}>★ ตัวอย่าง</button>
-        <button class="btn btn-sm btn-bfo" @click=${this._onExportBfo}>🔶 NetSuite BFO</button>
-        <button class="btn btn-sm btn-primary" @click=${this._onPreview}>▶ พรีวิว</button>
-        <button class="btn btn-sm" title="คีย์ลัด (กด ?)" @click=${this._onShortcuts}>⌨</button>
+
+        <details>
+          <summary class="iconbtn" title="การทำงานเพิ่มเติม (More actions)" aria-label="การทำงานเพิ่มเติม">⋯</summary>
+          <div class="menu" @click=${this._closeMenu}>
+            <button type="button" @click=${this._onToggleTheme}>สลับเป็น ${this.theme === 'dark' ? 'Light' : 'Dark'} theme</button>
+            <div class="menu-separator"></div>
+            <button type="button" @click=${this._onTemplates}>เทมเพลต · Templates</button>
+            <button type="button" @click=${this._onSave} ?disabled=${this.readOnly}>บันทึก · Save</button>
+            ${isNetSuiteEnv() ? html`<button class="btn" type="button" @click=${this._onSaveSettings}
+              ?disabled=${this.readOnly}>ตั้งค่าการบันทึก · Save settings</button>` : nothing}
+            <div class="menu-separator"></div>
+            <button type="button" @click=${this._onSample}>โหลดตัวอย่าง · Sample</button>
+            <button type="button" @click=${this._onExportJson}>ส่งออก JSON · Export JSON</button>
+            <button type="button" @click=${this._onExportBfo}>ส่งออก NetSuite BFO</button>
+            <button type="button" @click=${this._onShortcuts}>คีย์ลัด · Shortcuts</button>
+          </div>
+        </details>
+
+        <button class="iconbtn mobile-only" type="button" title="คุณสมบัติ (Properties)"
+          aria-label="เปิดคุณสมบัติ (Open properties)" @click=${() => this._emit('pld-toggle-right-panel')}>☷</button>
       </div>
     `;
   }
 
-  // ─── Event dispatchers (bubbled to app-shell for modal handling) ───
   private _emit(name: string) {
-    this.dispatchEvent(
-      new CustomEvent(name, { bubbles: true, composed: true }),
-    );
+    this.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true }));
   }
 
-  private _onToggleTheme() { this.theme = toggleTheme(); }
+  private _closeMenu = (event: Event) => {
+    if (!(event.target as HTMLElement).closest('button')) return;
+    (event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
+  };
 
-  private _onTemplates() { this._emit('pld-show-templates'); }
-  private _onSave()      { this._emit('pld-save-template'); }
-  private _onSaveSettings() { this._emit('pld-show-save-ns'); }
-  private _onExportJson(){ this._emit('pld-show-export-json'); }
-  private _onSample()    { this._emit('pld-load-sample'); }
-  private _onExportBfo() { this._emit('pld-show-bfo-export'); }
-  private _onPreview()   { this._emit('pld-show-preview'); }
-  private _onShortcuts() { this._emit('pld-show-shortcuts'); }
+  private _onToggleTheme = () => { this.theme = toggleTheme(); };
+  private _onTemplates = () => { this._emit('pld-show-templates'); };
+  private _onSave = () => { this._emit('pld-save-template'); };
+  private _onSaveSettings = () => { this._emit('pld-show-save-ns'); };
+  private _onExportJson = () => { this._emit('pld-show-export-json'); };
+  private _onSample = () => { this._emit('pld-load-sample'); };
+  private _onExportBfo = () => { this._emit('pld-show-bfo-export'); };
+  private _onPreview = () => { this._emit('pld-show-preview'); };
+  private _onShortcuts = () => { this._emit('pld-show-shortcuts'); };
 }
 
 declare global {

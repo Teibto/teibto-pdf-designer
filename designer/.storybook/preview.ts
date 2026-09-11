@@ -4,11 +4,11 @@ const preview = {
     backgrounds: {
       options: {
         dark: { name: 'dark', value: '#12131d' },
-        light: { name: 'light', value: '#ffffff' },
+        light: { name: 'Oracle Redwood', value: '#f5f4f2' },
       },
     },
   },
-  initialGlobals: { backgrounds: { value: 'dark' } },
+  initialGlobals: { backgrounds: { value: 'light' } },
 };
 
 export default preview;

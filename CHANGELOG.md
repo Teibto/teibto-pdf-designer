@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- Adopt the Oracle Redwood workspace contract in the Lit designer: canonical semantic tokens and light default, 56px top bar, template context bar, navigation rail, canvas and property inspector, responsive drawers with scrim/Escape handling, accessible tab/toggle/dialog/toast states, reduced-motion support, and Storybook/E2E coverage.
 - Add native deployment selection with two on-demand render and two merge deployments, concurrency/buffer size 1 and Audit logging. Exact documented submission rejection preserves a signed WAITING state for explicit same-job retry; ambiguous outcomes remain fenced. Deferred merge handoff attempts a requester notification without claiming completion. Account capacity, extra deployments and native rejection behavior require sandbox verification.
 
 ### Production-readiness candidate (#199; sandbox acceptance pending)

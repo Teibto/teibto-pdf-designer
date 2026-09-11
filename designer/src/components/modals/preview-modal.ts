@@ -45,8 +45,8 @@ export class PldPreviewModal extends LitElement {
       justify-content: space-between;
       margin-bottom: 16px;
       padding: 8px 12px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 8px;
     }
 
@@ -59,10 +59,10 @@ export class PldPreviewModal extends LitElement {
     .nav-btn {
       width: 30px;
       height: 30px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 6px;
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
+      background: var(--c-surface-2);
+      color: var(--c-text-subtle);
       font-size: 14px;
       cursor: pointer;
       display: flex;
@@ -72,8 +72,8 @@ export class PldPreviewModal extends LitElement {
     }
 
     .nav-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     .nav-btn:disabled {
@@ -84,7 +84,7 @@ export class PldPreviewModal extends LitElement {
     .page-info {
       font-size: 12px;
       font-family: var(--font-mono, monospace);
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     .zoom-controls {
@@ -96,14 +96,14 @@ export class PldPreviewModal extends LitElement {
     .zoom-label {
       font-size: 11px;
       font-family: var(--font-mono, monospace);
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       min-width: 40px;
       text-align: center;
     }
 
     .export-btn {
       padding: 8px 20px;
-      background: linear-gradient(135deg, #22d3a7, #4f6ef7);
+      background: var(--c-brand);
       border: none;
       border-radius: 6px;
       color: #fff;
@@ -129,7 +129,7 @@ export class PldPreviewModal extends LitElement {
     .server-frame {
       width: 100%;
       height: 68vh;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 8px;
       background: #fff;
     }
@@ -141,15 +141,15 @@ export class PldPreviewModal extends LitElement {
       justify-content: center;
       gap: 14px;
       height: 68vh;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       font-size: 13px;
     }
 
     .server-status .spinner {
       width: 34px;
       height: 34px;
-      border: 3px solid var(--color-border, #2a2c3a);
-      border-top-color: #4f6ef7;
+      border: 3px solid var(--c-border);
+      border-top-color: var(--c-brand);
       border-radius: 50%;
       animation: pld-spin 0.8s linear infinite;
     }
@@ -166,7 +166,7 @@ export class PldPreviewModal extends LitElement {
 
     .server-hint {
       font-size: 11px;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     /* ─── Page Preview ─── */
@@ -176,7 +176,7 @@ export class PldPreviewModal extends LitElement {
       overflow: auto;
       max-height: 60vh;
       padding: 10px;
-      background: var(--color-bg-deep, #0a0b10);
+      background: var(--c-bg);
       border-radius: 8px;
     }
 
@@ -288,7 +288,7 @@ export class PldPreviewModal extends LitElement {
 
     .break-indicator .break-line {
       flex: 1;
-      border-top: 1.5px dashed var(--break-color, #e74c8b);
+      border-top: 1.5px dashed var(--break-color, #b3311f);
     }
 
     .break-indicator .break-label {
@@ -297,18 +297,18 @@ export class PldPreviewModal extends LitElement {
       letter-spacing: 0.5px;
       text-transform: uppercase;
       color: #fff;
-      background: var(--break-color, #e74c8b);
+      background: var(--break-color, #b3311f);
       padding: 1px 5px;
       border-radius: 3px;
       white-space: nowrap;
     }
 
     .break-indicator.force-break {
-      --break-color: #f59e42;
+      --break-color: var(--c-warning);
     }
 
     .break-indicator.page-end {
-      --break-color: #4f6ef7;
+      --break-color: var(--c-brand);
     }
 
     .continuation-badge {
@@ -320,9 +320,9 @@ export class PldPreviewModal extends LitElement {
       font-weight: 600;
       letter-spacing: 0.5px;
       text-transform: uppercase;
-      color: var(--color-text-dim, #8a8ca0);
-      background: rgba(79, 110, 247, 0.12);
-      border: 1px solid rgba(79, 110, 247, 0.25);
+      color: var(--c-text-subtle);
+      background: var(--c-brand-soft);
+      border: 1px solid var(--c-brand);
       padding: 1px 6px;
       border-radius: 3px;
       z-index: 9999;

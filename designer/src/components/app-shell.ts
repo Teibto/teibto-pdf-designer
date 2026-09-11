@@ -71,6 +71,8 @@ export class PldAppShell extends LitElement {
   }, 1500);
 
   @state() private view: 'design' | 'flow' = 'design';
+  @state() private leftPanelOpen = false;
+  @state() private rightPanelOpen = false;
 
   // Modal states
   @state() private showTemplateManager = false;
@@ -92,14 +94,48 @@ export class PldAppShell extends LitElement {
       flex-direction: column;
       height: 100vh;
       overflow: hidden;
-      font-family: var(--font-sans);
-      background: var(--color-bg-deep);
-      color: var(--color-text);
+      font-family: var(--f-sans);
+      background: var(--c-bg);
+      color: var(--c-text);
     }
 
     .main-content {
       flex: 1;
       display: flex;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .workspace-panel {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex: none;
+      min-width: 0;
+      background: var(--c-surface);
+    }
+
+    .workspace-panel.left { border-right: 1px solid var(--c-border); }
+    .workspace-panel.right { border-left: 1px solid var(--c-border); }
+
+    pld-sidebar-left,
+    pld-sidebar-right {
+      display: flex;
+      flex-direction: column;
+      width: var(--layout-sidebar);
+      max-width: var(--layout-sidebar);
+    }
+
+    pld-sidebar-right {
+      width: var(--layout-inspector);
+      max-width: var(--layout-inspector);
+    }
+
+    pld-error-boundary {
+      flex: 1;
+      display: flex;
+      min-width: 0;
       overflow: hidden;
     }
 
@@ -121,10 +157,10 @@ export class PldAppShell extends LitElement {
       align-items: center;
       gap: 12px;
       padding: 8px 16px;
-      background: var(--color-bg-panel);
-      color: var(--color-warning);
-      border-bottom: 1px solid var(--color-border);
-      font-size: 13px;
+      background: var(--c-warning-soft);
+      color: var(--c-warning);
+      border-bottom: 1px solid var(--c-warning);
+      font-size: var(--t-sm);
     }
 
     .draft-banner span {
@@ -132,19 +168,64 @@ export class PldAppShell extends LitElement {
     }
 
     .draft-banner button {
-      border: 1px solid var(--color-border);
-      background: transparent;
-      color: var(--color-text);
-      border-radius: 4px;
-      padding: 4px 10px;
-      font-size: 12px;
+      min-height: var(--btn-h);
+      border: 1px solid var(--c-border-control);
+      background: var(--c-surface);
+      color: var(--c-text);
+      border-radius: var(--r-md);
+      padding: 0 var(--s-3);
+      font-size: var(--t-sm);
       cursor: pointer;
     }
 
     .draft-banner button.primary {
-      background: var(--color-accent);
-      color: var(--color-bg-deep);
-      border-color: transparent;
+      background: var(--c-brand);
+      color: var(--c-brand-on);
+      border-color: var(--c-brand);
+    }
+
+    .draft-banner button:focus-visible,
+    .drawer-scrim:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    .drawer-scrim { display: none; }
+
+    @media (max-width: 1023px) {
+      .workspace-panel {
+        position: absolute;
+        inset-block: 0;
+        z-index: var(--z-overlay);
+        box-shadow: var(--sh-lg);
+        transition: transform var(--transition-base);
+      }
+
+      .workspace-panel.left {
+        left: 0;
+        transform: translateX(-105%);
+      }
+
+      .workspace-panel.right {
+        right: 0;
+        transform: translateX(105%);
+      }
+
+      .workspace-panel.open { transform: translateX(0); }
+
+      .drawer-scrim {
+        position: absolute;
+        inset: 0;
+        z-index: calc(var(--z-overlay) - 1);
+        display: block;
+        border: 0;
+        background: var(--c-scrim);
+        cursor: default;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .workspace-panel { transition: none; }
     }
   `;
 
@@ -178,6 +259,9 @@ export class PldAppShell extends LitElement {
       if (!isMod && e.key === '?') {
         e.preventDefault();
         this.showShortcuts = !this.showShortcuts;
+      }
+      if (e.key === 'Escape' && (this.leftPanelOpen || this.rightPanelOpen)) {
+        this._closePanels();
       }
     };
     window.addEventListener('keydown', this._keyHandler);
@@ -257,6 +341,14 @@ export class PldAppShell extends LitElement {
     this.addEventListener('pld-show-save-ns', () => { this.showSaveNs = true; });
     this.addEventListener('pld-show-preview', () => { this.showPreview = true; });
     this.addEventListener('pld-show-shortcuts', () => { this.showShortcuts = true; });
+    this.addEventListener('pld-toggle-left-panel', () => {
+      this.leftPanelOpen = !this.leftPanelOpen;
+      this.rightPanelOpen = false;
+    });
+    this.addEventListener('pld-toggle-right-panel', () => {
+      this.rightPanelOpen = !this.rightPanelOpen;
+      this.leftPanelOpen = false;
+    });
 
     // Column config event from sidebar
     this.addEventListener('pld-open-column-config', (e: Event) => {
@@ -318,7 +410,15 @@ export class PldAppShell extends LitElement {
         : ''}
 
       <div class="main-content">
-        <pld-sidebar-left></pld-sidebar-left>
+        ${this.leftPanelOpen || this.rightPanelOpen
+          ? html`<button class="drawer-scrim" type="button" aria-label="ปิดแผงด้านข้าง"
+              @click=${this._closePanels}></button>`
+          : ''}
+
+        <aside class="workspace-panel left ${this.leftPanelOpen ? 'open' : ''}"
+          aria-label="เครื่องมือออกแบบ">
+          <pld-sidebar-left></pld-sidebar-left>
+        </aside>
 
         <!-- #145: contain a canvas/flow crash to an inline fallback + Retry
              instead of taking down the whole app (error-boundary was dead code). -->
@@ -330,7 +430,10 @@ export class PldAppShell extends LitElement {
           ${this.view === 'flow' ? html`<pld-flow-view></pld-flow-view>` : ''}
         </pld-error-boundary>
 
-        <pld-sidebar-right></pld-sidebar-right>
+        <aside class="workspace-panel right ${this.rightPanelOpen ? 'open' : ''}"
+          aria-label="คุณสมบัติองค์ประกอบ">
+          <pld-sidebar-right></pld-sidebar-right>
+        </aside>
       </div>
 
       <!-- ═══ MODALS ═══ -->
@@ -498,6 +601,11 @@ export class PldAppShell extends LitElement {
 
     showToast(`Loaded sample: ${tpl.name}`, 'success');
   }
+
+  private _closePanels = () => {
+    this.leftPanelOpen = false;
+    this.rightPanelOpen = false;
+  };
 }
 
 declare global {

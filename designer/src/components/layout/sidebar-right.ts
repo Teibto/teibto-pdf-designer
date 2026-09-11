@@ -25,19 +25,13 @@ export class PldSidebarRight extends LitElement {
 
   static styles = css`
     :host {
-      width: 280px;
-      background: var(--color-bg-panel);
-      border-left: 1px solid var(--color-border);
+      width: 100%;
+      background: var(--c-surface);
+      color: var(--c-text);
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
       overflow-y: auto;
-      animation: fadeIn 0.4s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to   { opacity: 1; transform: translateY(0); }
     }
 
     .empty {
@@ -46,9 +40,9 @@ export class PldSidebarRight extends LitElement {
       align-items: center;
       justify-content: center;
       flex: 1;
-      color: var(--color-text-muted);
-      font-size: 12px;
-      padding: 30px;
+      color: var(--c-text-muted);
+      font-size: var(--t-sm);
+      padding: var(--s-8);
       text-align: center;
       gap: 8px;
     }
@@ -59,23 +53,21 @@ export class PldSidebarRight extends LitElement {
     }
 
     .group {
-      padding: 14px;
-      border-bottom: 1px solid var(--color-border);
+      padding: var(--s-4);
+      border-bottom: 1px solid var(--c-border);
     }
 
     .group-title {
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--color-text-muted);
-      margin-bottom: 8px;
+      font-size: var(--t-sm);
+      font-weight: var(--w-bold);
+      color: var(--c-text-subtle);
+      margin-bottom: var(--s-2);
     }
 
     .row {
       display: flex;
-      gap: 8px;
-      margin-bottom: 6px;
+      gap: var(--s-2);
+      margin-bottom: var(--s-2);
       align-items: center;
     }
 
@@ -83,32 +75,35 @@ export class PldSidebarRight extends LitElement {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: var(--s-1);
     }
 
     .field label {
-      font-size: 10px;
-      color: var(--color-text-dim);
+      font-size: var(--t-xs);
+      color: var(--c-text-subtle);
     }
 
     input, select {
-      padding: 6px 8px;
-      background: var(--color-bg-deep);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      color: var(--color-text);
-      font-size: 12px;
+      box-sizing: border-box;
+      min-height: var(--btn-h);
+      padding: 0 var(--s-2);
+      background: var(--c-surface);
+      border: var(--bw-control) solid var(--c-border-control);
+      border-radius: var(--r-md);
+      color: var(--c-text);
+      font-size: var(--t-sm);
       font-family: var(--font-mono);
       outline: none;
       width: 100%;
     }
 
     input:focus, select:focus {
-      border-color: var(--color-accent);
+      border-color: var(--c-brand);
+      box-shadow: var(--focus-ring);
     }
 
     input[type="color"] {
-      height: 30px;
+      height: var(--btn-h);
       padding: 2px;
       cursor: pointer;
     }
@@ -119,12 +114,13 @@ export class PldSidebarRight extends LitElement {
     }
 
     textarea {
-      padding: 6px 8px;
-      background: var(--color-bg-deep);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      color: var(--color-text);
-      font-size: 12px;
+      box-sizing: border-box;
+      padding: var(--s-2);
+      background: var(--c-surface);
+      border: var(--bw-control) solid var(--c-border-control);
+      border-radius: var(--r-md);
+      color: var(--c-text);
+      font-size: var(--t-sm);
       font-family: inherit;
       outline: none;
       width: 100%;
@@ -133,40 +129,43 @@ export class PldSidebarRight extends LitElement {
     }
 
     textarea:focus {
-      border-color: var(--color-accent);
+      border-color: var(--c-brand);
+      box-shadow: var(--focus-ring);
     }
 
     /* ─── Role Selector ─── */
     .role-selector {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
-      margin-top: 6px;
+      gap: var(--s-1);
+      margin-top: var(--s-2);
     }
 
     .role-option {
-      padding: 4px 10px;
-      border: 1px solid var(--color-border);
-      border-radius: 12px;
-      font-size: 10px;
+      min-height: var(--btn-h);
+      padding: 0 var(--s-2);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-pill);
+      font: inherit;
+      font-size: var(--t-xs);
       cursor: pointer;
-      transition: all 0.15s;
+      transition: background var(--transition-fast), border-color var(--transition-fast);
       display: flex;
       align-items: center;
       gap: 4px;
-      background: var(--color-bg-card);
-      color: var(--color-text-dim);
+      background: var(--c-surface-2);
+      color: var(--c-text-subtle);
     }
 
     .role-option:hover {
-      border-color: var(--color-text-muted);
-      color: var(--color-text);
+      border-color: var(--c-border-control);
+      color: var(--c-text);
     }
 
     .role-option.active {
-      border-color: var(--color-accent);
-      background: rgba(79, 110, 247, 0.1);
-      color: var(--color-accent);
+      border-color: var(--c-brand);
+      background: var(--c-brand-soft);
+      color: var(--c-brand);
     }
 
     .role-dot {
@@ -178,31 +177,32 @@ export class PldSidebarRight extends LitElement {
     /* ─── Action Buttons ─── */
     .actions {
       display: flex;
-      gap: 6px;
+      gap: var(--s-2);
     }
 
     .action-btn {
       flex: 1;
-      padding: 6px;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      background: var(--color-bg-card);
-      color: var(--color-text-dim);
-      font-size: 11px;
+      min-height: var(--btn-h);
+      padding: 0 var(--s-2);
+      border: 1px solid var(--c-border-control);
+      border-radius: var(--r-md);
+      background: var(--c-surface);
+      color: var(--c-text-subtle);
+      font-size: var(--t-sm);
       cursor: pointer;
       font-family: inherit;
-      transition: all 0.15s;
+      transition: background var(--transition-fast), border-color var(--transition-fast);
     }
 
     .action-btn:hover {
-      background: var(--color-bg-hover);
-      color: var(--color-text);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     .action-btn.danger:hover {
-      background: rgba(239, 68, 68, 0.15);
-      color: var(--color-danger);
-      border-color: var(--color-danger);
+      background: var(--c-danger-soft);
+      color: var(--c-danger);
+      border-color: var(--c-danger);
     }
 
     /* ─── Binding Tag ─── */
@@ -211,12 +211,24 @@ export class PldSidebarRight extends LitElement {
       align-items: center;
       gap: 4px;
       padding: 3px 8px;
-      background: rgba(79, 110, 247, 0.12);
-      border: 1px solid rgba(79, 110, 247, 0.25);
-      border-radius: 4px;
-      font-size: 10px;
-      color: var(--color-accent);
+      background: var(--c-brand-soft);
+      border: 1px solid var(--c-brand);
+      border-radius: var(--r-md);
+      font-size: var(--t-xs);
+      color: var(--c-brand);
       font-family: var(--font-mono);
+    }
+
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    button:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; }
     }
   `;
 
@@ -331,13 +343,14 @@ export class PldSidebarRight extends LitElement {
         <div class="role-selector">
           ${(Object.entries(ELEMENT_ROLES) as [ElementRoleType, typeof ELEMENT_ROLES[ElementRoleType]][]).map(
             ([key, role]) => html`
-              <div
+              <button type="button"
                 class="role-option ${el.role === key ? 'active' : ''}"
+                aria-pressed=${el.role === key}
                 @click=${() => this._setRole(key)}
               >
                 <span class="role-dot" style="background: ${role.color}"></span>
                 ${role.label}
-              </div>
+              </button>
             `,
           )}
         </div>

@@ -93,7 +93,7 @@ export class PldFlowView extends LitElement {
     }
 
     .flow-node.connected {
-      border-color: rgba(79, 110, 247, 0.3);
+      border-color: var(--c-brand);
     }
 
     .flow-node-icon {
@@ -186,7 +186,7 @@ export class PldFlowView extends LitElement {
           ${this.jsonKeys.map(
             (key) => html`
               <div class="flow-node ${usedKeys.has(key) ? 'connected' : ''}">
-                <div class="flow-node-icon" style="background: rgba(79, 110, 247, 0.15); color: var(--color-accent);">
+                <div class="flow-node-icon" style="background: var(--c-brand-soft); color: var(--c-brand);">
                   {}
                 </div>
                 <div>

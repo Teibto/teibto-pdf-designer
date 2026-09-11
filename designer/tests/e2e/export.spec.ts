@@ -5,7 +5,7 @@
  * @since 2026-07-22
  */
 import { test, expect } from '@playwright/test';
-import { gotoApp, loadSample, headerBtn, openPreview, toast } from './_helpers';
+import { gotoApp, loadSample, headerBtn, openHeaderMore, openPreview, toast } from './_helpers';
 
 test.describe('Preview modal', () => {
   test.beforeEach(async ({ page }) => {
@@ -38,6 +38,7 @@ test.describe('BFO export modal', () => {
   test('opens and generates BFO XML', async ({ page }) => {
     await gotoApp(page);
     await loadSample(page);
+    await openHeaderMore(page);
     await headerBtn(page, 'NetSuite BFO').click();
 
     const modal = page.locator('pld-bfo-export-modal');
@@ -52,6 +53,7 @@ test.describe('BFO export modal', () => {
 test.describe('JSON export', () => {
   test('copies the template JSON and shows a toast', async ({ page }) => {
     await gotoApp(page);
+    await openHeaderMore(page);
     await headerBtn(page, 'JSON').click();
     await expect(toast(page, 'JSON copied')).toBeVisible();
   });
