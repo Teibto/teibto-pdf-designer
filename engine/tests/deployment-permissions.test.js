@@ -10,6 +10,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+test('manifest declares EXTREMELIST as an optional custom-record dependency', () => {
+  const manifest = fs.readFileSync(path.join(__dirname, '../src/manifest.xml'), 'utf8');
+  const matches = [...manifest.matchAll(/<feature\s+required="([^"]+)">EXTREMELIST<\/feature>/g)];
+
+  assert.equal(matches.length, 1, 'EXTREMELIST dependency must be declared exactly once');
+  assert.equal(matches[0][1], 'false', 'validation dependency must not force the feature on every account');
+});
+
 test('packaged PDF deployments do not pin a role and Suitelets prohibit anonymous access', () => {
   const folder = path.join(__dirname, '../src/Objects');
   const files = fs.readdirSync(folder).filter((name) => name.startsWith('customscript_') && name.endsWith('.xml'));

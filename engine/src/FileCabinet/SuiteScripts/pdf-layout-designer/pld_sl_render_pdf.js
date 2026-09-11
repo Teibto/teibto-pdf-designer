@@ -19,7 +19,6 @@
  * @author Wichit Wongta
  */
 define([
-  'N/render',
   'N/record',
   'N/search',
   'N/file',
@@ -30,7 +29,7 @@ define([
   './pld_lib_auth',
   './pld_lib_tpl_audit',
   './pld_lib_invoice_data'
-], function (render, record, search, file, runtime, log, xml, pldRender, auth, tplAudit, invoiceData) {
+], function (record, search, file, runtime, log, xml, pldRender, auth, tplAudit, invoiceData) {
 
   // ─── Custom Record Config (owned by the render core, #181) ───
   const TPL_RECORD_TYPE   = pldRender.TPL.TYPE;
@@ -398,32 +397,27 @@ define([
     if (!tplId) throw new Error('Missing tplid for preview');
 
     tel.stage = 'load-template';
-    // .xml — loadTemplate returns { xml, copies } (#92). Reading the object itself
-    // used to land here and blow up on .replace() below, so ?action=preview has
-    // been dead since the copy set was added; the split made it visible (#181).
-    var tplXml = pldRender.loadTemplate(tplId).xml;
+    var tpl = pldRender.loadTemplate(tplId);
+    var recType = tpl.rectype;
+    tel.rectype = recType || '';
+    if (!recType) {
+      throw new Error('Template ' + tplId + ' has no record type. Re-save it from the designer before previewing.');
+    }
+    var copies = pldRender.resolveCopies(tpl.copies, recType);
 
-    // Replace FreeMarker expressions with placeholder text for preview.
-    // The preview renderer has no data sources bound, so ANY ${...} left in
-    // the template (record, line, company, context, ...) is a render error —
-    // strip every interpolation and every <#...> directive, not just record.*.
-    var previewXml = tplXml
-      .replace(/\$\{[^}]*\}/g, '[Sample Data]')
-      .replace(/<#[^>]*>/g, '')
-      .replace(/<\/#[^>]*>/g, '');
-
+    // A saved-template preview is a real render against the engine-owned sample
+    // contract. Never strip FreeMarker or invoke N/render here: doing either
+    // creates a second renderer that can report success for XML Print will reject.
+    // pld_lib_render owns the complete binding/font/copy-set pipeline (#181/#191).
     tel.stage = 'render';
-    var renderer = render.create();
-    renderer.templateContent = previewXml;
+    var out = pldRender.renderSampleDocument(tpl.xml, recType, copies, tel);
+    out.pdfFile.name = 'preview.pdf';
 
-    var pdfFile = renderer.renderAsPdf();
-    pdfFile.name = 'preview.pdf';
-
-    logRenderOk(tel, { copies: 1 });
+    logRenderOk(tel, { copies: copies.length });
     tel.stage = 'write';
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
     context.response.setHeader({ name: 'Content-Disposition', value: 'inline; filename="preview.pdf"' });
-    context.response.writeFile({ file: pdfFile, isInline: true });
+    context.response.writeFile({ file: out.pdfFile, isInline: true });
   }
 
   // ═══════════════════════════════════════════════════

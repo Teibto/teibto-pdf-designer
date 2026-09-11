@@ -58,7 +58,11 @@ define([
         'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
     }
 
-    return { xml: xmlContent, copies: copiesFromDataJson(rec.getValue({ fieldId: TPL.DATA })) };
+    return {
+      xml: xmlContent,
+      copies: copiesFromDataJson(rec.getValue({ fieldId: TPL.DATA })),
+      rectype: rec.getValue({ fieldId: TPL.RECTYPE }) || ''
+    };
   }
 
   /** Copy set stored in the designer JSON of a template record (#92) */
@@ -96,7 +100,11 @@ define([
         'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
     }
 
-    return { xml: xmlContent, copies: copiesFromDataJson(results[0].getValue(TPL.DATA)) };
+    return {
+      xml: xmlContent,
+      copies: copiesFromDataJson(results[0].getValue(TPL.DATA)),
+      rectype: recType
+    };
   }
 
   /**

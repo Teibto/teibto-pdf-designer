@@ -158,6 +158,7 @@ test('resolveTemplate falls back to the record type default', () => {
 
   assert.equal(tpl.xml, TPL_XML);
   assert.equal(tpl.copies, null, 'no copy set in the designer JSON → caller applies the default');
+  assert.equal(tpl.rectype, 'invoice', 'default lookup is already scoped to this authoritative type');
 });
 
 test('no template at all is a hard error, never an empty PDF (R4)', () => {
@@ -171,6 +172,7 @@ test('an explicit tplid wins over the default, and carries its copy set (#92)', 
     recordValues: {
       custrecord_pld_tpl_xml: TPL_XML,
       custrecord_pld_tpl_data: JSON.stringify({ copies: TWO_COPIES }),
+      custrecord_pld_tpl_rectype: 'itemfulfillment',
     },
   });
 
@@ -178,6 +180,7 @@ test('an explicit tplid wins over the default, and carries its copy set (#92)', 
 
   assert.equal(tpl.xml, TPL_XML);
   assert.deepEqual(Array.from(tpl.copies).map((c) => c.th), ['ต้นฉบับ', 'สำเนา']);
+  assert.equal(tpl.rectype, 'itemfulfillment', 'explicit template carries its stored authoritative type');
 });
 
 // ─── architecture guard ──────────────────────────────────────────────────────

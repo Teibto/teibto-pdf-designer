@@ -72,11 +72,10 @@ can use `node --test --test-isolation=none "engine/tests/**/*.test.js"`. On this
 `python3` Store alias is broken; the validator passed using a shell function forwarding `python3`
 to the installed `python`, without modifying the validator.
 
-Round-three local evidence: **175/175** engine tests, **631/631** designer unit tests,
+Historical round-three evidence for the earlier candidate: **175/175** engine tests, **631/631** designer unit tests,
 **87/87** Chromium tests and **6/6**
 build-provenance tests. Full dependency audit is zero (including development dependencies).
-Storybook still exports 12 stories from the six existing story files. Current local logs include
-`designer/.unit-final.log`, `.e2e-toolchain.log` and `.build-netsuite-final.log` (ignored).
+Storybook exported 12 stories from the six story files at that milestone.
 The dependency findings recorded in earlier rounds were resolved; they are not current blockers.
 
 The synthetic row-mode pagination probe covers 100/1,000/10,000 Thai rows with complete,
@@ -85,15 +84,22 @@ run measured cold computation 0.664/0.203/0.625 ms and all 1,000 cache hits 0.46
 These small timings verify the local cache path only: there is no wall-clock pass threshold,
 browser rendering measurement, BFO glyph inspection or NetSuite throughput claim.
 
-Batch schema v4 requires authenticated durable job records and snapshots. Drain old tasks
-before upgrade and resubmit legacy requests. Job result/count persistence precedes temporary-file
-cleanup; failed merges retain private inputs for operator recovery. Automatic recovery, deployment
-pool scheduling, chunked output, retention and permission-revocation behavior remain open.
-Custom fields remain editable through authorized native APIs; their authenticated envelopes now
-detect forgery using a script-restricted API secret. Part/result verification covers the actual
-bytes passed to BFO or streamed to the caller, including post-save substitution tests. Native
-historical file access, replay of old authentic state and secret/script restrictions still require
+Schema v4 below is a **historical milestone, not the current batch contract**. Current code uses
+schema v5 authenticated jobs, artifact ledger, bounded render/merge stages and guarded downloads.
+Drain v4/older workers before upgrade and resubmit legacy requests; never add an unsigned fallback
+that promotes old job fields into v5 authority. Native historical file access, replay of authentic
+old state, permission revocation, secret/script restrictions and retention policy still require
 account tests and policy decisions. No local implementation establishes production readiness.
+
+Current branch local evidence (2026-09-11): **324/324 engine tests passed** with
+`node --test --test-isolation=none "engine/tests/**/*.test.js"`. This is current local Node evidence
+only: no SDF validation, NetSuite deployment, native crypto/file/search execution, role matrix or
+BFO/PDF inspection was performed by this run.
+
+Current designer evidence: **634/634 unit tests passed**, both production and NetSuite builds
+completed, Storybook 10.6.0 built successfully and `npm audit` reports zero vulnerabilities after
+upgrading Vitest/UI to 5.0.0. The local Chromium suite passed **87/87** tests. Connected NetSuite
+evidence is recorded separately and must not be inferred from these local toolchain checks.
 
 ## Connected acceptance and evidence
 
@@ -125,7 +131,7 @@ Bounded PART/CHUNK orphan adoption is also implemented locally. Age-based retent
 native-account security/capacity/parity evidence remain required. The following entries preserve historical verification counts for their respective slices;
 use the latest candidate evidence and current requirement matrix for acceptance.
 
-Schema v4 local verification: **201/201** engine tests, including real Node crypto adapters,
+Historical schema v4 verification: **201/201** engine tests, including real Node crypto adapters,
 native field/snapshot/part/result tampering, post-save PDF substitution, missing secrets and
 optimistic-write conflicts. All engine syntax checks and six template/sample checks pass.
 The same verified XML string reaches BFO; guarded download creates a new file from verified PDF

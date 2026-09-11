@@ -13,6 +13,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { loadAmd } = require('./helpers/amd');
 const {
@@ -30,6 +32,7 @@ function buildSuitelet({ templates = [], recordValues = {} } = {}) {
   const log = logStub();
   const render = renderStub();
   const search = searchStub(templates);
+  const sampleCalls = [];
   const stubs = {
     'N/render': render.module,
     'N/record': recordStub({
@@ -47,9 +50,14 @@ function buildSuitelet({ templates = [], recordValues = {} } = {}) {
     './pld_lib_invoice_data': {
       isSupportedType: () => false,
       buildTransactionData: () => ({}),
+      buildSampleData: (recType, th, en) => {
+        const data = { rectype: recType, copyTh: th, copyEn: en };
+        sampleCalls.push(data);
+        return data;
+      },
     },
   };
-  return { suitelet: loadAmd('./pld_sl_render_pdf', stubs), log, render, search };
+  return { suitelet: loadAmd('./pld_sl_render_pdf', stubs), log, render, search, sampleCalls };
 }
 
 test('a failed Print shows an HTML page with the errorId and no stack trace', () => {
@@ -244,21 +252,88 @@ test('download=T still forces an attachment', () => {
   assert.equal(response.state.files[0].isInline, false);
 });
 
-// ─── #181: ?action=preview was dead code ─────────────────────────────────────
-// The sample-data preview read the template loader's return value ({xml, copies}
-// since #92) as if it were the XML string, so the very next .replace() threw
-// "tplXml.replace is not a function" — every call landed on the error page. The
-// split of the render core surfaced it; this pins the fix.
-test('?action=preview renders the saved template with placeholder data', () => {
-  const { suitelet, render } = buildSuitelet({
-    recordValues: { custrecord_pld_tpl_xml: '<pdf><body>${record.tranid!""}</body></pdf>' },
+// ─── #181/#191: saved preview uses the same render core as Print ──────────────
+test('?action=preview renders the saved template through the canonical sample pipeline', () => {
+  const { suitelet, render, sampleCalls, log } = buildSuitelet({
+    recordValues: {
+      custrecord_pld_tpl_xml: '<pdf><body><#list record.items as line>${line.description!""}</#list></body></pdf>',
+      custrecord_pld_tpl_data: TWO_COPIES,
+      custrecord_pld_tpl_rectype: 'invoice',
+    },
   });
-  const { context, response } = contextStub({ parameters: { action: 'preview', tplid: '7' } });
+  const { context, response } = contextStub({
+    parameters: { action: 'preview', tplid: '7' },
+  });
 
   suitelet.onRequest(context);
 
   assert.equal(response.state.headers['Content-Type'], 'application/pdf');
   assert.equal(response.state.files.length, 1, 'a PDF must come back, not the error page');
   assert.equal(response.state.body, '', 'no error page');
-  assert.equal(render.calls.renderedAsPdf, 1);
+  assert.equal(render.calls.renderedAsPdf, 0, 'two copies use the core XML-to-pdfset pipeline');
+  assert.equal(render.calls.renderedAsString, 2, 'the core renders once per copy');
+  assert.equal(render.calls.xmlToPdf.length, 1, 'the core combines both copies into one PDF');
+  assert.deepEqual(sampleCalls.map((d) => d.copyTh), ['ต้นฉบับ', 'สำเนา']);
+  assert.deepEqual(
+    render.calls.dataSources.filter((d) => d.alias === 'record').map((d) => d.data.copyTh),
+    ['ต้นฉบับ', 'สำเนา'],
+    'preview binds engine sample data instead of deleting FreeMarker expressions'
+  );
+  assert.equal(log.entries.find((e) => e.level === 'audit').details.copies, 2);
+});
+
+test('?action=preview trusts the stored non-invoice rectype and its one-copy default', () => {
+  const { suitelet, render, sampleCalls, log } = buildSuitelet({
+    recordValues: {
+      custrecord_pld_tpl_xml: TPL_XML,
+      custrecord_pld_tpl_data: '',
+      custrecord_pld_tpl_rectype: 'itemfulfillment',
+    },
+  });
+  const { context, response } = contextStub({
+    // A stale/forged caller value cannot turn this saved template into an invoice.
+    parameters: { action: 'preview', tplid: '7', rectype: 'invoice' },
+  });
+
+  suitelet.onRequest(context);
+
+  assert.equal(response.state.headers['Content-Type'], 'application/pdf');
+  assert.equal(render.calls.renderedAsPdf, 1, 'non-invoice defaults to one original copy');
+  assert.equal(render.calls.renderedAsString, 0);
+  assert.deepEqual(sampleCalls, [{
+    rectype: 'itemfulfillment', copyTh: 'ต้นฉบับ', copyEn: 'Original',
+  }]);
+  const audit = log.entries.find((e) => e.level === 'audit');
+  assert.equal(audit.details.rectype, 'itemfulfillment');
+  assert.equal(audit.details.copies, 1);
+});
+
+test('?action=preview fails closed when the saved template has no rectype', () => {
+  const { suitelet, render, log } = buildSuitelet({
+    recordValues: { custrecord_pld_tpl_xml: TPL_XML },
+  });
+  const { context, response } = contextStub({
+    parameters: { action: 'preview', tplid: '7', rectype: 'invoice' },
+  });
+
+  suitelet.onRequest(context);
+
+  assert.match(response.state.headers['Content-Type'], /text\/html/);
+  assert.match(response.state.body, /has no record type/);
+  assert.equal(render.calls.created, 0, 'caller rectype must not bypass missing stored metadata');
+  assert.equal(log.entries.find((e) => e.level === 'error').details.rectype, '',
+    'telemetry must not present the caller value as authoritative');
+});
+
+test('the render Suitelet cannot own a direct N/render path', () => {
+  const source = fs.readFileSync(path.join(
+    __dirname,
+    '../src/FileCabinet/SuiteScripts/pdf-layout-designer/pld_sl_render_pdf.js'
+  ), 'utf8');
+
+  assert.doesNotMatch(source, /['"]N\/render['"]/, 'only pld_lib_render may depend on N/render');
+  assert.doesNotMatch(source, /\brender\.create\s*\(/, 'Suitelet must delegate renderer creation');
+  assert.equal(source.includes('.replace(/\\$\\{'), false, 'Suitelet must not strip FreeMarker bindings');
+  assert.equal(source.includes('[Sample Data]'), false, 'placeholder substitution creates false-success previews');
+  assert.match(source, /pldRender\.renderSampleDocument\(tpl\.xml, recType, copies, tel\)/);
 });

@@ -160,15 +160,21 @@ export const READ_ONLY_REASON =
 /**
  * Whether this account can render Thai text at all (#156).
  *
- * The designer Suitelet fills `fontRegularUrl` from its script parameter and falls
- * back to the company-config record, so an empty value means NEITHER is set. Every
- * template printed on that account then comes out with the Thai glyphs dropped and
- * BFO reports nothing — worth warning about at save/export time instead of letting
- * the user discover it from a PDF with missing text.
+ * The designer Suitelet fills both URLs from its script parameters and falls back
+ * to the company-config record. The render path requires both weights and resolves
+ * only File Cabinet media URLs, so the preflight must use that same minimum contract.
+ * Otherwise regular text can appear healthy while bold Thai glyphs disappear (or
+ * the server rejects the render) only after the user saves the template.
  */
 export function hasThaiFontConfigured(): boolean {
   const ctx = getNsContext();
-  return !!(ctx && ctx.fontRegularUrl);
+  if (!ctx) return false;
+
+  const isFileCabinetUrl = (value: string | null | undefined): boolean =>
+    typeof value === 'string'
+    && /^(?:https:\/\/[^/]+)?\/core\/media\/media\.nl\?/i.test(value.trim());
+
+  return isFileCabinetUrl(ctx.fontRegularUrl) && isFileCabinetUrl(ctx.fontBoldUrl);
 }
 
 function getDesignerUrl(): string {
