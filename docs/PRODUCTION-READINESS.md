@@ -91,7 +91,7 @@ that promotes old job fields into v5 authority. Native historical file access, r
 old state, permission revocation, secret/script restrictions and retention policy still require
 account tests and policy decisions. No local implementation establishes production readiness.
 
-Current branch local evidence (2026-09-11): **324/324 engine tests passed** with
+Current branch local evidence (2026-09-11): **326/326 engine tests passed** with
 `node --test --test-isolation=none "engine/tests/**/*.test.js"`. This is current local Node evidence
 only: no SDF validation, NetSuite deployment, native crypto/file/search execution, role matrix or
 BFO/PDF inspection was performed by this run.
@@ -100,6 +100,36 @@ Current designer evidence: **634/634 unit tests passed**, both production and Ne
 completed, Storybook 10.6.0 built successfully and `npm audit` reports zero vulnerabilities after
 upgrading Vitest/UI to 5.0.0. The local Chromium suite passed **87/87** tests. Connected NetSuite
 evidence is recorded separately and must not be inferred from these local toolchain checks.
+
+Connected SB2 evidence (2026-09-11, synthetic/redacted data only): server SDF validation passed
+against account `4089685_SB2`; the only remaining validator warnings state that `allroles` selects
+internal rather than external roles, which is intentional. A clean candidate deployment completed
+and version readback returned SHA `be8ac6d`, bundle SHA-256
+`58f4c0cc81c15192bf9cd3d90cca653bd9cd78438126d741158c039219d58208` and engine-payload SHA-256
+`99cb785f50e0157dc0d5aef9b16c4b30d122c118a5cc261aeb0e02c0e5ab4281`. All six canonical
+masters returned `%PDF-` through `preview-live` with synthetic sample data. The canonical invoice
+showed readable Thai glyphs and two copies; a temporary non-default QA template saved/reloaded as
+record 42, both live and saved previews rendered two visually matching pages, and the record was
+deleted after an identity/default guard. An intentionally broken existing QA template failed with
+a visible correlated error rather than a false-success PDF.
+
+Live BFO scale probes rendered 100, 1,000 and 10,000 synthetic Thai/XML-sensitive rows as 6, 54
+and 527 pages. Observed request/output/latency for the largest probe was 4,821,820 JSON characters,
+1,614,759 PDF bytes and 19,664 ms; these are one-run SB2 observations, not fleet capacity promises.
+The deployed designer loaded with no captured console errors, both font weights resolved to File
+Cabinet URLs, Thai text input round-tripped through the accessibility tree, and the named shortcuts
+dialog closed with Escape and restored focus. Live QA also exposed the batch search form dropping
+Suitelet routing parameters; the branch fix now gives every form an explicit resolved action and
+preserves `script`/`deploy` on GET. Final deployment/retest evidence for that fix belongs with the PR
+record. Restricted-role/subsidiary A/B, native batch privacy/queue/cleanup and retention policy
+remain release blockers.
+
+Redacted local screenshots: [live unsaved preview](../qa-evidence/issue-199/be8ac6d-live-unsaved-template42.png),
+[saved/reloaded preview](../qa-evidence/issue-199/be8ac6d-saved-template42.png),
+[viewer diff](../qa-evidence/issue-199/be8ac6d-preview-parity-diff.png), and
+[existing multipage invoice](../qa-evidence/issue-199/be8ac6d-invoice-preview.png). The 0.6229%
+whole-viewport diff is confined to PDF-viewer chrome/thumbnail timing; the document page itself is
+visually identical.
 
 ## Connected acceptance and evidence
 

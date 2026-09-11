@@ -31,9 +31,10 @@ define([
   'N/file',
   'N/record',
   'N/task',
+  'N/url',
   './pld_lib_render',
   './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity', './pld_lib_batch_cleanup', './pld_lib_batch_selection', './pld_lib_batch_retry'
-], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData, jobs, integrity, cleanup, selection, retry) {
+], function (search, runtime, log, xml, format, file, record, task, url, pldRender, invoiceData, jobs, integrity, cleanup, selection, retry) {
 
   /** หน่วย governance ที่กันไว้ให้ขั้นตอนรวมไฟล์ + ส่ง response ตอนท้าย */
   var RESERVE_UNITS = 100;
@@ -55,6 +56,42 @@ define([
     purchaseorder: true, cashsale: true, vendorbill: true,
     returnauthorization: true, customerpayment: true
   };
+
+  /** Resolve this deployed Suitelet instead of relying on the browser's current
+   * URL. GET form submission replaces the query string, so its script/deploy
+   * routing fields are also emitted as hidden inputs below. */
+  function selfRoute() {
+    var current = runtime.getCurrentScript();
+    return url.resolveScript({
+      scriptId: current.id,
+      deploymentId: current.deploymentId,
+      returnExternalUrl: false
+    });
+  }
+
+  function decodedQueryParam(route, wanted) {
+    var query = String(route || '').split('?')[1] || '';
+    query = query.split('#')[0];
+    var pairs = query.split('&');
+    for (var i = 0; i < pairs.length; i++) {
+      var at = pairs[i].indexOf('=');
+      var rawName = at < 0 ? pairs[i] : pairs[i].slice(0, at);
+      var rawValue = at < 0 ? '' : pairs[i].slice(at + 1);
+      try {
+        if (decodeURIComponent(rawName.replace(/\+/g, ' ')) === wanted) {
+          return decodeURIComponent(rawValue.replace(/\+/g, ' '));
+        }
+      } catch (e) {
+        throw new Error('Resolved batch Suitelet URL has invalid routing encoding');
+      }
+    }
+    throw new Error('Resolved batch Suitelet URL is missing required ' + wanted + ' routing parameter');
+  }
+
+  function getRoutingInputs(route) {
+    return '<input type="hidden" name="script" value="' + esc(decodedQueryParam(route, 'script')) + '" />' +
+      '<input type="hidden" name="deploy" value="' + esc(decodedQueryParam(route, 'deploy')) + '" />';
+  }
 
   function onRequest(context) {
     var request = context.request;
@@ -680,6 +717,7 @@ define([
     var from = params.from || '';
     var to = params.to || '';
     var tplId = params.tplid || '';
+    var route = selfRoute();
 
     var rows = [];
     if (recType) {
@@ -691,15 +729,15 @@ define([
     var html = pageShell('พิมพ์เอกสารเป็นชุด', [
       '<h1>พิมพ์เอกสารเป็นชุด</h1>',
       '<p class="sub">เลือกประเภทเอกสารและช่วงวันที่ แล้วติ๊กใบที่ต้องการ — ระบบรวมทุกใบเป็น PDF ไฟล์เดียว</p>',
-      filterForm(recType, from, to, tplId),
-      recType ? documentList(recType, tplId, rows) : ''
+      filterForm(route, recType, from, to, tplId),
+      recType ? documentList(route, recType, tplId, rows) : ''
     ].join('\n'));
 
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
     context.response.write(html);
   }
 
-  function filterForm(recType, from, to, tplId) {
+  function filterForm(route, recType, from, to, tplId) {
     var options = ['<option value="">— เลือกประเภทเอกสาร —</option>'];
     var titles = invoiceData.docTitles;
     Object.keys(titles).forEach(function (type) {
@@ -708,7 +746,8 @@ define([
     });
 
     return [
-      '<form method="GET" class="filters">',
+      '<form method="GET" action="' + esc(route) + '" class="filters">',
+      getRoutingInputs(route),
       '<label>ประเภทเอกสาร<select name="rectype" required>' + options.join('') + '</select></label>',
       '<label>วันที่ตั้งแต่<input type="date" name="from" value="' + esc(from) + '" /></label>',
       '<label>ถึงวันที่<input type="date" name="to" value="' + esc(to) + '" /></label>',
@@ -718,7 +757,7 @@ define([
     ].join('\n');
   }
 
-  function documentList(recType, tplId, rows) {
+  function documentList(route, recType, tplId, rows) {
     if (rows.length === 0) {
       return '<p class="warn">ไม่พบเอกสารที่ตรงเงื่อนไข — ลองขยายช่วงวันที่</p>';
     }
@@ -740,7 +779,7 @@ define([
     }).join('\n');
 
     return [
-      '<form method="POST" class="picker" id="pld-form">',
+      '<form method="POST" action="' + esc(route) + '" class="picker" id="pld-form">',
       // ปุ่มสองปุ่มใช้ hidden field ตัวนี้เลือกปลายทาง — ไม่ใช่ name="action" ที่ตัวปุ่ม
       // เพราะ field ชื่อซ้ำกันส่งถึง Suitelet แค่ค่าแรก (ดู parseIds)
       '<input type="hidden" name="action" id="pld-action" value="print" />',
@@ -819,6 +858,7 @@ define([
    */
   function writeSummaryPage(context, tel, recType, tplId, result) {
     var parts = ['<h1>พิมพ์เป็นชุดไม่ครบ</h1>'];
+    var route = selfRoute();
 
     parts.push('<p class="sub">เอกสารที่เลือกไว้ ' + (result.printed.length + result.failed.length + result.pending.length) +
       ' ใบ · สร้างสำเร็จ ' + result.printed.length + ' ใบ · ล้มเหลว ' + result.failed.length +
@@ -842,14 +882,14 @@ define([
     }
 
     if (result.printed.length > 0) {
-      parts.push(reprintForm(recType, tplId, result.printed.map(function (p) { return p.id; }),
+      parts.push(reprintForm(route, recType, tplId, result.printed.map(function (p) { return p.id; }),
         'พิมพ์ ' + result.printed.length + ' ใบที่สร้างสำเร็จ'));
     }
     if (result.pending.length > 0) {
-      parts.push(reprintForm(recType, tplId, result.pending,
+      parts.push(reprintForm(route, recType, tplId, result.pending,
         'พิมพ์ ' + result.pending.length + ' ใบที่เหลือ'));
       // ทางลัดที่จบในคลิกเดียวเมื่อส่วนที่เหลือยังใหญ่กว่าโควตาอยู่ดี
-      parts.push(reprintForm(recType, tplId, result.pending,
+      parts.push(reprintForm(route, recType, tplId, result.pending,
         'ส่ง ' + result.pending.length + ' ใบที่เหลือเข้าคิว', 'queue'));
     }
     parts.push('<p class="hint">การกดปุ่มคือการสั่ง render ใหม่สำหรับใบในกลุ่มนั้น ' +
@@ -860,8 +900,8 @@ define([
     context.response.write(pageShell('พิมพ์เป็นชุดไม่ครบ', parts.join('\n')));
   }
 
-  function reprintForm(recType, tplId, ids, label, action) {
-    return '<form method="POST" class="again">' +
+  function reprintForm(route, recType, tplId, ids, label, action) {
+    return '<form method="POST" action="' + esc(route) + '" class="again">' +
       '<input type="hidden" name="action" value="' + esc(action || 'print') + '" />' +
       '<input type="hidden" name="rectype" value="' + esc(recType) + '" />' +
       (tplId ? '<input type="hidden" name="tplid" value="' + esc(tplId) + '" />' : '') +

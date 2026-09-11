@@ -14,6 +14,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { loadAmd } = require('./helpers/amd');
 const {
@@ -73,6 +75,7 @@ function typedSearchStub(byType) {
  */
 function buildBatch({
   documents = [], templates = [], failIds = [], usage, asString, folders = [],
+  routeUrl = '/app/site/hosting/scriptlet.nl?script=123&deploy=1',
 } = {}) {
   const log = logStub();
   const render = renderStub(asString === undefined ? {} : { asString });
@@ -90,7 +93,10 @@ function buildBatch({
   const folderRecords = [];
   const stubs = {
     'N/search': search.module,
-    'N/runtime': runtimeStub({ usage }),
+    'N/runtime': runtimeStub({
+      usage,
+      script: { id: 'customscript_pld_batch', deploymentId: 'customdeploy_pld_batch' },
+    }),
     'N/log': log.module,
     'N/xml': xmlStub,
     'N/format': formatStub,
@@ -132,6 +138,8 @@ function buildBatch({
     },
   };
   const rows = require('./helpers/batch-store').batchStore(stubs, files);
+  const jobRoute = stubs['N/url'].resolveScript;
+  stubs['N/url'].resolveScript = (options) => options.params ? jobRoute(options) : routeUrl;
   return { openSnapshot: (text) => JSON.parse(JSON.stringify(loadAmd('./pld_lib_batch_integrity', stubs).open('snapshot', text))), stubs, rows, suitelet: loadAmd('./pld_sl_batch_print', stubs), log, render, search, files, task, folderRecords };
 }
 
@@ -175,6 +183,38 @@ test('หน้าแรกให้เลือกประเภทเอก�
   assert.match(response.state.body, /พิมพ์เอกสารเป็นชุด/);
   assert.match(response.state.body, /ใบส่งสินค้า \(DELIVERY NOTE\)/, 'ชื่อเอกสารมาจาก DOC_TITLES ที่เดียว');
   assert.equal(search.created.length, 0, 'ยังไม่เลือกประเภท ก็ยังไม่ต้องค้น');
+});
+
+test('GET search preserves resolved script/deploy routing and every local form has an explicit action', () => {
+  const routeUrl = '/app/site/hosting/scriptlet.nl?script=123&deploy=1&token="route"';
+  const { suitelet } = buildBatch({ documents: DOCS, templates: TEMPLATES, routeUrl });
+  const page = contextStub({ parameters: { rectype: 'itemfulfillment' } });
+
+  suitelet.onRequest(page.context);
+
+  const forms = [...page.response.state.body.matchAll(/<form\b[^>]*>/g)].map((m) => m[0]);
+  assert.equal(forms.length, 2, 'search and picker forms are both present');
+  forms.forEach((form) => {
+    assert.match(form, / action="\/app\/site\/hosting\/scriptlet\.nl\?script=123&amp;deploy=1&amp;token=&quot;route&quot;"/);
+  });
+  assert.match(page.response.state.body, /<form method="GET"[^>]*>[\s\S]*?name="script" value="123"/);
+  assert.match(page.response.state.body, /<form method="GET"[^>]*>[\s\S]*?name="deploy" value="1"/);
+
+  // GET submission replaces the action URL's query string. These hidden values
+  // are what prevent the live redirect to `scriptlet.nl?rectype=...` seen on SB2.
+  assert.equal((page.response.state.body.match(/name="script"/g) || []).length, 1);
+  assert.equal((page.response.state.body.match(/name="deploy"/g) || []).length, 1);
+});
+
+test('all batch HTML form literals declare an action target', () => {
+  const source = fs.readFileSync(path.join(
+    __dirname,
+    '../src/FileCabinet/SuiteScripts/pdf-layout-designer/pld_sl_batch_print.js'
+  ), 'utf8');
+  const forms = [...source.matchAll(/'<form\b([^']*)'/g)].map((m) => m[0]);
+
+  assert.ok(forms.length >= 6, 'guard must cover search, picker, retry, recovery, and cleanup forms');
+  forms.forEach((form) => assert.match(form, /\baction=/, form));
 });
 
 test('เลือกประเภทแล้วได้รายการพร้อม checkbox ต่อใบ', () => {
