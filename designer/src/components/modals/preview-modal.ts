@@ -19,7 +19,7 @@ import { formatCellValue } from '../../utils/format';
 import { clearBarcodeCache, getCachedBarcodeSvg } from '../../services/barcode.service';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { isNetSuiteEnv, getNsContext, renderLivePreview } from '../../services/netsuite-adapter.service';
-import { DEFAULT_RECORD_TYPE } from '../../constants/record-types';
+import { resolveSampleRecordType } from '../../services/sample-record-type.service';
 import '../shared/modal';
 
 @customElement('pld-preview-modal')
@@ -378,7 +378,9 @@ export class PldPreviewModal extends LitElement {
     const ctx = getNsContext();
     if (!ctx) return;
     const sample = this._sampleMode;
-    const rectype = ctx.recordType || DEFAULT_RECORD_TYPE;
+    const rectype = sample
+      ? resolveSampleRecordType(this.store.state.template.nsMetadata?.rectype, ctx.recordType)
+      : ctx.recordType?.trim();
     if (!sample && !ctx.recordId) return;
 
     this._clearServerPreview();
@@ -386,6 +388,7 @@ export class PldPreviewModal extends LitElement {
     this.serverLoading = true;
     this.serverError = '';
     try {
+      if (!rectype) throw new Error('ไม่พบประเภทเอกสารจริง กรุณาเปิด Designer จากรายการอีกครั้ง');
       // Font comes from the config record via ${company.fontRegular} (#156) — the
       // preview therefore fails/succeeds on fonts exactly like Print does.
       const options: BfoExportOptions = { useBands: true }; // band layout is authoritative (#47 cutover)

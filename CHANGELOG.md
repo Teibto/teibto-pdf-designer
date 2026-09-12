@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Use the saved template's document type for synthetic sample loading and preview; real-record preview keeps the record type paired with its ID and reports missing context explicitly.
+
 - Integrate portable Thai/Latin UI fonts, keyboard-accessible panels and modal controls, responsive drawer focus handling, persistent JSON import errors, and explicit new/unsaved template state. Rebuilding a band layout requires confirmation and remains undoable.
 - Preserve QR square geometry inside both portrait and landscape frames; reject unsupported barcode formats on import and export. Keep new template record-type/default choices explicit and detach imported JSON from saved-record identity.
 - Bound large data-form rendering, image/barcode caches and editing history; add regression, production startup, build provenance and agent-workspace gates. Connected restricted-role and queued-batch acceptance remains pending.

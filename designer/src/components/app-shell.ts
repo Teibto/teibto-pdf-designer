@@ -24,6 +24,7 @@ import {
   type TemplateDraft,
 } from '../services/template.service';
 import { showToast } from './shared/toast-notification';
+import { resolveSampleRecordType } from '../services/sample-record-type.service';
 import { getSampleTemplates } from '../constants/sample-templates';
 import { isNetSuiteEnv, autoLoadRecordIfAvailable, getNsContext, hasThaiFontConfigured, fetchNsSampleData } from '../services/netsuite-adapter.service';
 import { loadJsonData, extractJsonKeys } from '../state/actions';
@@ -694,7 +695,7 @@ export class PldAppShell extends LitElement {
     const ctx = getNsContext();
     const intent = this._beginDataLoad();
     try {
-      const sample = await fetchNsSampleData(ctx?.recordType || 'invoice');
+      const sample = await fetchNsSampleData(resolveSampleRecordType(this.store.state.template.nsMetadata?.rectype, ctx?.recordType));
       if (!this._isCurrentDataLoad(intent)) return;
       loadJsonData(this.store, sample.data);
       showToast('โหลดข้อมูลตัวอย่างแล้ว — ตัวเลขและชื่อทั้งหมดเป็นของสมมติ', 'success');
