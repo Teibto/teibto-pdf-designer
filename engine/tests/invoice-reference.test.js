@@ -23,28 +23,69 @@ function setup(id, subsidiaries, footer) {
 function result(values) {
   return { getValue({ name }) { return values[name] ?? ''; } };
 }
+function item(values = {}, texts = {}) {
+  return {
+    values: {
+      custcol_thl_summarytype: '0', quantityuom: '1', fxrate: '100', fxamount: '100', unit: 'ชิ้น',
+      memo: 'รายละเอียดตัวอย่าง', 'item.displayname': 'สินค้าตัวอย่าง', 'item.type': 'InvtPart',
+      'CURRENCY.symbol': 'USD', custbody_thl_entlegalname: 'ผู้ซื้อตัวอย่าง',
+      custbody_thl_entvatregistrationno: '0105599999999', custbody_thl_entbranchno: '00000',
+      billaddress: 'ที่อยู่ลูกค้า\nบรรทัดเพิ่มเติม', shipaddress: 'ที่อยู่จัดส่ง\nบรรทัดเพิ่มเติม', ...values
+    },
+    texts: { item: 'SAMPLE-ITEM', custcol_thl_summarytype: 'Product/Service', ...texts }
+  };
+}
 function harness(options = {}) {
-  const calls = { file: [], record: [], setup: [], companyReads: [], fetches: [] };
+  const calls = { file: [], record: [], setup: [], companyReads: [], fetches: [], invoiceFetches: [], summaryFetches: [], loadedSearches: [] };
   const sourceFilters = [['type', 'anyof', 'CustInvc'], 'OR', ['mainline', 'is', 'F']];
+  const invoicePages = options.invoicePages ?? [options.noCompany ? [] : (options.lines ?? [item()])];
   const saved = {
     filterExpression: sourceFilters,
     columns: [{ name: 'tranid' }],
-    run() {
+    runPaged({ pageSize }) {
+      assert.equal(pageSize, 1000);
       if (options.searchError) throw new Error('saved search unavailable');
-      return { getRange(range) {
-        calls.range = range;
-        return options.noCompany ? [] : [{ getValue(column) {
-          calls.companyReads.push(column);
-          return ({ ...COMPANY, ...options.company })[column.name] ?? '';
-        } }];
-      } };
+      return {
+        pageRanges: invoicePages.map((_, index) => ({ index })),
+        fetch({ index }) {
+          calls.invoiceFetches.push(index);
+          return { data: invoicePages[index].map(line => ({
+            getValue(column) {
+              if (column.join === JOIN) {
+                calls.companyReads.push(column);
+                return ({ ...COMPANY, ...options.company })[column.name] ?? '';
+              }
+              return line.values[(column.join ? column.join + '.' : '') + column.name] ?? '';
+            },
+            getText({ name }) { return line.texts[name] ?? ''; }
+          })) };
+        }
+      };
+    }
+  };
+  const summarySaved = {
+    filterExpression: [], columns: [],
+    runPaged() {
+      if (options.summaryError) throw new Error('summary search unavailable');
+      return {
+        pageRanges: [{ index: 0 }],
+        fetch({ index }) {
+          calls.summaryFetches.push(index);
+          return { data: (options.summaries ?? [{ custrecord_sum_type: '5', custrecord_sum_taxrate: '7.0' }]).map(result) };
+        }
+      };
     }
   };
   const rows = options.setups ?? [setup('10', '2', 'Synthetic configured footer')];
   const pages = options.pages ?? [rows];
   const search = {
     Sort: { DESC: 'DESC' },
-    load(args) { calls.savedSearch = args; return saved; },
+    load(args) {
+      calls.loadedSearches.push(args);
+      if (args.id === 'customsearch_thl_transactiondataprintinv') { calls.savedSearch = args; return saved; }
+      assert.equal(args.id, 'customsearch_thl_summarytotaldataprint');
+      return summarySaved;
+    },
     createColumn(column) { return column; },
     create(args) {
       calls.setup.push(args);
@@ -63,7 +104,7 @@ function harness(options = {}) {
   const record = { load(args) {
     calls.record.push(args);
     return { getValue({ fieldId }) {
-      return ({ ntype: '7', subsidiary: '2', custbody_thl_docprintouttype: '3', ...options.body })[fieldId] ?? '';
+      return ({ ntype: '7', subsidiary: '2', custbody_thl_docprintouttype: '3', taxtotal: 7, ...options.body })[fieldId] ?? '';
     } };
   } };
   const file = { load(args) {
@@ -73,10 +114,10 @@ function harness(options = {}) {
   } };
   const helper = loadAmd('pld_lib_invoice_reference', {
     'N/search': search, 'N/record': record, 'N/file': file,
-    './pld_lib_thai_wordbreak': { breakThai(value) { return value; } }
+    './pld_lib_thai_wordbreak': { breakThai(value) { return options.breakThai ? options.breakThai(value) : value; } }
   });
   const data = { subsidiaryId: '2', company: { name: 'Unrelated config company' }, document: { number: 'SAMPLE-1' }, items: [] };
-  return { helper, data, calls, saved, sourceFilters };
+  return { helper, data, calls, saved, summarySaved, sourceFilters };
 }
 const plain = value => JSON.parse(JSON.stringify(value));
 
@@ -86,9 +127,10 @@ test('invoice company search retains existing OR grouping and adds strict invoic
   assert.deepEqual(plain(h.calls.savedSearch), { id: 'customsearch_thl_transactiondataprintinv' });
   assert.deepEqual(plain(h.saved.filterExpression), [h.sourceFilters, 'AND', ['internalid', 'anyof', '123']]);
   assert.deepEqual(plain(h.calls.record), [{ type: 'invoice', id: '123', isDynamic: false }]);
-  assert.deepEqual(plain(h.calls.range), { start: 0, end: 1 });
+  assert.deepEqual(h.calls.invoiceFetches, [0]);
   assert.ok(h.calls.companyReads.every(column => column.join === JOIN));
-  assert.equal(h.saved.columns.length, 6);
+  assert.ok(h.saved.columns.some(column => column.name === 'fxrate'));
+  assert.ok(h.saved.columns.some(column => column.name === 'displayname' && column.join === 'item'));
   assert.deepEqual(plain(enriched.referenceCompany), {
     name: 'Example & Test Limited', address: '99 Example Road\nTest City',
     taxId: '0105500000000', branchCode: '00002', logo: '/core/media/media.nl?id=501&c=EXAMPLE'
@@ -202,4 +244,139 @@ test('invalid invoice IDs are rejected before any account reads', () => {
     assert.throws(() => h.helper.enrich(h.data, id), error => error.name === 'PLD_REFERENCE_CONTEXT_INVALID');
     assert.equal(h.calls.record.length, 0);
   }
+});
+
+test('type-two advance with blank source rate displays zero and never falls back to fxamount', () => {
+  const h = harness({
+    lines: [item({ custcol_thl_summarytype: '2', quantityuom: '1', fxrate: '', fxamount: '7000' })],
+    body: { taxtotal: 17.25 }
+  });
+  h.data.totals = { gross: '7,000.00', customerPaid: '7,017.25', amountInWords: 'Stale generic words' };
+  h.data.item = [{ item: 'Unrelated generic row', amount: 7000 }];
+  const before = JSON.stringify(h.data);
+  const enriched = h.helper.enrich(h.data, '123');
+  assert.equal(enriched.items.length, 1);
+  assert.equal(enriched.items[0].quantity, '1.00');
+  assert.equal(enriched.items[0].unit_price, '');
+  assert.equal(enriched.items[0].discount, '');
+  assert.equal(enriched.items[0].amount, '0.00');
+  assert.equal(enriched.item[0].rate, null);
+  assert.equal(enriched.item[0].amount, 0);
+  assert.equal(enriched.item[0].item, enriched.items[0].name);
+  assert.equal(enriched.totals.gross, '0.00');
+  assert.equal(enriched.totals.baseAmount, '0.00');
+  assert.equal(enriched.totals.grandTotal, '17.25');
+  assert.equal(enriched.totals.customerPaid, '17.25');
+  assert.equal(enriched.totals.amountInWords, 'SEVENTEEN DOLLAR AND TWENTY-FIVE CENT');
+  assert.equal(enriched.totalText, '17.25');
+  assert.equal(JSON.stringify(h.data), before, 'reference enrichment does not mutate generic caller data');
+});
+
+test('legacy item selection, contiguous discount consumption and signed totals agree', () => {
+  const h = harness({
+    lines: [
+      item({ quantityuom: '2', fxrate: '100', fxamount: '999' }),
+      item({ custcol_thl_summarytype: '3', fxamount: '-10' }, { custcol_thl_summarytype: 'Discount Item' }),
+      item({ custcol_thl_summarytype: '3', fxamount: '-5' }, { custcol_thl_summarytype: 'Discount Item' }),
+      item({ custcol_thl_summarytype: '1', quantityuom: '1.5', fxrate: '20' }),
+      item({ custcol_thl_summarytype: '2', quantityuom: '1', fxrate: '50' }),
+      item({ custcol_thl_summarytype: '4', fxamount: '-40' }),
+      item({ custcol_thl_summarytype: '3', fxamount: '-5' }),
+      item({ custcol_thl_summarytype: '8', fxamount: '3' }),
+      item({ custcol_thl_summarytype: '8', fxamount: '-1' }),
+      item({ 'item.type': 'Subtotal', quantityuom: '100', fxrate: '100' }),
+      ...['7', '9', '10', '11', '12'].map(type => item({ custcol_thl_summarytype: type, fxamount: '-900' }))
+    ],
+    summaries: [
+      { custrecord_sum_type: '7', custrecord_sum_total: '-4' },
+      { custrecord_sum_type: '5', custrecord_sum_taxrate: '0.07' },
+      { custrecord_sum_type: '7', custrecord_sum_total: '-6' },
+      { custrecord_sum_type: '5', custrecord_sum_taxrate: '7.0' }
+    ],
+    body: { taxtotal: 11.9 }
+  });
+  const enriched = h.helper.enrich(h.data, '123');
+  assert.equal(enriched.items.length, 3);
+  assert.deepEqual(Array.from(enriched.items, row => row.no), [1, 2, 3]);
+  assert.equal(enriched.items[0].discount, '-15.00');
+  assert.equal(enriched.items[0].amount, '185.00');
+  assert.equal(enriched.items[1].quantity, '1.50');
+  assert.equal(enriched.items[2].amount, '50.00', 'type-two amount prints but does not enter gross');
+  const expected = {
+    gross: '215.00', specialDiscount: '-5.00', advanceReceive: '-40.00', baseAmount: '170.00',
+    vatRate: '7.0', vat: '11.90', grandTotal: '181.90', wht: '-6.00', cashCoupon: '-2.00', customerPaid: '173.90'
+  };
+  for (const [key, value] of Object.entries(expected)) assert.equal(enriched.totals[key], value, key);
+  assert.equal(enriched.totals.summaryRows.length, 9);
+  assert.equal(enriched.totals.summaryRows[6].value, '-6.00');
+  assert.equal(enriched.totals.amountInWords, 'ONE HUNDRED SEVENTY-THREE DOLLAR AND NINETY CENT');
+  assert.deepEqual(plain(h.summarySaved.filterExpression), [['custrecord_sum_parenttransaction', 'anyof', '123']]);
+  assert.deepEqual(h.calls.loadedSearches.map(row => row.id), [
+    'customsearch_thl_transactiondataprintinv', 'customsearch_thl_summarytotaldataprint'
+  ]);
+});
+
+test('positive advance, special-discount and WHT values retain their source signs', () => {
+  const h = harness({
+    lines: [item(), item({ custcol_thl_summarytype: '4', fxamount: '10' }),
+      item({ custcol_thl_summarytype: '3', fxamount: '5' }), item({ custcol_thl_summarytype: '8', fxamount: '-3' })],
+    summaries: [{ custrecord_sum_type: '7', custrecord_sum_total: '7' }], body: { taxtotal: 0 }
+  });
+  const totals = h.helper.enrich(h.data, '123').totals;
+  assert.equal(totals.baseAmount, '115.00');
+  assert.equal(totals.wht, '7.00');
+  assert.equal(totals.cashCoupon, '-3.00');
+  assert.equal(totals.customerPaid, '119.00');
+});
+
+test('saved-search page boundaries do not interrupt discount lookahead or truncate fifty lines', () => {
+  const pages = [[item()], [item({ custcol_thl_summarytype: '3', fxamount: '-5' }, { custcol_thl_summarytype: 'Discount Item' }),
+    ...Array.from({ length: 49 }, (_, index) => item({}, { item: 'SAMPLE-' + (index + 2) }))]];
+  const h = harness({ invoicePages: pages, body: { taxtotal: 0 } });
+  const enriched = h.helper.enrich(h.data, '123');
+  assert.deepEqual(h.calls.invoiceFetches, [0, 1]);
+  assert.equal(enriched.items.length, 50);
+  assert.equal(enriched.item.length, 50);
+  assert.equal(enriched.items[0].amount, '95.00');
+  assert.equal(enriched.items[49].no, 50);
+  assert.equal(enriched.totals.gross, '4,995.00');
+});
+
+test('currency words use reference customer-paid amount and saved-search currency', () => {
+  const h = harness({ lines: [item({ 'CURRENCY.symbol': 'THB' })] });
+  h.data.document.currencyCode = 'USD';
+  const enriched = h.helper.enrich(h.data, '123');
+  assert.equal(enriched.document.currencyCode, 'THB');
+  assert.equal(enriched.totals.amountInWords, 'หนึ่งร้อยเจ็ดบาทถ้วน');
+  assert.equal(enriched.totals.summaryRows[8].label, 'Customer Paid / ยอดชำระ (บาท)');
+});
+
+test('reference header and footer preserve raw Thai while item text retains word breaking', () => {
+  const h = harness({ company: { custrecord_cba_companyname: 'บริษัททดสอบ', custrecord_cba_address: 'ที่อยู่บริษัท\nบรรทัดเพิ่มเติม' },
+    breakThai: value => 'SEGMENTED:' + value });
+  const enriched = h.helper.enrich(h.data, '123');
+  assert.equal(enriched.referenceCompany.name, 'บริษัททดสอบ');
+  assert.equal(enriched.referenceCompany.address, 'ที่อยู่บริษัท\nบรรทัดเพิ่มเติม');
+  assert.equal(enriched.customer.name, 'ผู้ซื้อตัวอย่าง');
+  assert.equal(enriched.customer.address, 'ที่อยู่ลูกค้า\nบรรทัดเพิ่มเติม');
+  assert.equal(enriched.shipTo.address, 'ที่อยู่จัดส่ง\nบรรทัดเพิ่มเติม');
+  assert.equal(enriched.document.footerText, 'Synthetic configured footer');
+  assert.match(enriched.items[0].name, /^SEGMENTED:/);
+  assert.match(enriched.items[0].memo, /^SEGMENTED:/);
+});
+
+test('invalid reference financial values and missing currency fail without generic fallback', () => {
+  const cases = [
+    [{ lines: [item({ fxrate: 'invalid' })] }, 'PLD_REFERENCE_NUMBER_INVALID'],
+    [{ body: { taxtotal: 'invalid' } }, 'PLD_REFERENCE_NUMBER_INVALID'],
+    [{ summaries: [{ custrecord_sum_type: '7', custrecord_sum_total: 'invalid' }] }, 'PLD_REFERENCE_NUMBER_INVALID'],
+    [{ lines: [item({ 'CURRENCY.symbol': '' })] }, 'PLD_REFERENCE_CURRENCY_MISSING']
+  ];
+  for (const [options, name] of cases) {
+    const h = harness(options);
+    assert.throws(() => h.helper.enrich(h.data, '123'), error => error.name === name);
+    assert.equal(h.data.totals, undefined);
+  }
+  const h = harness({ summaryError: true });
+  assert.throws(() => h.helper.enrich(h.data, '123'), /summary search unavailable/);
 });
