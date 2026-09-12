@@ -529,6 +529,12 @@
       "attempts": 1,
       "aborted": 0,
       "completed": 1
+    },
+    "visibleFormSmoke": {
+      "runs": 1,
+      "requestToPaintMs": 3483.0,
+      "responseToPaintMs": 12.6,
+      "editMs": 34.3
     }
   },
   "diagnosticObservations": [
@@ -545,10 +551,28 @@
       "outcome": "later HTTP 200 and PDF parity passed",
       "prefetchCause": "rAF-only wait possible; occurrence not conclusively attributed",
       "includedInSuccessfulFormOrCanonicalRenderSeries": false
+    },
+    {
+      "kind": "final-form-hidden-tab-observation-timeout",
+      "count": 1,
+      "phase": "form-ready; response and Lit updates completed, form rAF not delivered",
+      "visibility": "hidden",
+      "outcome": "frames resumed after owned tab brought forward; fresh visible smoke passed",
+      "includedInSuccessfulSeries": false
     }
   ],
   "ci": {
     "atReportCreation": "final-head run pending",
-    "statusReference": "https://github.com/Teibto/teibto-pdf-designer/pull/214"
+    "statusReference": "https://github.com/Teibto/teibto-pdf-designer/pull/214",
+    "testClockCorrection": {
+      "failedRun": 34724111890,
+      "cause": "synthetic fixture print date depended on runner day",
+      "focusedPassesPerTimezone": 40,
+      "timezones": [
+        "Pacific/Honolulu",
+        "Asia/Bangkok"
+      ],
+      "productionSourceChanged": false
+    }
   }
 }

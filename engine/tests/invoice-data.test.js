@@ -103,6 +103,20 @@ const ITEM_LINES = [
   },
 ];
 
+// Pin only the print-time service boundary to the baseline's capture date.
+// Transaction/apply DATE formatting remains unchanged; DATETIME is exclusively
+// document.printedDate in this builder and must not depend on the runner's day.
+const invoiceFormatStub = {
+  ...formatStub,
+  format(options) {
+    if (options.type === formatStub.Type.DATETIME) {
+      assert.equal(Object.prototype.toString.call(options.value), '[object Date]');
+      return '13/09/2026 10:30';
+    }
+    return formatStub.format(options);
+  },
+};
+
 /** Returns the module plus the query stub, so a test can assert on the SQL issued. */
 function buildLibWith(overrides = {}) {
   const values = { ...BODY_VALUES, ...(overrides.values || {}) };
@@ -127,7 +141,7 @@ function buildLibWith(overrides = {}) {
         item: overrides.itemLines || ITEM_LINES,
       },
     }).module,
-    'N/format': formatStub,
+    'N/format': invoiceFormatStub,
     './pld_lib_company_config': companyConfigStub,
   };
   return { lib: loadAmd('./pld_lib_invoice_data', stubs), query: q };
@@ -657,4 +671,12 @@ test('joined header retains currency, creator, dates and reference fields', () =
   assert.equal(data.document.refNo, HDR.otherrefnum);
   assert.match(query.seen[0].query, /currency.id = t.currency/);
   assert.match(query.seen[0].query, /BUILTIN.DF\(t.createdby\) AS created_by/);
+});
+
+
+test('baseline print-time stub is independent of current day and preserves transaction dates', () => {
+  for (const instant of ['2000-01-01T00:00:00Z', '2026-09-12T23:30:00Z', '2040-12-31T23:59:59Z']) {
+    assert.equal(invoiceFormatStub.format({ value: new Date(instant), type: formatStub.Type.DATETIME }), '13/09/2026 10:30');
+  }
+  assert.equal(invoiceFormatStub.format({ value: new Date(2026, 6, 25), type: formatStub.Type.DATE }), '25/07/2026');
 });

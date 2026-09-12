@@ -106,6 +106,13 @@ aborted one pending request with zero completed responses. An earlier slower clo
 occurred after a successful response and was not counted as an abort pass. These
 are follow-up smoke checks, not a new ten-run form series.
 
+An additional final form smoke observation timed out after the response and Lit
+updates while the tab was hidden, before either form animation frame fired.
+Bringing the owned tab forward resumed those frames. A fresh visible-tab run
+passed: 3483.0 ms request-to-paint, 12.6 ms response-to-paint and 34.3 ms edit.
+The hidden-tab timeout is retained as an observation failure, not a product
+request failure or a successful paint measurement.
+
 ## Deployment, rollback and privacy
 
 The original live files and all affected bundle assets were captured privately;
@@ -133,6 +140,10 @@ validation and local scale evidence are in [the implementation report](213-trans
 The scheduler follow-up passed 7/7 focused Preview tests, lint (29 existing warnings)
 and the canonical NetSuite build. Prior CI passed at `ae582ce`; final-head CI status
 is tracked on [PR #214](https://github.com/Teibto/teibto-pdf-designer/pull/214).
+Run 34724111890 exposed a current-day dependency in the new synthetic baseline
+fixture comparisons. Only the test print-time service was pinned; transaction
+date and financial assertions remain unchanged. The focused 40-test suite passed
+in both Honolulu and Bangkok timezones; no deployed production source changed.
 [Numeric aggregates](213-sb2-performance.json) retain all three stages, sample counts,
 first requests, maxima and unavailable telemetry.
 
