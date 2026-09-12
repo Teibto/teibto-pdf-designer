@@ -14,14 +14,23 @@ on:
 env:
   GITLEAKS_VERSION: "8.29.0" # pin โดย teibto-dev-standards — อัปเดตที่ template กลางเท่านั้น
 
+permissions:
+  contents: read
+
 jobs:
   quality-gate:
     name: quality-gate
-    runs-on: ubuntu-latest
+    # Run repository-owned changes only on the team's persistent private runner.
+    if: >-
+      github.event.repository.private == true &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, teibto-devtools]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -29,13 +38,20 @@ jobs:
           cache: npm
           cache-dependency-path: designer/package-lock.json
 
-      - name: Install gitleaks (pinned)
+      # Per-job installation avoids sudo and shared /usr/local/bin writes.
+      - name: Install gitleaks (pinned, per-job)
         run: |
-          curl -sfL -o /tmp/gitleaks.tgz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/
-          gitleaks version
+          case "$(uname -m)" in
+            aarch64|arm64) GL_ARCH=arm64 ;;
+            x86_64|amd64) GL_ARCH=x64 ;;
+            *) echo "Unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl -sfL -o "${RUNNER_TEMP}/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GL_ARCH}.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/gitleaks.tgz" -C "${RUNNER_TEMP}" gitleaks
+          chmod +x "${RUNNER_TEMP}/gitleaks"
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/gitleaks" version
 
       # 1) Secret scan — ห้าม opt-out ทุก governance profile (Playbook §2.4)
       - name: Secret scan (working tree + staged)
@@ -64,8 +80,8 @@ jobs:
       # both runtimes must discover the same agents and delivery skill.
       - name: Validate AI workspace
         run: |
-          python -m unittest scripts/test_validate_ai_workspace.py
-          python scripts/validate-ai-workspace.py
+          python3 -m unittest scripts/test_validate_ai_workspace.py
+          python3 scripts/validate-ai-workspace.py
 
       # 4b) Engine (SuiteScript) — เดิม CI ไม่ครอบ engine/ เลย (#155)
       #     node --check จับ syntax · node --test รัน unit test ที่ mount AMD module จริง
@@ -111,6 +127,7 @@ jobs:
         if: hashFiles('designer/package.json') != ''
         working-directory: designer
         run: |
-          npx playwright install --with-deps chromium
+          # Chromium OS dependencies are provisioned on the team runner.
+          npx playwright install chromium
           npm run test:e2e
           npx playwright test --config playwright.performance.config.ts
