@@ -33,8 +33,11 @@ Rules ที่เจอบ่อยใน repo นี้:
 ## Workflow แนะนำ (token-saving)
 
 - อ่าน `docs/architecture/OVERVIEW.md` ก่อนเริ่มงานใหม่ — มี map ของ services/components ทั้งหมด
+- อ่าน `docs/AGENT-WORKFLOW.md` เมื่อต้องแบ่งงาน/ส่งต่องานหรือทำงานผ่านหลาย context — ใช้
+  contract เดียวกันและไม่สำรวจซ้ำเมื่อ explorer ส่ง map ที่เพียงพอแล้ว
 - `designer/src/` มี 60+ ไฟล์ — เปิดเฉพาะไฟล์ที่เกี่ยว อย่าโหลดทั้งโฟลเดอร์; จุดศูนย์กลาง: `state/store.ts` (Lit Context + Immer), `state/actions.ts`, `services/bfo-export.service.ts`
-- งาน NetSuite deploy/QA ใช้ skill: `netsuite-qa-browser`, `netsuite-suiteql`, `netsuite-suitelet`
+- งาน NetSuite validate/deploy/render/save-parity ใช้ skill `pdf-template-delivery`; อ่าน reference
+  เฉพาะ mode ที่กำลังทำ และให้ primary agent ถือ live action ทั้งหมด
 
 ## ห้ามทำใน repo นี้
 
