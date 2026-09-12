@@ -17,19 +17,33 @@ env:
 jobs:
   quality-gate:
     name: quality-gate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, teibto-devtools]
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install gitleaks (pinned)
+      # Match the team's canonical runner setup: architecture-aware, per-job tools.
+      - name: Install gitleaks (pinned, per-job)
         run: |
-          curl -sfL -o /tmp/gitleaks.tgz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
-          sudo mv /tmp/gitleaks /usr/local/bin/
-          gitleaks version
+          case "$(uname -m)" in
+            aarch64|arm64) GL_ARCH=arm64 ;;
+            x86_64)       GL_ARCH=x64 ;;
+            *) echo "Unsupported runner architecture" >&2; exit 1 ;;
+          esac
+          curl -sfL -o "${RUNNER_TEMP}/gitleaks.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GL_ARCH}.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/gitleaks.tgz" -C "${RUNNER_TEMP}" gitleaks
+          chmod +x "${RUNNER_TEMP}/gitleaks"
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/gitleaks" version
+
+      - name: Set up Node for automation and designer
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
 
       # 1) Secret scan — ห้าม opt-out ทุก governance profile (Playbook §2.4)
       - name: Secret scan (working tree + staged)
@@ -64,11 +78,6 @@ jobs:
           done
           node --test "engine/tests/**/*.test.js"
 
-      - name: Set up Node for automation
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
       - name: PDF automation — MCP protocol and service tests
         working-directory: automation
         run: |
@@ -95,6 +104,9 @@ jobs:
       - name: Node — e2e (Playwright, designer/)
         if: hashFiles('designer/package.json') != ''
         working-directory: designer
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/playwright-browsers
         run: |
-          npx playwright install --with-deps chromium
+          # System libraries are provisioned by the runner owner, not by PR code.
+          npx playwright install chromium
           npm run test:e2e
