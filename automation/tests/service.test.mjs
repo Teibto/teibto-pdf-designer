@@ -12,6 +12,7 @@ test('canonical catalog needs no session and maps record types from XML', async 
   assert.deepEqual(result.templates.map(template => template.id), [
     'delivery-note', 'invoice-reference', 'invoice', 'purchase-order', 'quotation', 'receipt', 'tax-invoice',
   ]);
+  assert.deepEqual(result.templates.find(t => t.id === 'invoice-reference'), { id: 'invoice-reference', rectype: 'invoice' });
   assert.deepEqual(result.templates.find(t => t.id === 'receipt'), { id: 'receipt', rectype: 'customerpayment' });
 });
 test('render uses exact master XML and copy labels; output is exclusive and bounded', async t => {
