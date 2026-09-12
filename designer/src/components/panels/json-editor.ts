@@ -143,6 +143,13 @@ export class PldJsonEditor extends LitElement {
       color: var(--c-text);
     }
 
+    .data-hint {
+      margin: 0 0 8px;
+      color: var(--c-text-subtle);
+      font-size: var(--t-sm);
+      line-height: 1.5;
+    }
+
     /* ─── View Toggle ─── */
     .view-toggle {
       display: flex;
@@ -320,6 +327,11 @@ export class PldJsonEditor extends LitElement {
         </div>
       </div>
 
+      <p class="data-hint" id="data-scope-hint">
+        แก้ข้อมูลเพื่อจำลองการผูกฟิลด์บนพื้นที่ออกแบบเท่านั้น
+        PDF Preview ใน NetSuite ใช้ข้อมูลจากเอกสารจริง หรือข้อมูลตัวอย่างของระบบ
+      </p>
+
       <!-- View Toggle -->
       <div class="view-toggle">
         <button
@@ -350,7 +362,7 @@ export class PldJsonEditor extends LitElement {
   private _renderJsonView() {
     return html`
       <label for="json-source">ข้อมูล JSON (JSON data)</label>
-      <textarea id="json-source"
+      <textarea id="json-source" aria-describedby="data-scope-hint"
         class="${this.isValid ? '' : 'invalid'}"
         style="min-height: ${this.isExpanded ? '300px' : '120px'};"
         placeholder='Paste JSON data here...

@@ -420,7 +420,7 @@ export class PldPreviewModal extends LitElement {
     }
   }
 
-  /** Download the exact PDF displayed, including unsaved changes and sample data. */
+  /** Download the displayed PDF, including unsaved layout edits and server-sourced data. */
   private _printServer() {
     if (!this.serverPdfUrl || this.serverLoading) return;
     const link = document.createElement('a');
@@ -452,8 +452,8 @@ export class PldPreviewModal extends LitElement {
       <div class="preview-toolbar">
         <span class="server-hint">
           ${this._sampleMode
-            ? 'เรนเดอร์โดย NetSuite N/render ด้วย ข้อมูลตัวอย่าง — ฟอนต์ หัว-ท้ายกระดาษ และชุดสำเนา ตรงกับ Print จริง ส่วนตัวเลขและชื่อเป็นของสมมติ'
-            : 'พรีวิวแบบปัจจุบัน รวมการแก้ไขที่ยังไม่บันทึก — บันทึกก่อนสั่ง Print จากเอกสาร'}
+            ? 'พรีวิวด้วยข้อมูลตัวอย่างของระบบ รวมการแก้ไขแบบที่ยังไม่บันทึก ข้อมูลที่แก้ในแผง Data ใช้จำลองบนพื้นที่ออกแบบเท่านั้น'
+            : 'พรีวิวด้วยข้อมูลจากเอกสารจริง รวมการแก้ไขแบบที่ยังไม่บันทึก ข้อมูลที่แก้ในแผง Data ใช้จำลองบนพื้นที่ออกแบบเท่านั้น บันทึกแบบก่อนสั่ง Print จากเอกสาร'}
         </span>
         <button class="export-btn" ?disabled=${this.serverLoading || !this.serverPdfUrl}
           @click=${this._printServer}>${icon('file')} ดาวน์โหลด PDF ที่แสดง</button>
