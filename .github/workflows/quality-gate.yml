@@ -64,6 +64,17 @@ jobs:
           done
           node --test "engine/tests/**/*.test.js"
 
+      - name: Set up Node for automation
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: PDF automation — MCP protocol and service tests
+        working-directory: automation
+        run: |
+          npm ci
+          npm test
+
       # ==================== STACK: Node (designer/) ====================
       # monorepo: แอปหลักอยู่ designer/ — ไม่มี package.json ที่ root
       - name: Node — lint + test (designer/)
