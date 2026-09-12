@@ -1,0 +1,174 @@
+<?xml version="1.0"?>
+<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
+<#--
+  Reference invoice variant. Canonical layout; all account data is supplied at runtime.
+  @author Wichit Wongta
+  @since 2026-09-13
+  pld:rectype invoice
+  pld:reference-layout
+  N/render supplies the curated record, company File Cabinet links, and copy aliases.
+  Header geometry follows the reference; the item table remains in normal BFO flow.
+  Short, compact invoices retain the reference's blank ruled item area. Long or
+  multiline invoices omit that padding so BFO can paginate without clipping text.
+-->
+<#if (company.fontRegular!"") == "" || (company.fontBold!"") == "">
+  <#stop "Reference invoice requires configured Thai regular and bold File Cabinet fonts.">
+</#if>
+<pdf lang="th" xml:lang="th">
+<head>
+  <link name="THSarabunPSK" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />
+  <style type="text/css">
+    * { font-family: THSarabunPSK, sans-serif; font-size: 11.04pt; line-height: 105%; color: #000000; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { padding: 0; vertical-align: top; font-weight: normal; }
+    p { margin: 0; }
+    p.center { text-align: center; }
+    p.right { text-align: right; }
+    .blue { color: #293CE7; }
+    .title { color: #293CE7; font-size: 21pt; text-align: center; }
+    .metadata td { border: 0.1pt solid #696969; padding: 0 2pt; }
+    .party-label { background-color: #D9EEFF; color: #293CE7; padding: 0 2pt; }
+    .party-content { padding: 2.01pt 2pt 0; }
+    .items th { background-color: #D9EEFF; color: #293CE7; border: 0.1pt solid #696969; vertical-align: middle; padding: 2pt; }
+    .items td { border-left: 0.1pt solid #696969; border-right: 0.1pt solid #696969; padding: 2pt; }
+    .items td p { font-size: 11pt; color: #231F20; }
+    .items td b { font-size: 11.04pt; color: #000000; }
+    .items { border-bottom: 0.1pt solid #696969; }
+    .totals td { height: 16pt; border-bottom: 0.1pt solid #696969; vertical-align: middle; padding: 0 2pt; }
+    .amount-words { background-color: #D9EEFF; border-bottom: 0.1pt solid #696969; height: 20pt; padding: 3pt 2pt; }
+    .remark { border: 0.1pt solid #696969; padding: 2.28pt 4.8pt 3pt; }
+    .footer-box { border: 0.08pt solid #696969; color: #293CE7; }
+    .footer-box td { padding: 0; }
+    .footer-box b { font-size: 11pt; }
+    .footer-text { font-size: 10pt; text-align: center; }
+    .party-label p, .items th p, .footer-box p, .footer-box b { color: #293CE7; }
+    .remark p, .remark b { font-size: 11pt; }
+  </style>
+  <macrolist>
+    <macro id="reference-header">
+      <table width="100%"><tr><td>
+      <table width="100%" style="table-layout: fixed;">
+        <tr>
+          <td style="width: 50%; height: 52.15pt;">
+            <#if (record.referenceCompany.logo!"") != ""><p style="text-align: left;"><img src="${(record.referenceCompany.logo!'')?xml}" width="112pt" height="32pt" /></p></#if>
+          </td>
+          <td style="width: 50%; padding-left: 15.5pt;" align="center">
+            <p text-align="center" class="title" style="text-align: center;">Invoice (${(copy.en!"Original")?xml})</p>
+            <p text-align="center" class="title" style="text-align: center;">ใบแจ้งหนี้ (${(copy.th!"ต้นฉบับ")?xml})</p>
+          </td>
+        </tr>
+      </table>
+      <table width="100%" style="table-layout: fixed;">
+        <tr>
+          <td style="width: 50%; padding-right: 22pt;">
+            <p class="blue" style="text-align: left;">${(record.referenceCompany.name!"")?xml}</p>
+            <p style="text-align: left;">${(record.referenceCompany.address!"")?xml}</p>
+            <p style="text-align: left;">Tax ID / เลขที่ผู้เสียภาษี : ${(record.referenceCompany.taxId!"")?xml}</p>
+            <p style="text-align: left;">Branch / สาขา : ${(record.referenceCompany.branchCode!"")?xml}</p>
+          </td>
+          <td style="width: 50%; padding-left: 18pt;">
+            <table class="metadata" style="table-layout: fixed;">
+              <tr><td width="106.52pt" style="width: 106.52pt;"><p style="text-align: left; padding-left: 1.065pt;">Doc No. / เลขที่เอกสาร</p></td><td width="136.98pt" style="width: 136.98pt;"><p class="blue" style="text-align: left;">&#160;${(record.document.number!"")?xml}</p></td></tr>
+              <tr><td><p style="text-align: left; padding-left: 1.065pt;">Date / วันที่</p></td><td><p class="blue" style="text-align: left;">&#160;${(record.document.date!"")?xml}</p></td></tr>
+              <tr><td><p style="text-align: left; padding-left: 1.065pt;">Due Date / วันครบกำหนดชำระ</p></td><td><p class="blue" style="text-align: left;">&#160;${(record.document.dueDate!"")?xml}</p></td></tr>
+              <tr><td><p style="text-align: left; padding-left: 1.065pt;">Ref. SO / เลขที่การขาย</p></td><td><p class="blue" style="text-align: left;">&#160;${(record.document.refSo!"")?xml}</p></td></tr>
+              <tr><td><p style="text-align: left; padding-left: 1.065pt;">Ref. No / เลขที่อ้างอิง</p></td><td><p class="blue" style="text-align: left;">&#160;${(record.document.refNo!"")?xml}</p></td></tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+      <table style="margin-top: 10pt; border-top: 0.1pt solid #696969;"><tr><td style="height: 12.7pt;"></td></tr></table>
+      <table width="100%" style="table-layout: fixed;">
+        <tr>
+          <td width="252pt" style="width: 252pt;" class="party-label"><p style="text-align: left;">Customer / ชื่อ - ที่อยู่ลูกค้า</p></td>
+          <td width="29.33pt" style="width: 29.33pt;"></td>
+          <td width="225.6pt" style="width: 225.6pt;" class="party-label"><p style="text-align: left;">Ship To / ที่อยู่จัดส่งสินค้า</p></td>
+          <td width="16.07pt" style="width: 16.07pt;"></td>
+        </tr>
+        <tr>
+          <td class="party-content">
+            <table width="216pt" style="width: 216pt; table-layout: fixed;"><tr><td>
+            <p style="text-align: left;">${(record.customer.name!"")?xml}</p>
+            <p style="text-align: left;">${(record.customer.address!"")?xml}</p>
+            <p style="text-align: left;">Tax ID/ เลขประจำตัวผู้เสียภาษี: ${(record.customer.taxId!"")?xml}</p>
+            <p style="text-align: left;">Branch / สาขา : ${(record.customer.branchCode!"")?xml}</p>
+            </td></tr></table>
+          </td>
+          <td></td>
+          <td class="party-content"><table width="184pt" style="width: 184pt; table-layout: fixed;"><tr><td><p style="text-align: left;">${(record.shipTo.address!"")?xml}</p></td></tr></table></td>
+          <td></td>
+        </tr>
+      </table>
+      </td></tr></table>
+    </macro>
+    <macro id="reference-footer">
+      <table class="footer-box" width="523.2pt" style="width: 523.2pt;">
+        <tr>
+          <td style="width: 55%; height: 16pt;"><p style="text-align: left;"><b>&#160;ผู้ออกเอกสาร/User ID : </b>${(record.issuer.createdBy!"")?xml}</p></td>
+          <td style="width: 45%;" align="right"><p text-align="right" class="right" style="text-align: right;">Printed Date : ${(record.document.printedDate!"")?xml}&#160;</p></td>
+        </tr>
+        <tr><td colspan="2" align="center" style="height: 32pt;"><p text-align="center" class="footer-text" style="text-align: center;">${(record.document.footerText!"")?xml}</p></td></tr>
+      </table>
+      <table width="523.2pt" style="width: 523.2pt; margin-top: -0.2pt;"><tr><td align="right"><p text-align="right" class="right" style="text-align: right;">Page <pagenumber/>&#160;/&#160;<totalpages/></p></td></tr></table>
+    </macro>
+  </macrolist>
+</head>
+<body size="A4" padding="0" margin="0.5in" margin-bottom="0.2in" header="reference-header" header-height="80mm" footer="reference-footer" footer-height="25mm">
+  <#assign invoiceRows = (record.items)![]>
+  <#assign compactRows = invoiceRows?size lte 4>
+  <#assign occupiedHeight = 0>
+  <#list invoiceRows as row>
+    <#if (row.name!"")?length gt 60 || (row.memo!"")?length gt 90 || (row.memo!"")?contains("\n")><#assign compactRows = false></#if>
+    <#assign occupiedHeight = occupiedHeight + 16>
+    <#-- Offset the measured memo-gap increase minus the 11.04-to-11pt line-height change. -->
+    <#if (row.memo!"") != ""><#assign occupiedHeight = occupiedHeight + 17.317></#if>
+  </#list>
+  <table class="items" width="100%" style="table-layout: fixed;">
+    <thead><tr style="height: 40pt;">
+      <th width="4.62%" align="center" style="width: 4.62%;"><p text-align="center" class="center" style="text-align: center;">No.<br/>ลำดับ</p></th>
+      <th width="40%" align="center" style="width: 40%;"><p text-align="center" class="center" style="text-align: center;">Description<br/>รายละเอียด</p></th>
+      <th width="6.92%" align="center" style="width: 6.92%;"><p text-align="center" class="center" style="text-align: center;">Quantity<br/>จำนวน</p></th>
+      <th width="6.92%" align="center" style="width: 6.92%;"><p text-align="center" class="center" style="text-align: center;">Unit<br/>หน่วย</p></th>
+      <th width="13.85%" align="center" style="width: 13.85%;"><p text-align="center" class="center" style="text-align: center;">Unit Price<br/>ราคาต่อหน่วย</p></th>
+      <th width="13.85%" align="center" style="width: 13.85%;"><p text-align="center" class="center" style="text-align: center;">Total Discount<br/>ส่วนลด</p></th>
+      <th width="13.84%" align="center" style="width: 13.84%;"><p text-align="center" class="center" style="text-align: center;">Amount<br/>จำนวนเงิน (${(record.document.currencyCode!"")?xml})</p></th>
+    </tr></thead>
+    <tbody>
+      <#list invoiceRows as row>
+      <tr style="height: 16pt;">
+        <td width="4.62%" style="width: 4.62%;" align="center"><p text-align="center" class="center" style="text-align: center;">${row_index + 1}</p></td>
+        <td width="40%" style="width: 40%;"><p style="text-align: left;"><b>${(row.name!"")?xml}</b></p><#if (row.memo!"") != ""><#list (row.memo!"")?split("\n") as memoLine><p style="text-align: left; margin-top: 4.359pt;">${(memoLine!"")?xml}</p></#list></#if></td>
+        <td width="6.92%" style="width: 6.92%;" align="center"><p text-align="center" class="center" style="text-align: center;">${(row.quantity!"")?xml}</p></td>
+        <td width="6.92%" style="width: 6.92%;" align="center"><p text-align="center" class="center" style="text-align: center;">${(row.unit!"")?xml}</p></td>
+        <td width="13.85%" style="width: 13.85%;" align="right"><p text-align="right" class="right" style="text-align: right;">${(row.unit_price!"")?xml}</p></td>
+        <td width="13.85%" style="width: 13.85%;" align="right"><p text-align="right" class="right" style="text-align: right;">${(row.discount!"")?xml}</p></td>
+        <td width="13.84%" style="width: 13.84%;" align="right"><p text-align="right" class="right" style="text-align: right;">${(row.amount!"")?xml}</p></td>
+      </tr>
+      </#list>
+      <#if compactRows>
+      <tr style="height: ${209.8 - occupiedHeight}pt;"><td width="4.62%" style="width: 4.62%;"></td><td width="40%" style="width: 40%;"></td><td width="6.92%" style="width: 6.92%;"></td><td width="6.92%" style="width: 6.92%;"></td><td width="13.85%" style="width: 13.85%;"></td><td width="13.85%" style="width: 13.85%;"></td><td width="13.84%" style="width: 13.84%;"></td></tr>
+      </#if>
+    </tbody>
+  </table>
+  <table style="page-break-inside: avoid;">
+    <tr><td style="width: 50.5%;"></td><td style="width: 49.5%;">
+      <table class="totals">
+        <tr><td style="width: 72%; padding-right: 4.54pt;" align="right"><p text-align="right" class="right" style="text-align: right;"><b>Total / มูลค่ารวม</b></p></td><td style="width: 28%;" align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.gross!"")?xml}</p></td></tr>
+        <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>Special Discount / ส่วนลดพิเศษ</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.specialDiscount!"")?xml}</p></td></tr>
+        <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>Advance Receive / หักเงินรับล่วงหน้า</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.advanceReceive!"")?xml}</p></td></tr>
+        <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.baseAmount!"")?xml}</p></td></tr>
+        <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>VAT / ภาษีมูลค่าเพิ่ม ${(record.totals.vatRate!"")?xml}%</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.vat!"")?xml}</p></td></tr>
+        <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>Grand Total / มูลค่าสุทธิ</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.grandTotal!"")?xml}</p></td></tr>
+        <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>Withholding Tax / ภาษีหัก ณ ที่จ่าย</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.wht!"")?xml}</p></td></tr>
+        <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>Cash Coupon / คูปองส่วนลดเงินสด</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.cashCoupon!"")?xml}</p></td></tr>
+        <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>Customer Paid / ยอดชำระ (${(record.document.currencyCode!"")?xml})</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.customerPaid!"")?xml}</p></td></tr>
+      </table>
+    </td></tr>
+    <tr><td colspan="2" class="amount-words" align="right"><p text-align="right" class="right" style="text-align: right; margin-top: 1.035pt;">${(record.totals.amountInWords!"")?xml}</p></td></tr>
+  </table>
+  <table style="margin-top: 16pt; page-break-inside: avoid;"><tr><td class="remark" style="height: 48pt;">
+    <p style="text-align: left;"><b>Remark / หมายเหตุ:</b></p>
+    <#list (record.memo!"")?split("\n") as memoLine><p style="text-align: left;">${(memoLine!"")?xml}</p></#list>
+  </td></tr></table>
+</body>
+</pdf>

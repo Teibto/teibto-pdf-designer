@@ -1,0 +1,19 @@
+{
+  "name": "@teibto/pdf-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local MCP and CLI access to the canonical NetSuite BFO PDF engine",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "mcp": "node src/mcp.mjs",
+    "cli": "node src/cli.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.6.2"
+  }
+}

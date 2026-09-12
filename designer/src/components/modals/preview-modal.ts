@@ -17,7 +17,7 @@ import { resolveTemplateString, resolveBinding } from '../../services/binding.se
 import { computePagination, finalizePagination, getPageData } from '../../services/pagination.service';
 import { formatCellValue } from '../../utils/format';
 import { clearBarcodeCache, getCachedBarcodeSvg } from '../../services/barcode.service';
-import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
+import { getCurrentBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { isNetSuiteEnv, getNsContext, renderLivePreview } from '../../services/netsuite-adapter.service';
 import { resolveSampleRecordType } from '../../services/sample-record-type.service';
 import '../shared/modal';
@@ -392,7 +392,7 @@ export class PldPreviewModal extends LitElement {
       // Font comes from the config record via ${company.fontRegular} (#156) — the
       // preview therefore fails/succeeds on fonts exactly like Print does.
       const options: BfoExportOptions = { useBands: true }; // band layout is authoritative (#47 cutover)
-      const xml = exportBfoXml(this.store.state, options);
+      const xml = getCurrentBfoXml(this.store.state, options);
       const blob = await renderLivePreview({
         xml,
         rectype,
@@ -440,7 +440,11 @@ export class PldPreviewModal extends LitElement {
         @close=${this._close}
       >
         <div slot="body">
-          ${this._serverMode ? this._renderServerBody() : this._renderSimBody()}
+          ${this._serverMode
+            ? this._renderServerBody()
+            : this.store.state.editorMode === 'xml'
+              ? html`<div class="server-status error">Canonical XML preview requires the NetSuite BFO render service.</div>`
+              : this._renderSimBody()}
         </div>
       </pld-modal>
     `;

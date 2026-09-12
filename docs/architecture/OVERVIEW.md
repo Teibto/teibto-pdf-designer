@@ -7,7 +7,7 @@
 ## หลักการออกแบบ (ตัดสินแล้ว — เปลี่ยนต้องคุยใน Issue)
 
 1. **BFO (`N/render`) เป็น render engine เดียว** — preview ต้องมาจาก engine เดียวกับที่ print จริง
-2. **Template XML (`templates/master/`) คือ source of truth** — designer เป็นเครื่อง scaffold ร่างแบบครั้งแรก (hybrid model); แก้รอบหลังแก้ที่ XML ผ่าน PR
+2. **Template XML (`templates/master/`) คือ source of truth** — visual designer สร้าง XML ผ่าน generator เดียว ส่วนโหมด XML แก้ BFO/FreeMarker โดยตรงและส่งข้อความเดิมไป Preview/Save โดยไม่แปลงกลับเป็นองค์ประกอบ. การปรับ canonical pack ยังคงต้องนำ XML กลับเข้า repository ผ่าน PR.
 3. **BFO generator มีที่เดียว** — `designer/src/services/bfo-export.service.ts`; Suitelet ทำหน้าที่เก็บ + render เท่านั้น
 4. ที่ scale 100+ account: **ต้นทุนใหญ่คือ fleet maintenance ไม่ใช่การสร้าง template** — ทุกการตัดสินใจให้ถามก่อนว่า "deploy/อัปเดต 100 account แล้วเป็นยังไง"
 

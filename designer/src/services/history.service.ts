@@ -42,6 +42,8 @@ const MAX_IMAGE_STORE_BYTES = 16 * 1024 * 1024;
 // ─── Snapshot (stripped of heavy data) ───
 
 interface HistorySnapshot {
+  editorMode: 'visual' | 'xml';
+  rawXml: string;
   elements: CanvasElement[];
   /** Band structure (#47 cutover): band edits are undoable like element edits. */
   bands: Band[];
@@ -217,6 +219,8 @@ export class HistoryService {
     const pagination = structuredClone(state.pagination);
     const copies = structuredClone(state.copies);
     return {
+      editorMode: state.editorMode,
+      rawXml: state.rawXml,
       elements: stripped,
       bands,
       page,
@@ -225,7 +229,7 @@ export class HistoryService {
       imageDataRefs,
       selectedId: state.selectedId,
       timestamp: Date.now(),
-      estimatedSize: estimateSize(stripped) + estimateBandsSize(bands)
+      estimatedSize: state.rawXml.length * 2 + estimateSize(stripped) + estimateBandsSize(bands)
         + estimateObjectSize(page) + estimateObjectSize(pagination) + estimateObjectSize(copies),
     };
   }
@@ -243,6 +247,8 @@ export class HistoryService {
       });
 
       this._store.dispatch((draft) => {
+        draft.editorMode = snapshot.editorMode;
+        draft.rawXml = snapshot.rawXml;
         draft.elements = restored as any;
         draft.bands = structuredClone(snapshot.bands);
         draft.page = structuredClone(snapshot.page);

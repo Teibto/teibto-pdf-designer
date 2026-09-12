@@ -696,6 +696,8 @@ export class PldTemplateManagerModal extends LitElement {
     this.store.beginDocumentSession();
     clearPaginationCache();
     this.store.dispatch((draft) => {
+      draft.editorMode = 'visual';
+      draft.rawXml = '';
       draft.elements = structuredClone(tpl.elements);
       // Bands must load with the elements (#113) — band-view does not
       // auto-regenerate, and a later "Save to NetSuite" with empty bands
@@ -775,24 +777,27 @@ export class PldTemplateManagerModal extends LitElement {
     try {
       const src = await getNsTemplate(id);
       if (!this._mayCommitLoad(intent)) return;
-      let data: Partial<DocumentTemplate>;
+      let data: Partial<DocumentTemplate> | null = null;
       try {
-        data = JSON.parse(src.data);
+        data = src.data ? JSON.parse(src.data) : null;
       } catch {
-        throw new Error('Template has no designer data (XML-only record) — it cannot be edited here');
+        // Invalid/missing designer JSON is expected for canonical XML records.
       }
-      if (!data.elements) {
-        throw new Error('Template has no designer data (XML-only record) — it cannot be edited here');
+      const visual = Array.isArray(data?.elements);
+      if (!visual && !src.xml.trim()) {
+        throw new Error('Template has no designer data and its canonical XML is empty');
       }
 
       this.store.beginDocumentSession();
       clearPaginationCache();
       this.store.dispatch((draft) => {
-        draft.elements = data.elements!;
-        draft.bands = data.bands ?? elementsToBands(data.elements!);
-        draft.copies = data.copies ?? null;
-        if (data.page) draft.page = { ...data.page };
-        if (data.pagination) draft.pagination = { ...draft.pagination, ...data.pagination };
+        draft.editorMode = visual ? 'visual' : 'xml';
+        draft.rawXml = visual ? '' : src.xml;
+        draft.elements = visual ? data!.elements! : [];
+        draft.bands = visual ? data!.bands ?? elementsToBands(data!.elements!) : [];
+        draft.copies = visual ? data!.copies ?? null : null;
+        if (visual && data!.page) draft.page = { ...data!.page };
+        if (visual && data!.pagination) draft.pagination = { ...draft.pagination, ...data!.pagination };
         draft.template.nsMetadata = { rectype: src.rectype, isDefault: src.isDefault };
         draft.template.id = src.id;
         draft.template.name = src.name;
@@ -801,7 +806,10 @@ export class PldTemplateManagerModal extends LitElement {
         draft.multiSelect = [];
         draft.currentPage = 1;
       });
-      showToast(`Loaded from NetSuite: ${src.name}`, 'success');
+      showToast(
+        visual ? `Loaded from NetSuite: ${src.name}` : `Opened canonical XML: ${src.name}`,
+        'success',
+      );
       this._close();
     } catch (err) {
       if (generation !== this._loadGeneration || intent.documentSession !== this.store.documentSession) return;
@@ -864,6 +872,8 @@ export class PldTemplateManagerModal extends LitElement {
     return {
       generation,
       documentSession: this.store.documentSession,
+      editorMode: state.editorMode,
+      rawXml: state.rawXml,
       elements: state.elements,
       bands: state.bands,
       page: state.page,
@@ -880,7 +890,9 @@ export class PldTemplateManagerModal extends LitElement {
     if (intent.documentSession !== this.store.documentSession) return false;
 
     const state = this.store.state;
-    const unchanged = intent.elements === state.elements
+    const unchanged = intent.editorMode === state.editorMode
+      && intent.rawXml === state.rawXml
+      && intent.elements === state.elements
       && intent.bands === state.bands
       && intent.page === state.page
       && intent.pagination === state.pagination
@@ -896,6 +908,8 @@ export class PldTemplateManagerModal extends LitElement {
     this.store.beginDocumentSession();
     clearPaginationCache();
     this.store.dispatch((draft) => {
+      draft.editorMode = source.editorMode;
+      draft.rawXml = source.rawXml;
       draft.elements = structuredClone(source.elements);
       draft.bands = structuredClone(source.bands);
       draft.copies = structuredClone(source.copies);

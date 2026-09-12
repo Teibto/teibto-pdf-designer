@@ -12,7 +12,7 @@ vi.mock('../../src/services/netsuite-adapter.service', async original => ({
   getNsContext: mocks.context, isNetSuiteEnv: mocks.isNs,
   fetchNsSampleData: mocks.sample, renderLivePreview: mocks.preview,
 }));
-vi.mock('../../src/services/bfo-export.service', () => ({ exportBfoXml: () => '<pdf>sample test</pdf>' }));
+vi.mock('../../src/services/bfo-export.service', () => ({ getCurrentBfoXml: () => '<pdf>sample test</pdf>' }));
 import { mount } from './_harness';
 
 beforeEach(() => {

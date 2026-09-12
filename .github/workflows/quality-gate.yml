@@ -25,7 +25,7 @@ jobs:
       github.event.repository.private == true &&
       (github.event_name != 'pull_request' ||
        github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, teibto-devtools]
+    runs-on: [self-hosted, Linux, teibto-devtools]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -127,6 +127,8 @@ jobs:
         id: browser-gate
         if: hashFiles('designer/package.json') != ''
         working-directory: designer
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/playwright-browsers
         run: |
           # Chromium OS dependencies are provisioned on the team runner.
           npx playwright install chromium

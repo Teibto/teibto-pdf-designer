@@ -20,7 +20,7 @@ import { migrateTemplate, needsMigration, isFutureVersion, CURRENT_VERSION } fro
 import { clearPaginationCache } from './pagination.service';
 import { elementsToBands } from './band-layout.service';
 import { extractJsonKeys } from '../state/actions';
-import { exportBfoXml, type BfoExportOptions } from './bfo-export.service';
+import { getCurrentBfoXml, type BfoExportOptions } from './bfo-export.service';
 import { saveNsTemplate, getNsContext, getCachedBindingContract } from './netsuite-adapter.service';
 
 const TEMPLATE_PREFIX = 'pld-template-';
@@ -86,6 +86,7 @@ async function acknowledgeSave(store: AppStore, saved: AppStore['state'], sessio
   const current = store.state;
   if (store.documentSession !== session || current.template.id !== saved.template.id) return;
   const unchanged = current.template.name === saved.template.name &&
+      current.editorMode === saved.editorMode && current.rawXml === saved.rawXml &&
       current.elements === saved.elements && current.bands === saved.bands &&
       current.page === saved.page && current.pagination === saved.pagination &&
       current.copies === saved.copies && current.jsonData === saved.jsonData;
@@ -125,6 +126,8 @@ async function persistTemplate(store: AppStore): Promise<DocumentTemplate> {
     bands: state.bands.length ? structuredClone(state.bands) : undefined,
     copies: state.copies && state.copies.length ? structuredClone(state.copies) : undefined,
     jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
+    editorMode: state.editorMode,
+    rawXml: state.editorMode === 'xml' ? state.rawXml : undefined,
   };
 
   await set(`${TEMPLATE_PREFIX}${template.id}`, template);
@@ -184,16 +187,16 @@ async function persistTemplateToNetSuite(
   // The Thai font is bound to the config record inside exportBfoXml (#156) — no
   // per-account URL is baked in here, so a saved template keeps working after the
   // font file is re-saved in the File Cabinet (its h= token changes).
-  const xml = exportBfoXml(state, options);
+  const xml = getCurrentBfoXml(state, options);
 
-  const designerJson = JSON.stringify({
-    elements: state.elements,
-    page: state.page,
-    pagination: state.pagination,
-    // Persist band edits so a re-edit restores them (#47 3b).
-    bands: state.bands.length ? state.bands : undefined,
-    copies: state.copies && state.copies.length ? state.copies : undefined,
-  });
+  const designerJson = state.editorMode === 'visual' ? JSON.stringify({
+      elements: state.elements,
+      page: state.page,
+      pagination: state.pagination,
+      // Persist band edits so a re-edit restores them (#47 3b).
+      bands: state.bands.length ? state.bands : undefined,
+      copies: state.copies && state.copies.length ? state.copies : undefined,
+    }) : undefined;
 
   // กับดัก BFO ที่พิสูจน์แล้วว่าทำให้เอกสารพิมพ์ไม่ออกหรือพิมพ์ว่าง ต้องตายตรงนี้ (#191).
   // ปล่อยผ่านไปแล้วมันจะไปโผล่ตอนผู้ใช้กด Print ที่หน้างาน ซึ่งไกลจากคนที่แก้ได้ที่สุด
@@ -211,13 +214,13 @@ async function persistTemplateToNetSuite(
 
   // Fail before the POST with an actionable message, rather than let the server
   // reject an over-cap CLOBTEXT with an opaque error (#143).
-  assertClobSize('ข้อมูลเทมเพลต (Designer Data)', designerJson);
+  if (designerJson !== undefined) assertClobSize('ข้อมูลเทมเพลต (Designer Data)', designerJson);
   assertClobSize('BFO XML', xml);
 
   const result = await saveNsTemplate({
     id: state.template.id || undefined,
     name: state.template.name || 'Untitled Template',
-    data: designerJson,
+    ...(designerJson !== undefined ? { data: designerJson } : {}),
     xml,
     rectype: explicitType ?? (state.template.id ? undefined : newRecordType),
     isDefault: opts.isDefault,
@@ -287,6 +290,8 @@ export async function loadTemplate(
   store.beginDocumentSession();
   const template = data as unknown as DocumentTemplate;
   store.dispatch((d) => {
+    d.editorMode = template.editorMode === 'xml' ? 'xml' : 'visual';
+    d.rawXml = template.editorMode === 'xml' ? template.rawXml ?? '' : '';
     d.elements = template.elements;
     // Restore persisted bands; legacy element-only templates regenerate them from
     // elements so band mode always has a structure (#47 3b).
@@ -361,6 +366,8 @@ export function exportTemplateJson(store: AppStore): string {
     bands: state.bands.length ? structuredClone(state.bands) : undefined,
     copies: state.copies && state.copies.length ? structuredClone(state.copies) : undefined,
     jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
+    editorMode: state.editorMode,
+    rawXml: state.editorMode === 'xml' ? state.rawXml : undefined,
   };
 
   return JSON.stringify(template, null, 2);
@@ -426,6 +433,8 @@ export function importTemplateJson(
   store.beginDocumentSession();
   const template = raw as unknown as DocumentTemplate;
   store.dispatch((d) => {
+    d.editorMode = template.editorMode === 'xml' ? 'xml' : 'visual';
+    d.rawXml = template.editorMode === 'xml' ? template.rawXml ?? '' : '';
     d.elements = template.elements || [];
     d.bands = template.bands ?? elementsToBands(template.elements || []);
     d.copies = template.copies ?? null;
@@ -462,6 +471,8 @@ export interface TemplateDraft {
   nsMetadata?: { rectype: string; isDefault: boolean };
   templateId: string | null;
   templateName: string;
+  editorMode?: 'visual' | 'xml';
+  rawXml?: string;
   page: PageConfig;
   pagination: PaginationConfig;
   elements: CanvasElement[];
@@ -498,6 +509,8 @@ export async function saveDraft(store: AppStore, now: string): Promise<void> {
     nsMetadata: state.template.nsMetadata,
     templateId: state.template.id,
     templateName: state.template.name,
+    editorMode: state.editorMode,
+    rawXml: state.editorMode === 'xml' ? state.rawXml : undefined,
     page: structuredClone(state.page),
     pagination: structuredClone(state.pagination),
     elements: structuredClone(state.elements),

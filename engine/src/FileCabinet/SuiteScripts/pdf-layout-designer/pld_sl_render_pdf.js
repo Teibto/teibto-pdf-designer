@@ -408,8 +408,7 @@ define([
       out = pldRender.renderSampleDocument(body.xml, body.rectype, pvCopies, tel);
     } else if (body.data) {
       // synthetic-data preview (#75): caller supplies the bound object itself
-      out = { pdfFile: pldRender.makeRenderer(body.xml, body.data, null, tel, pvCopies[0]).renderAsPdf() };
-      copiesCount = 1;
+      out = pldRender.renderSampleDocument(body.xml, body.rectype, pvCopies, tel, body.data);
     } else {
       out = pldRender.renderDocument(body.xml, body.rectype, body.recid, pvCopies, tel);
     }

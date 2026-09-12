@@ -48,6 +48,7 @@ function buildSuitelet({ templates = [], recordValues = {} } = {}) {
     './pld_lib_company_config': companyConfigStub,
     // no SuiteQL in these tests — the curated builder has its own suite
     './pld_lib_invoice_data': {
+      docTitles: { invoice: { th: 'ใบแจ้งหนี้', en: 'Invoice' }, itemfulfillment: { th: 'ใบส่งสินค้า', en: 'Delivery Note' } },
       isSupportedType: () => false,
       buildTransactionData: () => ({}),
       buildSampleData: (recType, th, en) => {
