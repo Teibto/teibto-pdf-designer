@@ -7,7 +7,7 @@
  * @since 2026-09-11
  */
 import { LitElement, html, css, nothing, unsafeCSS } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, eventOptions, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { icon } from '../shared/icon';
@@ -323,14 +323,15 @@ export class PldHeader extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true }));
   }
 
-  private _closeMenu = (event: Event) => {
+  @eventOptions({ capture: true })
+  private _closeMenu(event: Event) {
     if (!(event.target as HTMLElement).closest('button')) return;
     const details = (event.currentTarget as HTMLElement).closest('details');
     details?.removeAttribute('open');
-    // Restore synchronously: any modal opened by the action takes focus during
-    // its subsequent Lit update, while nonmodal actions keep a visible target.
+    // Focus the visible disclosure before the button opens a modal. Capturing
+    // avoids a Lit update opening the dialog before this parent listener runs.
     details?.querySelector('summary')?.focus();
-  };
+  }
 
   private _onToggleTheme = () => { this.theme = toggleTheme(); };
   private _onTemplates = () => { this._emit('pld-show-templates'); };

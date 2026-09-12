@@ -95,7 +95,8 @@ export class PldSaveNsModal extends LitElement {
 `;
 
   render() {
-    if (!this.open) return nothing;
+    // Keep the controlled modal mounted so its close lifecycle restores focus
+    // before the native dialog is removed from the top layer.
     return html`
       <pld-modal .open=${this.open} modalTitle="บันทึกเข้า NetSuite" size="md" @close=${this._close}>
         <div slot="body">
