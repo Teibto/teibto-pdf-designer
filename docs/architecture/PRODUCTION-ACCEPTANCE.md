@@ -64,8 +64,8 @@ This decision does not grant permission to delete existing account records or ar
 
 The deployed runtime candidate `05310c9` passed targeted component lint, 26 existing component
 tests, production/NetSuite builds and SDF validation. Actual served JavaScript matched the
-deployed build. Native standalone Data/Preview hints were verified; transaction-context wording
-is source/unit validated and still requires native verification. A synthetic template journey verified native keyboard text
+deployed build. Native standalone and transaction-context Data/Preview hints were verified.
+A synthetic template journey verified native keyboard text
 entry, save, exact XML/JSON readback, fresh-page catalog reload, and a two-page native PDF whose
 downloaded bytes match the displayed response. This is not an entirely keyboard-only journey
 and does not establish real-record Print parity for that fixture.
@@ -85,6 +85,20 @@ one worker and a newly started server. The serial production startup gate passed
 maximum long task was 96 ms and TBT 46 ms. Large-data E2E retained all 10,000 rows with only
 50 rows/500 inputs mounted; 100 Design/Flow switches showed no retained DOM/listener growth.
 These local pinned-Chromium results do not establish other browser/device or SB2 capacity limits.
+
+Additional connected evidence on the same deployed runtime verifies real-record Preview versus
+Print for a retained synthetic invoice: XML and record identity matched, both PDFs contained
+Original and Copy, and text plus text geometry matched after excluding the observed printed-time
+line. Independently rendered PDFs are not byte-identical. A QA-only 100-row data overlay on the
+canonical invoice layout exercised the native default copy-set path: twelve pages, six per copy,
+complete ordered rows in each copy, restarted page numbering and final-page totals. All twelve
+pages were visually inspected; canonical master source was not modified.
+
+The entirely keyboard-only native journey remains unproven. Tab navigation and destination
+selection worked, but the shared coordinator's Enter command produced keydown/keyup without
+native button activation in two observed controls. A narrow coordinator patch is prepared but
+awaits authorization to modify the shared tool. Do not change product buttons merely to satisfy
+this driver limitation or substitute DOM clicks as keyboard evidence.
 
 The committed integration `6119e27` passed 827 local Designer tests, full 115-case E2E
 and production startup gates. Coverage was 83.79% statements, 78.63% branches, 86.32%
@@ -119,8 +133,9 @@ Fixtures and outputs are retained until the user explicitly requests deletion.
 - BATCH-03 covers authenticated published XML-input cleanup. Live deletion of retained QA
   artifacts requires an explicit deletion request; read-only and local checks can proceed.
   PDF/snapshot/output deletion is deferred until explicitly requested by the user.
-- Complete native multipage copy-set and real-record Print parity evidence. Standalone
-  displayed-download byte parity is verified for the current synthetic journey only.
+- Default two-copy multipage composition and short synthetic real-record Print parity are
+  verified for the fixtures above. Keep custom-copy configurations and other unexercised
+  feature combinations explicitly separate from these scoped results.
 - Complete the entirely keyboard-only feature journey and remaining panel/theme states.
 - Restore current remote CI after account-owner billing resolution, then satisfy required
   review and release policy. Production deployment requires separate authorization.
