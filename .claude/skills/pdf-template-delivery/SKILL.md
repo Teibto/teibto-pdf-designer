@@ -19,7 +19,8 @@ parity between canonical XML, saved templates, and server-rendered PDFs.
    passing test does not replace it.
 4. Keep every SuiteCloud, browser, account-data, and generated-output integration action with the
    primary agent. Validate before deploy, use synthetic or redacted data, and preserve private live
-   artifacts outside the repository.
+   artifacts outside version control. Never stage private evidence; use a private external or
+   explicitly ignored local directory.
 5. Judge commands and endpoints by semantic output. HTTP 200 can contain a JSON error, and a
    zero-exit SuiteCloud command can print a validation failure. Inspect response bodies, command
    text, deployed/read-back digests, rendered content, and failure behavior.

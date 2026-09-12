@@ -8,7 +8,8 @@ change does not remove already-deployed safeguards.
 
 Prepare a private local rollback bundle before deployment. It is complete only when its version
 manifest and every affected asset hash match the live account. Keep live source, URLs, logs, PDFs,
-IDs, and account data outside the repository; committed evidence is synthetic or redacted.
+IDs, and account data outside version control in a private external or explicitly ignored local
+directory; committed evidence is synthetic or redacted.
 
 Build the canonical NetSuite bundle through the repository's provenance flow. Stage, seal, and stamp
 generated output with source and asset digests, then verify the digest of the JavaScript actually
@@ -34,7 +35,8 @@ served by NetSuite. Do not hand-edit generated `dist` files, deployment stamps, 
 
 ## Shared browser coordinator
 
-Follow the current shared-session block in repository `AGENTS.md` and read the coordinator README
+Follow the current user-selected shared-session instructions (including applicable user/global
+`AGENTS.md` instructions) and read the coordinator README
 before browser QA. Start with registry status, claim one owned tab for the run, and preserve that
 exact target ID for later commands. Use the coordinator's login recovery only.
 
