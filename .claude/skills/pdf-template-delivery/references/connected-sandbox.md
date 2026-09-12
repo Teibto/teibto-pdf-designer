@@ -40,6 +40,13 @@ Follow the current user-selected shared-session instructions (including applicab
 before browser QA. Start with registry status, claim one owned tab for the run, and preserve that
 exact target ID for later commands. Use the coordinator's login recovery only.
 
+Verify native clicks by the resulting UI state. The tested coordinator's `@ref` click path reads
+the node's box without scrolling it into view, even though its CSS-selector path does scroll.
+For a card inside a scrollable dialog, explicitly scroll that visible UI element into view, then
+click its current reference and assert the intended result. A successful command alone does not
+prove the click reached the control; do not silently substitute a DOM `.click()` as clickability
+evidence. Bring the owned tab to the foreground when diagnosing input that did not land.
+
 Never kill or restart the shared browser, log out, change roles or preferences, close another
 worker's tab, copy cookies, or create a second profile to bypass session errors. Close only the tab
 owned by this run. Reusable commands and evidence must not contain active target IDs, record IDs,
