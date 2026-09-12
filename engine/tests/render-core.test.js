@@ -262,3 +262,15 @@ test('duplicate active defaults fail visibly before rendering rather than choosi
   assert.equal(requestedRanges[0].end, 2, 'the server must request enough rows to detect ambiguity');
   assert.equal(render.calls.created, 0);
 });
+
+test('reference marker must be a metadata line inside one FreeMarker comment', () => {
+  const x = buildCore({ curated: true });
+  for (const xml of [
+    '<#-- normal comment -->\npld:reference-layout\n<#-- another comment -->' + TPL_XML,
+    '<#-- mention pld:reference-layout in prose -->' + TPL_XML,
+    '<!--\npld:reference-layout\n-->' + TPL_XML,
+  ]) x.core.renderDocumentXml(xml, 'invoice', 42, TWO_COPIES);
+  assert.deepEqual(x.referenceCalls, []);
+  const raw = buildCore();
+  assert.throws(() => raw.core.renderDocumentXml('<#--\npld:reference-layout\n-->' + TPL_XML, 'other', 42, TWO_COPIES), /requires a curated invoice/);
+});

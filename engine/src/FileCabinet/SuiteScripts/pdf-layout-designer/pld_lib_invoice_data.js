@@ -788,21 +788,23 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var cfg = {};
     try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
 
+    var sampleCompany = {
+      name: cfg.name || 'บริษัท ตัวอย่าง จำกัด (สำนักงานใหญ่)',
+      nameEn: cfg.nameEn || 'Example Company Limited',
+      address: cfg.address || '99/9 ถนนทดสอบ แขวงตัวอย่าง เขตทดลอง กรุงเทพฯ 10110',
+      addressEn: cfg.addressEn || '99/9 Test Rd, Bangkok 10110',
+      phone: cfg.phone || '02-000-0000',
+      email: cfg.email || 'ar@example.co.th',
+      taxId: cfg.taxId || '0105500000000',
+      branch: branchText(cfg.branch || '00000'),
+      branchCode: cfg.branch || '00000',
+      logo: cfg.logo || ''
+    };
+
     return {
       subsidiaryId: '',
-      referenceCompany: {},
-      company: {
-        name: cfg.name || 'บริษัท ตัวอย่าง จำกัด (สำนักงานใหญ่)',
-        nameEn: cfg.nameEn || 'Example Company Limited',
-        address: cfg.address || '99/9 ถนนทดสอบ แขวงตัวอย่าง เขตทดลอง กรุงเทพฯ 10110',
-        addressEn: cfg.addressEn || '99/9 Test Rd, Bangkok 10110',
-        phone: cfg.phone || '02-000-0000',
-        email: cfg.email || 'ar@example.co.th',
-        taxId: cfg.taxId || '0105500000000',
-        branch: branchText(cfg.branch || '00000'),
-        branchCode: cfg.branch || '00000',
-        logo: cfg.logo || ''
-      },
+      referenceCompany: Object.assign({}, sampleCompany),
+      company: sampleCompany,
       document: {
         number: 'SAMPLE-0001',
         date: '17/07/2026',

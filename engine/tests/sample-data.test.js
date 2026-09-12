@@ -285,3 +285,14 @@ test('พรีวิวที่ไม่มีทั้ง record และ sa
   assert.equal(body.error, true);
   assert.match(body.message, /sample:true/);
 });
+
+test('reference sample carries synthetic company bindings without looking up a transaction', () => {
+  const data = loadInvoiceData().buildSampleData('invoice');
+  assert.equal(data.referenceCompany.name, data.company.name);
+  assert.equal(data.referenceCompany.address, data.company.address);
+  assert.equal(data.referenceCompany.logo, data.company.logo);
+  assert.equal(data.referenceCompany.branchCode, data.company.branchCode);
+  assert.notEqual(data.referenceCompany, data.company);
+  assert.equal(data.document.currencyCode, 'THB');
+  assert.ok(data.totals.amountInWords);
+});

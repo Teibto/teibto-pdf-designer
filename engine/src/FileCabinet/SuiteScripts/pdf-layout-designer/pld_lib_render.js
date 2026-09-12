@@ -279,7 +279,8 @@ define([
     }
     if (tel) tel.stage = 'render';
 
-    var snapshot = curatedType ? freezeSnapshot(referenceData(tplXml, invoiceData.buildTransactionData(recType, recId), recType, recId)) : null;
+    var snapshot = referenceData(tplXml, curatedType ? invoiceData.buildTransactionData(recType, recId) : null, recType, recId);
+    if (snapshot) freezeSnapshot(snapshot);
     var tranId = '';
     var docs = copies.map(function (c) {
       var curated = snapshot ? dataForCopy(snapshot, recType, c) : null;
@@ -384,7 +385,8 @@ define([
    * @returns {{pdfFile: Object}}
    */
   function referenceData(tplXml, data, recType, recId) {
-    if (!/<#--[\s\S]*?^\s*pld:reference-layout\s*$[\s\S]*?-->/m.test(tplXml)) return data;
+    var comments = tplXml.match(/<#--[\s\S]*?-->/g) || [];
+    if (!comments.some(function (comment) { return /^\s*pld:reference-layout\s*$/m.test(comment); })) return data;
     if (recType !== 'invoice' || !data) throw new Error('Reference invoice layout requires a curated invoice');
     return invoiceReference.enrich(data, recId);
   }
