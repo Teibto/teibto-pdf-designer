@@ -319,8 +319,8 @@ function countingGraph({ subsidiary = '2', denied = false, missingFonts = false,
       if (rich && query.includes('SELECT * FROM transactionline')) {
         return { asMappedResults: () => [{ linesequencenumber: 1, custcol_lot: 'SYN-LOT' }] };
       }
-      return { asMappedResults: () => query.includes('FROM transaction WHERE id')
-        ? [{ tranid: 'SYN-' + version, currency_code: 'THB' }] : [] };
+      return { asMappedResults: () => query.includes('FROM transaction t LEFT JOIN customrecord_thl_summarytotal')
+        ? [{ tranid: 'SYN-' + version, currency_code: 'THB', summary_id: null, summary_type: null, summary_total: null, summary_taxrate: null }] : [] };
     } },
     'N/search': { Sort: { DESC: 'DESC' }, createColumn: value => value,
       create: () => page([]), load({ id }) {

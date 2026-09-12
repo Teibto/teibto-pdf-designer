@@ -106,9 +106,13 @@ const ITEM_LINES = [
 /** Returns the module plus the query stub, so a test can assert on the SQL issued. */
 function buildLibWith(overrides = {}) {
   const values = { ...BODY_VALUES, ...(overrides.values || {}) };
+  const header = { ...HDR, ...(overrides.header || {}) };
   const q = queryStub([
-    { match: 'FROM transaction WHERE id', rows: [HDR] },
-    { match: 'customrecord_thl_summarytotal', rows: overrides.sums || SUMS },
+    { match: 'FROM transaction t LEFT JOIN customrecord_thl_summarytotal', rows:
+      (overrides.sums || SUMS).length ? (overrides.sums || SUMS).map((summary, index) => ({
+        ...header, summary_id: index + 1, summary_type: summary.sumtype,
+        summary_total: summary.total, summary_taxrate: summary.taxrate
+      })) : [{ ...header, summary_id: null, summary_type: null, summary_total: null, summary_taxrate: null }] },
     { match: 'FROM transactionline tl', rows: overrides.lines || LINES },
     { match: 'SELECT * FROM transactionline', rows: [] },
   ]);
@@ -612,4 +616,45 @@ test('reference invoice fields reflect native source, legal buyer and settlement
   assert.equal(data.customer.branchCode, '00007');
   assert.equal(plain(data.customer.name), 'บริษัท ผู้ซื้อสังเคราะห์ จำกัด');
   assert.equal(data.totals.customerPaid, '10,300.00');
+});
+
+
+const summaryBaseline = require('./fixtures-invoice-summary-baseline.json');
+for (const fixture of summaryBaseline.cases) {
+  test(`joined header/summary matches pre-fusion financial/header output: ${fixture.name}`, () => {
+    const { lib, query } = buildLibWith({ sums: fixture.sums });
+    const data = lib.buildTransactionData('invoice', 42);
+    const selected = Object.fromEntries(summaryBaseline.keys.map(key => [key, data[key]]));
+    assert.deepEqual(JSON.parse(JSON.stringify(selected)), fixture.expected);
+    assert.equal(query.seen.length, 3, 'header + summaries, printed lines, custom line fields only');
+    const joined = query.seen.filter(call => call.query.includes('customrecord_thl_summarytotal'));
+    assert.equal(joined.length, 1);
+    assert.match(joined[0].query, /FROM transaction t LEFT JOIN customrecord_thl_summarytotal s/);
+    assert.match(joined[0].query, /ON s.custrecord_sum_parenttransaction = t.id WHERE t.id = \?/);
+    assert.deepEqual(Array.from(joined[0].params), [42]);
+  });
+}
+
+test('all curated types use one header-summary query and keep the header without summary rows', () => {
+  for (const type of buildLib().supportedTypes) {
+    const { lib, query } = buildLibWith({ sums: [] });
+    const data = lib.buildTransactionData(type, 42);
+    assert.equal(data.document.number, HDR.tranid);
+    assert.equal(data.document.date, HDR.trandate);
+    assert.equal(query.seen.filter(call => call.query.includes('customrecord_thl_summarytotal')).length, 1);
+    assert.equal(query.seen.length, ['customerpayment', 'itemfulfillment'].includes(type) ? 1 : 3);
+  }
+});
+
+
+test('joined header retains currency, creator, dates and reference fields', () => {
+  const { lib, query } = buildLibWith({ header: { currency_code: 'USD', created_by: '105 Synthetic Issuer' }, sums: [] });
+  const data = lib.buildTransactionData('invoice', 42);
+  assert.equal(data.document.currencyCode, 'USD');
+  assert.equal(data.issuer.createdBy, 'Synthetic Issuer');
+  assert.equal(data.document.date, HDR.trandate);
+  assert.equal(data.document.dueDate, HDR.duedate);
+  assert.equal(data.document.refNo, HDR.otherrefnum);
+  assert.match(query.seen[0].query, /currency.id = t.currency/);
+  assert.match(query.seen[0].query, /BUILTIN.DF\(t.createdby\) AS created_by/);
 });

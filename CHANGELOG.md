@@ -6,6 +6,7 @@
 
 - Reuse one transaction and company snapshot per PDF document, including the reference Invoice and copy sets, while refreshing each new request. Add numeric server phase/governance measurements and a serial canonical-template benchmark (#213).
 - Cancel superseded Designer record and preview requests and coordinate record reloads with current user intent; add fetch-to-form performance coverage (#213).
+- Load transaction headers and statutory summaries in one query, reducing a database round trip in Designer record loading and PDF rendering while preserving missing-summary and zero-total behavior (#213).
 - Count the Invoice's item table when paginating its layout, so a header information table cannot incorrectly hold a multi-page document at one page (#213).
 
 - Add a canonical XML editing mode to Designer with exact XML preview/save/export, explicit document state and draft recovery; existing visual templates retain the sole BFO exporter.
