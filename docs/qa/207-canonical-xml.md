@@ -29,4 +29,10 @@ The live browser run verified:
 
 Native Long Text storage removes the final newline after the closing PDF tag. Every preceding character matched. This storage normalization is recorded separately from editor fidelity.
 
-The BFO export modal opens in Canonical XML mode; exact live export-text comparison was not completed. Source passthrough is covered by local contract tests. After the completed save/reload/restore run, a supplementary read returned HTML rather than JSON and was not counted as additional evidence.
+The BFO export modal's complete source was subsequently compared with fresh saved-template read-back: all 14,863 characters match, no test marker remains, Designer data is empty, and the template remains non-default. A supplementary read initially returned HTML rather than JSON; the shared coordinator recovered the session, and the repeated semantic check passed. The export modal was closed, leaving the restored source open in Designer.
+
+## Cold-start correction
+
+The CI trace attributes the long task primarily to the initial style/layout pass together with module evaluation. The workspace now mounts in a second task after shell chrome. `updateComplete` still waits for the complete workspace, and readiness measurement still includes fonts and subsequent paints. No timing budget was increased and no work was excluded from measurement.
+
+Local production performance passed 20 cold and 30 warm runs: cold app-ready p95 369.4 ms, maximum 375.6 ms, and maximum long task/TBT zero for both sets. Full unit/component tests passed 63 files / 842 tests before the final reconnect edge fix; the final focused lifecycle suite passed 5/5. Related browser E2E passed 24/24. Build and lint passed (31 existing lint warnings). The final candidate still requires its CI and connected bundle verification.
