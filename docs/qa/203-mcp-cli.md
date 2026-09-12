@@ -52,12 +52,32 @@ templates, shared browser tabs or session state were changed for this work.
   page numbering and Original/Copy labels. Compare CLI and MCP meaningful output.
 - [ ] Verify all six advertised templates produce usable synthetic PDFs.
 - [ ] Confirm session/permission failures do not produce a successful artifact.
-- [ ] Connect the local server to the user's AI client and verify tool discovery.
+- [x] Connect the local server to the user's AI client and verify tool discovery.
 - [ ] Record redacted artifact identities and results; preserve company data locally.
 
 Mock transport byte fixtures are deliberately not valid deliverable PDFs and do
 not prove BFO output. Optional actual-record mode has local contract/gate tests;
 no real record ID is authorized as a live QA target in this task yet.
+
+## Actual AI-client connection (2026-09-13)
+
+Registered `teibto_pdf` in the user's Codex MCP configuration using the tested
+Node executable and this issue's worktree server. Configuration contains only
+the coordinator and local output paths; account and owned target remain unset
+pending sandbox confirmation. No credentials were stored in the repository.
+
+A fresh `codex exec --ephemeral --sandbox read-only --json` client discovered
+the registered tool and called `teibto_pdf.pdf_list_templates` exactly once with
+`{}`. The observed MCP event completed successfully with all six IDs:
+`delivery-note`, `invoice`, `purchase-order`, `quotation`, `receipt`, `tax-invoice`.
+The client made no shell, browser, status, render or other MCP calls. It exited 0.
+This proves actual AI-host discovery and invocation, in addition to the SDK
+subprocess tests. It does not prove authenticated PDF rendering.
+
+Keep the issue worktree while its server path is registered. After merge, repoint
+the registration to the final checkout and verify it before removing the worktree.
+Restart/reconnect clients to load the newly registered server. Complete the
+account/target configuration and live render acceptance after sandbox confirmation.
 
 ## Review
 
