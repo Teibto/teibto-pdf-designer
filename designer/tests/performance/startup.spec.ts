@@ -94,10 +94,11 @@ function summarize(samples: StartupSample[]) {
   };
 }
 
-function assertRuntimeBudgets(samples: StartupSample[]) {
+function assertRuntimeBudgets(samples: StartupSample[], label: string) {
+  const metrics = summarize(samples);
+  console.info(`${label} ${JSON.stringify(metrics)}`);
   expect(samples.every((sample) => sample.longTaskSupported)).toBe(true);
   expect(samples.every((sample) => sample.loadedUiFontFaces === 6)).toBe(true);
-  const metrics = summarize(samples);
   expect(metrics.maxLongTaskMs).toBeLessThan(100);
   expect(metrics.maxTbtMs).toBeLessThan(150);
   expect(metrics.barcodeRequests).toBe(0);
@@ -125,9 +126,8 @@ test('cold production startup stays within fixed-Chromium budgets', async ({ bro
     samples.push(await measure(page));
     await context.close();
   }
-  const metrics = assertRuntimeBudgets(samples);
+  const metrics = assertRuntimeBudgets(samples, 'PLD_PRODUCTION_COLD_STARTUP');
   assertColdArtifactBudgets(metrics);
-  console.info(`PLD_PRODUCTION_COLD_STARTUP ${JSON.stringify(metrics)}`);
   expect(metrics.appReadyP95Ms).toBeLessThan(750);
 });
 
@@ -136,7 +136,6 @@ test('warm production startup stays within fixed-Chromium budgets', async ({ pag
   for (let index = 0; index < 5; index++) await measure(page);
   const samples: StartupSample[] = [];
   for (let index = 0; index < 30; index++) samples.push(await measure(page));
-  const metrics = assertRuntimeBudgets(samples);
-  console.info(`PLD_PRODUCTION_WARM_STARTUP ${JSON.stringify(metrics)}`);
+  const metrics = assertRuntimeBudgets(samples, 'PLD_PRODUCTION_WARM_STARTUP');
   expect(metrics.appReadyP95Ms).toBeLessThan(400);
 });

@@ -131,3 +131,14 @@ jobs:
           npx playwright install chromium
           npm run test:e2e
           npx playwright test --config playwright.performance.config.ts
+
+      # Only local-app CI output; connected sandbox evidence stays outside these paths.
+      - name: Retain failed browser test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            designer/test-results/e2e-*/
+            designer/test-results/performance-*/
+          if-no-files-found: ignore
