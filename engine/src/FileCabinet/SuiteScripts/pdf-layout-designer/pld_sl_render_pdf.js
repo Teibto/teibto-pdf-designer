@@ -224,11 +224,43 @@ define([
       subsidiaryId: '',
       userId: user.id || '',
       stage: 'init',
-      start: Date.now()
+      start: Date.now(),
+      startUsage: remainingUsage()
     };
   }
 
   function telElapsedMs(tel) { return Date.now() - tel.start; }
+
+  function remainingUsage() {
+    try {
+      var value = runtime.getCurrentScript().getRemainingUsage();
+      return typeof value === 'number' && isFinite(value) ? value : null;
+    } catch (e) { return null; }
+  }
+
+  // Only numeric, bounded-cardinality measurements leave the native log. Never
+  // expose record IDs, bindings, account URLs or exception text in headers.
+  function writePerformance(response, tel, pdfFile) {
+    var currentUsage = remainingUsage();
+    var perf = tel.performance || {};
+    var phases = perf.phases || {};
+    var timing = ['total;dur=' + Math.max(0, telElapsedMs(tel))];
+    ['data', 'reference', 'binding', 'bfo', 'combine'].forEach(function (name) {
+      var phase = phases[name];
+      if (phase && typeof phase.elapsedMs === 'number' && isFinite(phase.elapsedMs)) {
+        timing.push(name + ';dur=' + Math.max(0, phase.elapsedMs));
+      }
+    });
+    response.setHeader({ name: 'Server-Timing', value: timing.join(', ') });
+    if (tel.startUsage !== null && currentUsage !== null) {
+      perf.usage = Math.max(0, tel.startUsage - currentUsage);
+      response.setHeader({ name: 'X-PLD-Usage', value: String(perf.usage) });
+    } else { perf.usage = null; }
+    if (pdfFile && typeof pdfFile.size === 'number' && isFinite(pdfFile.size)) {
+      perf.pdfBytes = pdfFile.size;
+    }
+    tel.performance = perf;
+  }
 
   /** Base structured payload common to the ok/error log lines. */
   function telBase(tel) {
@@ -240,7 +272,8 @@ define([
       tplid: tel.tplid,
       subsidiaryId: tel.subsidiaryId,
       userId: tel.userId,
-      elapsedMs: telElapsedMs(tel)
+      elapsedMs: telElapsedMs(tel),
+      performance: tel.performance || null
     };
   }
 
@@ -314,6 +347,7 @@ define([
     out.pdfFile.name = fileName;
 
     // PDF built — record the success telemetry before we hand off the bytes (#149).
+    writePerformance(context.response, tel, out.pdfFile);
     logRenderOk(tel, { copies: copiesCount });
 
     // ─── 4. Return PDF ───
@@ -414,6 +448,7 @@ define([
     }
     out.pdfFile.name = 'preview.pdf';
 
+    writePerformance(context.response, tel, out.pdfFile);
     logRenderOk(tel, { copies: copiesCount });
     tel.stage = 'write';
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
@@ -446,6 +481,7 @@ define([
     var out = pldRender.renderSampleDocument(tpl.xml, recType, copies, tel);
     out.pdfFile.name = 'preview.pdf';
 
+    writePerformance(context.response, tel, out.pdfFile);
     logRenderOk(tel, { copies: copies.length });
     tel.stage = 'write';
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });

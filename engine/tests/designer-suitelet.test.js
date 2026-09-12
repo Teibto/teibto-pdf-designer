@@ -29,6 +29,8 @@ function buildDesigner({
   editorRoles = '',
   companyConfig = companyConfigStub,
   scriptParameters = {},
+  invoiceData = { isSupportedType: () => false, buildTransactionData: () => ({}) },
+  usage,
 } = {}) {
   const store = recordStoreStub({
     [`${CFG_TYPE}:1`]: { custrecord_pld_cfg_editor_roles: editorRoles },
@@ -46,13 +48,14 @@ function buildDesigner({
     'N/runtime': runtimeStub({
       user: { id: 9, name: 'QA Tester', email: 'qa@example.test', role, subsidiary: 2 },
       parameters: scriptParameters,
+      usage,
     }),
     'N/url': { resolveScript: () => '/app/site/hosting/scriptlet.nl?script=1&deploy=1' },
     'N/search': storeSearchStub(store).module,
     'N/record': store.module,
     'N/log': log.module,
     './pld_lib_company_config': companyConfig,
-    './pld_lib_invoice_data': { isSupportedType: () => false, buildTransactionData: () => ({}) },
+    './pld_lib_invoice_data': invoiceData,
   };
   return { suitelet: loadAmd('./pld_sl_designer', stubs), store, log };
 }
@@ -135,4 +138,33 @@ test('broken render company config leaves bootstrap fonts empty despite legacy p
   const ctx = injectedContext(page.response.state.body);
   assert.equal(ctx.fontRegularUrl, null, 'SPA must keep the missing-font warning visible');
   assert.equal(ctx.fontBoldUrl, null, 'legacy deployment params cannot make preview look configured');
+});
+
+test('load-record measures server work without changing the data contract or exposing identifiers', () => {
+  let usage = 1000;
+  const data = { document: { number: 'SYNTHETIC-PRIVATE' }, items: [{ description: 'ทดสอบ' }] };
+  const { suitelet } = buildDesigner({
+    usage: () => usage,
+    invoiceData: {
+      isSupportedType: () => true,
+      buildTransactionData: () => { usage -= 23; return data; },
+    },
+  });
+  const { context, response } = contextStub({ parameters: { action: 'load-record', rectype: 'invoice', recid: '42' } });
+  suitelet.onRequest(context);
+  assert.deepEqual(JSON.parse(response.state.body), data);
+  assert.match(response.state.headers['Server-Timing'], /^data;dur=\d+, serialize;dur=\d+$/);
+  assert.equal(response.state.headers['X-PLD-Usage'], '23');
+  assert.doesNotMatch(response.state.headers['Server-Timing'], /SYNTHETIC-PRIVATE|recid/);
+});
+
+test('load-record leaves unavailable governance absent instead of claiming zero', () => {
+  const { suitelet } = buildDesigner({
+    usage: () => { throw new Error('unavailable'); },
+    invoiceData: { isSupportedType: () => true, buildTransactionData: () => ({ items: [] }) },
+  });
+  const { context, response } = contextStub({ parameters: { action: 'load-record', rectype: 'invoice', recid: '42' } });
+  suitelet.onRequest(context);
+  assert.deepEqual(JSON.parse(response.state.body), { items: [] });
+  assert.equal(response.state.headers['X-PLD-Usage'], undefined);
 });

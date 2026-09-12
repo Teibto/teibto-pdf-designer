@@ -14,7 +14,7 @@
  * pld_sl_render_pdf (พิมพ์ทีละใบ + preview) และ batch print เรียกฟังก์ชันชุดเดียวกันนี้.
  *
  * `tel` ที่รับเข้ามาคือ telemetry object ของผู้เรียก (#149) — lib เขียนเฉพาะ
- * `stage` กับ `subsidiaryId` ลงไป ไม่ได้เป็นเจ้าของ log เอง เพราะรูปแบบ log/error
+ * `stage`, `subsidiaryId` กับ aggregate `performance` ลงไป ไม่ได้เป็นเจ้าของ log เอง เพราะรูปแบบ log/error
  * ขึ้นกับคนอ่านฝั่งผู้เรียก (#157).
  *
  * @author Wichit Wongta
@@ -171,6 +171,71 @@ define([
   // RENDERER
   // ═══════════════════════════════════════════════════
 
+  // All caches live inside one render invocation, never at module scope.
+  function remainingUsage() {
+    try {
+      var value = runtime.getCurrentScript().getRemainingUsage();
+      return typeof value === 'number' && isFinite(value) ? value : null;
+    } catch (e) { return null; }
+  }
+
+  function measure(tel, phase, work) {
+    if (!tel) return work();
+    var started = Date.now(), before = remainingUsage();
+    try { return work(); } finally {
+      try {
+        var after = remainingUsage();
+        var perf = tel.performance || (tel.performance = { phases: {} });
+        if (!perf.phases) perf.phases = {};
+        var previous = perf.phases[phase];
+        var usage = before == null || after == null ? null : Math.max(0, before - after);
+        perf.phases[phase] = {
+          elapsedMs: (previous ? previous.elapsedMs : 0) + Math.max(0, Date.now() - started),
+          usage: usage == null || (previous && previous.usage == null) ? null : (previous ? previous.usage : 0) + usage
+        };
+      } catch (metricsError) { /* Telemetry must never replace a render failure. */ }
+    }
+  }
+
+  function requestContext(rec) {
+    var companies = Object.create(null);
+    return {
+      rec: rec,
+      loadCompany: function (subsidiaryId) {
+        var key = String(subsidiaryId || '');
+        if (!Object.prototype.hasOwnProperty.call(companies, key)) {
+          companies[key] = companyConfig.load(subsidiaryId, { forRender: true });
+        }
+        return companies[key];
+      }
+    };
+  }
+
+  function loadRequest(recType, recId, tel) {
+    if (tel) tel.stage = 'load-record';
+    return measure(tel, 'data', function () {
+      return requestContext(record.load({ type: recType, id: recId }));
+    });
+  }
+
+  function transactionSnapshot(tplXml, recType, recId, tel, request, copy) {
+    if (tel) tel.stage = 'data';
+    var data = measure(tel, 'data', function () {
+      return invoiceData.isSupportedType(recType)
+        ? invoiceData.buildTransactionData(recType, recId, copy && copy.th, copy && copy.en, request) : null;
+    });
+    if (tel) tel.stage = 'reference';
+    data = measure(tel, 'reference', function () { return referenceData(tplXml, data, recType, recId, request); });
+    if (tel) tel.performance.itemCount = data && Array.isArray(data.items) ? data.items.length : null;
+    return data;
+  }
+
+  function renderPass(tplXml, data, rec, tel, copy, request, asString) {
+    if (tel) tel.stage = 'render';
+    var renderer = measure(tel, 'binding', function () { return makeRenderer(tplXml, data, rec, tel, copy, request); });
+    return measure(tel, 'bfo', function () { return asString ? renderer.renderAsString() : renderer.renderAsPdf(); });
+  }
+
   /**
    * Build a configured N/render renderer for one template + one data binding —
    * the single binding path shared by Print (render), live Preview
@@ -181,7 +246,7 @@ define([
    * otherwise bind the raw NetSuite record (`rec`) so hand-written master
    * templates (${record.tranid}) render unchanged.
    */
-  function makeRenderer(tplXml, curatedData, rec, tel, copy) {
+  function makeRenderer(tplXml, curatedData, rec, tel, copy, request) {
     var renderer = render.create();
     renderer.templateContent = tplXml;
 
@@ -209,21 +274,21 @@ define([
     renderer.addCustomDataSource({
       format: render.DataSource.OBJECT,
       alias: 'company',
-      data: companyConfig.load(subsidiaryId, { forRender: true })
+      data: request ? request.loadCompany(subsidiaryId) : companyConfig.load(subsidiaryId, { forRender: true })
     });
 
-    // Current date/user info
-    var currentUser = runtime.getCurrentUser();
-    renderer.addCustomDataSource({
-      format: render.DataSource.OBJECT,
-      alias: 'context',
-      data: {
+    // Reuse the same time/user context for every copy in this request.
+    var context = request && request.context;
+    if (!context) {
+      var currentUser = runtime.getCurrentUser();
+      context = {
         today: format.format({ value: new Date(), type: format.Type.DATE }),
         now: format.format({ value: new Date(), type: format.Type.DATETIME }),
-        userName: currentUser.name,
-        userEmail: currentUser.email
-      }
-    });
+        userName: currentUser.name, userEmail: currentUser.email
+      };
+      if (request) request.context = context;
+    }
+    renderer.addCustomDataSource({ format: render.DataSource.OBJECT, alias: 'context', data: context });
 
     return renderer;
   }
@@ -247,10 +312,9 @@ define([
    * Returns { pdfFile, rec } (caller names the file).
    */
   function renderXmlWithRecord(tplXml, recType, recId, curatedData, tel, copy) {
-    if (tel) tel.stage = 'load-record';
-    var rec = record.load({ type: recType, id: recId });
-    if (tel) tel.stage = 'render';
-    return { pdfFile: makeRenderer(tplXml, curatedData, rec, tel, copy).renderAsPdf(), rec: rec };
+    var request = loadRequest(recType, recId, tel);
+    if (tel) tel.performance.copies = 1;
+    return { pdfFile: renderPass(tplXml, curatedData, request.rec, tel, copy, request, false), rec: request.rec };
   }
 
   // ═══════════════════════════════════════════════════
@@ -270,22 +334,16 @@ define([
    */
   function renderDocumentXml(tplXml, recType, recId, copies, tel) {
     assertCopyCount(copies);
-    var curatedType = invoiceData.isSupportedType(recType);
-
-    var rec = null;
-    if (!curatedType) {
-      if (tel) tel.stage = 'load-record';
-      rec = record.load({ type: recType, id: recId });
-    }
-    if (tel) tel.stage = 'render';
-
-    var snapshot = referenceData(tplXml, curatedType ? invoiceData.buildTransactionData(recType, recId) : null, recType, recId);
+    var request = loadRequest(recType, recId, tel);
+    var rec = request.rec;
+    if (tel) tel.performance.copies = copies.length;
+    var snapshot = transactionSnapshot(tplXml, recType, recId, tel, request);
     if (snapshot) freezeSnapshot(snapshot);
     var tranId = '';
     var docs = copies.map(function (c) {
       var curated = snapshot ? dataForCopy(snapshot, recType, c) : null;
       if (curated) tranId = tranId || (curated.document && curated.document.number) || '';
-      return extractPdfDoc(makeRenderer(tplXml, curated, rec, tel, c).renderAsString());
+      return extractPdfDoc(renderPass(tplXml, curated, rec, tel, c, request, true));
     });
 
     if (!tranId && rec) {
@@ -355,17 +413,16 @@ define([
     assertCopyCount(copies);
     if (copies.length === 1) {
       var only = copies[0];
-      var singleData = invoiceData.isSupportedType(recType)
-        ? invoiceData.buildTransactionData(recType, recId, only.th, only.en)
-        : null;
-      singleData = referenceData(tplXml, singleData, recType, recId);
-      var out = renderXmlWithRecord(tplXml, recType, recId, singleData, tel, only);
+      var request = loadRequest(recType, recId, tel);
+      if (tel) tel.performance.copies = copies.length;
+      var singleData = transactionSnapshot(tplXml, recType, recId, tel, request, only);
+      var out = { pdfFile: renderPass(tplXml, singleData, request.rec, tel, only, request, false), rec: request.rec };
       return { pdfFile: out.pdfFile, rec: out.rec, tranId: '' };
     }
 
     var multi = renderDocumentXml(tplXml, recType, recId, copies, tel);
     if (tel) tel.stage = 'copyset';
-    return { pdfFile: combinePdfDocs(multi.docs), tranId: multi.tranId, rec: multi.rec };
+    return { pdfFile: measure(tel, 'combine', function () { return combinePdfDocs(multi.docs); }), tranId: multi.tranId, rec: multi.rec };
   }
 
   /**
@@ -384,34 +441,37 @@ define([
    *
    * @returns {{pdfFile: Object}}
    */
-  function referenceData(tplXml, data, recType, recId) {
+  function referenceData(tplXml, data, recType, recId, request) {
     var comments = tplXml.match(/<#--[\s\S]*?-->/g) || [];
     if (!comments.some(function (comment) { return /^\s*pld:reference-layout\s*$/m.test(comment); })) return data;
     if (recType !== 'invoice' || !data) throw new Error('Reference invoice layout requires a curated invoice');
-    return invoiceReference.enrich(data, recId);
+    return invoiceReference.enrich(data, recId, request);
   }
 
   function renderSampleDocument(tplXml, recType, copies, tel, suppliedData) {
     assertCopyCount(copies);
     if (tel) tel.stage = 'render';
 
-    var snapshot = suppliedData ? freezeSnapshot(JSON.parse(JSON.stringify(suppliedData))) : null;
-    function sampleForCopy(c) {
-      return snapshot ? dataForCopy(snapshot, recType, c) : invoiceData.buildSampleData(recType, c.th, c.en);
+    var request = requestContext(null);
+    var snapshot = measure(tel, 'data', function () {
+      return freezeSnapshot(suppliedData ? JSON.parse(JSON.stringify(suppliedData))
+        : invoiceData.buildSampleData(recType, undefined, undefined, request));
+    });
+    if (tel) {
+      tel.performance.copies = copies.length;
+      tel.performance.itemCount = snapshot && Array.isArray(snapshot.items) ? snapshot.items.length : null;
     }
 
     if (copies.length === 1) {
       var only = copies[0];
-      var data = sampleForCopy(only);
-      return { pdfFile: makeRenderer(tplXml, data, null, tel, only).renderAsPdf() };
+      return { pdfFile: renderPass(tplXml, dataForCopy(snapshot, recType, only), null, tel, only, request, false) };
     }
 
     var docs = copies.map(function (c) {
-      var perCopy = sampleForCopy(c);
-      return extractPdfDoc(makeRenderer(tplXml, perCopy, null, tel, c).renderAsString());
+      return extractPdfDoc(renderPass(tplXml, dataForCopy(snapshot, recType, c), null, tel, c, request, true));
     });
     if (tel) tel.stage = 'copyset';
-    return { pdfFile: combinePdfDocs(docs) };
+    return { pdfFile: measure(tel, 'combine', function () { return combinePdfDocs(docs); }) };
   }
 
   return {

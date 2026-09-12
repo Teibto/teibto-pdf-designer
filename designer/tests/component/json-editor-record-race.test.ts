@@ -24,6 +24,7 @@ vi.mock('../../src/components/shared/toast-notification', async (importOriginal)
   showToast: mocks.showToast,
 }));
 
+import '../../src/components/app-shell';
 import '../../src/components/panels/json-editor';
 
 function deferred<T>() {
@@ -39,11 +40,13 @@ afterEach(() => {
 });
 
 function mountEditor() {
-  const store = new AppStore();
+  const shell = document.createElement('pld-app-shell') as any;
+  document.body.appendChild(shell);
+  const store: AppStore = shell.store;
   const editor = document.createElement('pld-json-editor') as any;
   editor.store = store;
   editor.viewMode = 'json';
-  document.body.appendChild(editor);
+  shell.appendChild(editor);
   return { editor, store };
 }
 
@@ -60,13 +63,15 @@ describe('json-editor record reload', () => {
     const second = editor._loadFromRecord();
     newer.resolve({ marker: 'new' });
     await second;
+    await new Promise((resolve) => setTimeout(resolve, 0));
     older.resolve({ marker: 'old' });
     await first;
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(store.state.jsonData).toEqual({ marker: 'new' });
     expect(editor.jsonText).toBe(JSON.stringify({ marker: 'new' }, null, 2));
     expect(mocks.showToast).toHaveBeenCalledTimes(1);
-    expect(mocks.showToast).toHaveBeenCalledWith('Record data loaded!', 'success');
+    expect(mocks.autoLoadRecordIfAvailable.mock.calls[0][0].aborted).toBe(true);
   });
 
   it('does not overwrite a newer local raw edit with a pending reload', async () => {
@@ -78,6 +83,7 @@ describe('json-editor record reload', () => {
     editor._onInput({ target: { value: '{"local":true}' } } as unknown as Event);
     pending.resolve({ marker: 'stale-record' });
     await reload;
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(store.state.jsonData).toEqual({ local: true });
     expect(editor.jsonText).toBe('{"local":true}');
@@ -94,6 +100,7 @@ describe('json-editor record reload', () => {
     editor._clear();
     pending.resolve({ marker: 'stale-record' });
     await reload;
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(store.state.jsonData).toBeNull();
     expect(editor.jsonText).toBe('');
@@ -110,6 +117,7 @@ describe('json-editor record reload', () => {
     loadJsonData(store, external);
     pending.resolve({ marker: 'stale-record' });
     await reload;
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(store.state.jsonData).toEqual(external);
     expect(editor.jsonText).toBe(JSON.stringify(external, null, 2));

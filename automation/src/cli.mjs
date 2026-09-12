@@ -10,7 +10,7 @@ import { createService } from './service.mjs';
 const help = `Usage:
   node src/cli.mjs templates
   node src/cli.mjs status
-  node src/cli.mjs render --template <id> --output <basename.pdf> [--copies 1..10] [--record-id <id>]
+  node src/cli.mjs render --template <id> --output <basename.pdf> [--copies 1..10] [--record-id <id>] [--measure]
 
 Render uses synthetic data and the existing NetSuite sandbox BFO renderer.
 Actual sandbox records require --record-id and operator opt-in PLD_ALLOW_RECORDS=true.
@@ -21,7 +21,7 @@ and optional PLD_RENDER_URL. See docs/MCP-CLI.md.
 try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { help: { type: 'boolean', short: 'h' }, template: { type: 'string' }, output: { type: 'string' }, copies: { type: 'string' }, 'record-id': { type: 'string' } },
+    options: { help: { type: 'boolean', short: 'h' }, template: { type: 'string' }, output: { type: 'string' }, copies: { type: 'string' }, 'record-id': { type: 'string' }, measure: { type: 'boolean' } },
   });
   if (values.help || positionals.length === 0) {
     process.stdout.write(help);
@@ -39,7 +39,7 @@ try {
     const service = createService();
     const result = command === 'templates' ? await service.listTemplates()
       : command === 'status' ? await service.status()
-        : await service.render({ template: values.template, outputName: values.output, ...(values.copies === undefined ? {} : { copies: Number(values.copies) }), ...(values['record-id'] === undefined ? {} : { recordId: values['record-id'] }) });
+        : await service.render({ template: values.template, outputName: values.output, ...(values.measure ? { measure: true } : {}), ...(values.copies === undefined ? {} : { copies: Number(values.copies) }), ...(values['record-id'] === undefined ? {} : { recordId: values['record-id'] }) });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   }
 } catch (error) {

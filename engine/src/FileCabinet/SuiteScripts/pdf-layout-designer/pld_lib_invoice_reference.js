@@ -259,11 +259,11 @@ function (search, record, file, wordbreak, amountWords) {
     return null;
   }
 
-  function enrich(data, recordId) {
+  function enrich(data, recordId, request) {
     if (!data || !data.document || !/^\d+$/.test(text(recordId)) || Number(recordId) <= 0) {
       fail('PLD_REFERENCE_CONTEXT_INVALID', 'Reference invoice enrichment requires curated invoice data and a positive invoice internal ID.');
     }
-    var invoice = record.load({ type: 'invoice', id: text(recordId), isDynamic: false });
+    var invoice = request ? request.rec : record.load({ type: 'invoice', id: text(recordId), isDynamic: false });
     var rows = invoiceRows(text(recordId));
     var company = companyForInvoice(rows);
     var setup = footerSetup(invoice, data);

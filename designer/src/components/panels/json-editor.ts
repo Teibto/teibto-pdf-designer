@@ -12,7 +12,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { clearJsonData, loadJsonData } from '../../state/actions';
-import { getNsContext, autoLoadRecordIfAvailable } from '../../services/netsuite-adapter.service';
+import { getNsContext } from '../../services/netsuite-adapter.service';
 import { showToast } from '../shared/toast-notification';
 import './data-form';
 
@@ -64,7 +64,6 @@ export class PldJsonEditor extends LitElement {
   @state() private formData: Record<string, unknown> | null = null;
   private _rawDraftDirty = false;
   private _committingLocalData = false;
-  private _recordLoadRequest = 0;
   private _observedJsonData: Readonly<Record<string, unknown>> | null = null;
 
   static styles = css`
@@ -273,7 +272,6 @@ export class PldJsonEditor extends LitElement {
         return;
       }
       if (!dataChanged) return;
-      this._invalidateRecordLoad();
       // Preserve an in-progress raw draft. Only a genuine external data change
       // may rewrite JSON text, and only when the raw editor is not dirty.
       if (this.viewMode === 'json' && this._rawDraftDirty) return;
@@ -292,7 +290,6 @@ export class PldJsonEditor extends LitElement {
   }
 
   disconnectedCallback() {
-    ++this._recordLoadRequest;
     super.disconnectedCallback();
     if (this._stateHandler) {
       this.store.removeEventListener('state-changed', this._stateHandler);
@@ -427,7 +424,7 @@ export class PldJsonEditor extends LitElement {
 
   private _onInput(e: Event) {
     const text = (e.target as HTMLTextAreaElement).value;
-    this._invalidateRecordLoad();
+    this.dispatchEvent(new CustomEvent('pld-cancel-data-load', { bubbles: true, composed: true }));
     this.jsonText = text;
     this._rawDraftDirty = true;
 
@@ -451,20 +448,9 @@ export class PldJsonEditor extends LitElement {
 
   /** Re-fetch curated record data (#82) — Sample/template loads overwrite
    *  jsonData, hiding the record's fields.* from the field picker (#78). */
-  private async _loadFromRecord() {
-    const request = ++this._recordLoadRequest;
-    try {
-      const data = await autoLoadRecordIfAvailable();
-      if (request !== this._recordLoadRequest || !this.isConnected || !data) return;
-      this.jsonText = JSON.stringify(data, null, 2);
-      this._rawDraftDirty = false;
-      this._commitLocalData(data);
-      this.isValid = true;
-      showToast('Record data loaded!', 'success');
-    } catch (err) {
-      if (request !== this._recordLoadRequest || !this.isConnected) return;
-      showToast(`Load record failed: ${(err as Error).message}`, 'error');
-    }
+  private _loadFromRecord() {
+    this._rawDraftDirty = false;
+    this.dispatchEvent(new CustomEvent('pld-load-record', { bubbles: true, composed: true }));
   }
 
   private _loadSample() {
@@ -499,7 +485,7 @@ export class PldJsonEditor extends LitElement {
   }
 
   private _commitLocalData(data: Record<string, unknown>): void {
-    this._invalidateRecordLoad();
+    this.dispatchEvent(new CustomEvent('pld-cancel-data-load', { bubbles: true, composed: true }));
     this.formData = data;
     this._committingLocalData = true;
     try {
@@ -511,7 +497,7 @@ export class PldJsonEditor extends LitElement {
   }
 
   private _commitLocalClear(): void {
-    this._invalidateRecordLoad();
+    this.dispatchEvent(new CustomEvent('pld-cancel-data-load', { bubbles: true, composed: true }));
     this.formData = null;
     this._committingLocalData = true;
     try {
@@ -522,9 +508,6 @@ export class PldJsonEditor extends LitElement {
     this.keyCount = 0;
   }
 
-  private _invalidateRecordLoad(): void {
-    ++this._recordLoadRequest;
-  }
 }
 
 declare global {

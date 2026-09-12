@@ -38,6 +38,7 @@ export class PldPreviewModal extends LitElement {
   @state() private serverLoading = false;
   @state() private serverError = '';
   private previewRequest = 0;
+  private previewController: AbortController | null = null;
 
   static styles = css`
     .preview-toolbar {
@@ -387,7 +388,15 @@ export class PldPreviewModal extends LitElement {
     const request = this.previewRequest;
     this.serverLoading = true;
     this.serverError = '';
+    const controller = this.previewController = new AbortController();
     try {
+      await this.updateComplete;
+      // A task after an animation frame lets the loading indicator paint before export.
+      await new Promise<void>((resolve) => {
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
+        else setTimeout(resolve, 0);
+      });
+      if (controller.signal.aborted || !this.open || !this.isConnected) return;
       if (!rectype) throw new Error('ไม่พบประเภทเอกสารจริง กรุณาเปิด Designer จากรายการอีกครั้ง');
       // Font comes from the config record via ${company.fontRegular} (#156) — the
       // preview therefore fails/succeeds on fonts exactly like Print does.
@@ -399,6 +408,7 @@ export class PldPreviewModal extends LitElement {
         recid: sample ? undefined : ctx.recordId!,
         copies: this.store.state.copies,
         sample,
+        signal: controller.signal,
       });
       if (request !== this.previewRequest || !this.open || !this.isConnected) return;
       this.serverPdfUrl = URL.createObjectURL(blob);
@@ -413,6 +423,8 @@ export class PldPreviewModal extends LitElement {
 
   private _clearServerPreview() {
     this.previewRequest++;
+    this.previewController?.abort();
+    this.previewController = null;
     this.serverLoading = false;
     if (this.serverPdfUrl) {
       URL.revokeObjectURL(this.serverPdfUrl);

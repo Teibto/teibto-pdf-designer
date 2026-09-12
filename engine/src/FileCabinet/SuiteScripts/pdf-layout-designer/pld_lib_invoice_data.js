@@ -230,7 +230,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
    * @param {string} [copyLabelTH] e.g. 'ต้นฉบับ' / 'สำเนา' (multi-copy); default original
    * @param {string} [copyLabelEN] e.g. 'Original' / 'Copy'
    */
-  function buildTransactionData(recType, recId, copyLabelTH, copyLabelEN) {
+  // Optional internal request is supplied only by the render core; standalone
+  // callers retain record authorization and forRender config validation below.
+  function buildTransactionData(recType, recId, copyLabelTH, copyLabelEN, request) {
     var id = Number(recId);
     var titles = DOC_TITLES[recType] || DOC_TITLES.invoice;
     // '-' negates GL-signed sales lines for display; '' keeps purchase lines as-is
@@ -242,7 +244,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var isPayment = !!APPLY_SOURCE[recType];
     // A delivery note's rows come from the `item` sublist, for the same reason (#176).
     var isSublistItems = !!SUBLIST_ITEMS[recType];
-    var rec = record.load({ type: recType, id: id });
+    // Internal request context is created by the render core after its record load.
+    var rec = request ? request.rec : record.load({ type: recType, id: id });
 
     var hdr = first(
       "SELECT tranid, TO_CHAR(trandate,'DD/MM/YYYY') AS trandate, " +
@@ -527,7 +530,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // body field decides which customrecord_pld_config row companyConfig.load()
     // matches — empty/absent (non-OneWorld) falls back to the global config.
     var subsidiaryId = bodyValue(rec, 'subsidiary') || '';
-    var cfg = companyConfig.load(subsidiaryId, { forRender: true });
+    var cfg = request ? request.loadCompany(subsidiaryId) : companyConfig.load(subsidiaryId, { forRender: true });
 
     // Bordered key/value grids rendered as PLD tables (ShapeElement has no border,
     // so the doc-info and summary boxes are 2-column tables bound to these arrays).
@@ -728,7 +731,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
    * @param {string} [copyLabelTH] ป้ายชุดสำเนาของ pass นี้
    * @param {string} [copyLabelEN]
    */
-  function buildSampleData(recType, copyLabelTH, copyLabelEN) {
+  function buildSampleData(recType, copyLabelTH, copyLabelEN, request) {
     var type = isSupportedType(recType) ? String(recType) : 'invoice';
     var titles = DOC_TITLES[type];
     var showTotals = !NO_TOTALS[type];
@@ -786,7 +789,13 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     });
 
     var cfg = {};
-    try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
+    if (request) {
+      // Rendering requires validated fonts; standalone sample generation keeps
+      // its existing config-optional behavior for callers building fixtures.
+      cfg = request.loadCompany(undefined);
+    } else {
+      try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
+    }
 
     var sampleCompany = {
       name: cfg.name || 'บริษัท ตัวอย่าง จำกัด (สำนักงานใหญ่)',

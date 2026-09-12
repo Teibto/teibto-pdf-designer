@@ -785,7 +785,8 @@ function getTableData(
   if (!jsonData) return { totalRows: 0, rows: [] };
 
   for (const el of elements) {
-    if (el.type === 'table' && el.binding) {
+    // Header doc-info and summary grids are fixed layout, not the paginated detail rows.
+    if (el.type === 'table' && el.role === 'table' && el.binding) {
       const data = resolveBinding(jsonData, el.binding);
       if (Array.isArray(data)) {
         const rows = data as Record<string, unknown>[];

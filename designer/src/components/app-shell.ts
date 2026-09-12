@@ -72,6 +72,12 @@ export class PldAppShell extends LitElement {
     this._resolveWorkspaceReady = resolve;
   });
   private _dataLoadGeneration = 0;
+  private _recordLoadController: AbortController | null = null;
+  private readonly _loadRecordHandler = () => { void this._loadRecord(); };
+  private readonly _cancelDataLoadHandler = () => {
+    ++this._dataLoadGeneration;
+    this._recordLoadController?.abort();
+  };
   private _jsonDataRevision = 0;
   private _observedJsonData: Readonly<Record<string, unknown>> | null = null;
   private readonly _keyHandler = (e: KeyboardEvent) => {
@@ -125,6 +131,7 @@ export class PldAppShell extends LitElement {
     if (state.jsonData !== this._observedJsonData) {
       this._observedJsonData = state.jsonData;
       this._jsonDataRevision++;
+      this._recordLoadController?.abort();
     }
 
     // Immer preserves references for untouched branches. Comparing the complete
@@ -453,6 +460,8 @@ export class PldAppShell extends LitElement {
     this.addEventListener('pld-show-export-json', this._exportJsonHandler);
     this.addEventListener('pld-load-sample', this._loadSampleHandler);
     this.addEventListener('pld-load-sample-data', this._loadSampleDataHandler);
+    this.addEventListener('pld-load-record', this._loadRecordHandler);
+    this.addEventListener('pld-cancel-data-load', this._cancelDataLoadHandler);
     this.addEventListener('pld-show-bfo-export', this._showBfoExportHandler);
     this.addEventListener('pld-show-save-ns', this._showSaveNsHandler);
     this.addEventListener('pld-show-preview', this._showPreviewHandler);
@@ -476,17 +485,7 @@ export class PldAppShell extends LitElement {
         showToast(`Connected to NetSuite (${ctx.userName})`, 'info');
       }
       // Auto-load record data if opened from a record
-      const intent = this._beginDataLoad(generation);
-      autoLoadRecordIfAvailable().then((data) => {
-        if (!this._isCurrentDataLoad(intent)) return;
-        if (data) {
-          loadJsonData(this.store, data);
-          showToast(`Loaded ${(data as any)._recordType} #${(data as any)._internalId}`, 'success');
-        }
-      }).catch((err) => {
-        if (!this._isCurrentDataLoad(intent)) return;
-        showToast(`Failed to load record: ${err.message}`, 'error');
-      });
+      void this._loadRecord();
     }
   }
 
@@ -499,6 +498,7 @@ export class PldAppShell extends LitElement {
     this._drawerMedia = null;
     ++this._connectionGeneration;
     ++this._dataLoadGeneration;
+    this._recordLoadController?.abort();
     super.disconnectedCallback();
     this._cleanupKeyboard?.();
     this._cleanupKeyboard = null;
@@ -533,7 +533,25 @@ export class PldAppShell extends LitElement {
     return this.isConnected && generation === this._connectionGeneration;
   }
 
+  private async _loadRecord(): Promise<void> {
+    const intent = this._beginDataLoad();
+    const controller = this._recordLoadController = new AbortController();
+    try {
+      const data = await autoLoadRecordIfAvailable(controller.signal);
+      if (!this._isCurrentDataLoad(intent) || controller.signal.aborted || !data) return;
+      this._recordLoadController = null;
+      loadJsonData(this.store, data);
+      showToast(`Loaded ${data._recordType} #${data._internalId}`, 'success');
+    } catch (err) {
+      if (!this._isCurrentDataLoad(intent) || controller.signal.aborted) return;
+      showToast(`Failed to load record: ${(err as Error).message}`, 'error');
+    } finally {
+      if (this._recordLoadController === controller) this._recordLoadController = null;
+    }
+  }
+
   private _beginDataLoad(connectionGeneration = this._connectionGeneration) {
+    this._recordLoadController?.abort();
     return {
       generation: ++this._dataLoadGeneration,
       connectionGeneration,
@@ -557,6 +575,8 @@ export class PldAppShell extends LitElement {
     this.removeEventListener('pld-show-export-json', this._exportJsonHandler);
     this.removeEventListener('pld-load-sample', this._loadSampleHandler);
     this.removeEventListener('pld-load-sample-data', this._loadSampleDataHandler);
+    this.removeEventListener('pld-load-record', this._loadRecordHandler);
+    this.removeEventListener('pld-cancel-data-load', this._cancelDataLoadHandler);
     this.removeEventListener('pld-show-bfo-export', this._showBfoExportHandler);
     this.removeEventListener('pld-show-save-ns', this._showSaveNsHandler);
     this.removeEventListener('pld-show-preview', this._showPreviewHandler);

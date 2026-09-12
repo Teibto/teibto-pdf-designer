@@ -185,6 +185,43 @@ describe('app-shell reconnect lifecycle', () => {
     expect(mocks.showToast).toHaveBeenCalledWith('Loaded invoice #new', 'success');
   });
 
+  it('shares auto-load and editor reload intent before either response commits', async () => {
+    const initial = deferred<Record<string, unknown> | null>();
+    const reload = deferred<Record<string, unknown> | null>();
+    mocks.isNetSuiteEnv.mockReturnValue(true);
+    mocks.autoLoadRecordIfAvailable.mockReturnValueOnce(initial.promise).mockReturnValueOnce(reload.promise);
+    const shell = document.createElement('pld-app-shell') as any;
+    document.body.appendChild(shell);
+    await settle(shell);
+    const editor = document.createElement('pld-json-editor') as any;
+    editor.store = shell.store;
+    shell.appendChild(editor);
+    editor._loadFromRecord();
+    expect(mocks.autoLoadRecordIfAvailable.mock.calls[0][0].aborted).toBe(true);
+    initial.resolve({ marker: 'stale' });
+    await settle(shell);
+    expect(shell.store.state.jsonData).toBeNull();
+    reload.resolve({ marker: 'reload' });
+    await settle(shell);
+    expect(shell.store.state.jsonData).toEqual({ marker: 'reload' });
+  });
+
+  it('aborts auto-load for an invalid editor draft and on disconnect', async () => {
+    mocks.isNetSuiteEnv.mockReturnValue(true);
+    mocks.autoLoadRecordIfAvailable.mockReturnValue(new Promise(() => {}));
+    const shell = document.createElement('pld-app-shell') as any;
+    document.body.appendChild(shell);
+    await settle(shell);
+    const editor = document.createElement('pld-json-editor') as any;
+    editor.store = shell.store;
+    shell.appendChild(editor);
+    editor._onInput({ target: { value: '{' } });
+    expect(mocks.autoLoadRecordIfAvailable.mock.calls[0][0].aborted).toBe(true);
+    editor._loadFromRecord();
+    shell.remove();
+    expect(mocks.autoLoadRecordIfAvailable.mock.calls[1][0].aborted).toBe(true);
+  });
+
   it('does not let initial NetSuite auto-load overwrite a newer local data edit', async () => {
     const pending = deferred<Record<string, unknown> | null>();
     mocks.isNetSuiteEnv.mockReturnValue(true);

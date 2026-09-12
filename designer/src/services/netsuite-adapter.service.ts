@@ -196,12 +196,25 @@ const RETRY_DELAY_MS = 1000;
 /** Retryable HTTP status codes */
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
+function abortableDelay(delay: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); reject(signal?.reason); };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, delay);
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
 async function suiteletFetch(
   baseUrl: string,
   action: string,
   params: Record<string, string> = {},
   method: 'GET' | 'POST' = 'GET',
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   if (!baseUrl) throw new Error('Suitelet URL not configured');
 
@@ -223,7 +236,10 @@ async function suiteletFetch(
   // save/delete/rollback can create duplicate records or history versions.
   const maxRetries = method === 'GET' ? MAX_RETRIES : 0;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    signal?.throwIfAborted();
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
     const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
     try {
 
@@ -238,6 +254,7 @@ async function suiteletFetch(
         // "Unexpected token '<'". Detect the redirect/HTML and surface a clear
         // session-expired error instead (#139).
         const text = await response.text();
+        signal?.throwIfAborted();
         const head = text.trimStart().slice(0, 200).toLowerCase();
         const looksLikeHtml = head.startsWith('<');
         if (response.redirected || looksLikeHtml) {
@@ -260,6 +277,7 @@ async function suiteletFetch(
       // Retryable error — will retry
       lastError = new Error(`NetSuite API error ${response.status}: ${response.statusText}`);
     } catch (err) {
+      signal?.throwIfAborted();
       if (err instanceof DOMException && err.name === 'AbortError') {
         lastError = new Error(`NetSuite API timeout after ${DEFAULT_TIMEOUT_MS}ms`);
       } else if (err instanceof TypeError) {
@@ -270,13 +288,14 @@ async function suiteletFetch(
       }
     } finally {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', abort);
     }
 
     // Exponential backoff before retry
     if (attempt < maxRetries) {
       const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
       console.warn(`[NS API] Retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms: ${lastError?.message}`);
-      await new Promise((r) => setTimeout(r, delay));
+      await abortableDelay(delay, signal);
     }
   }
 
@@ -290,18 +309,19 @@ async function suiteletFetch(
 export async function loadRecordData(
   recordType: string,
   recordId: string,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const result = await suiteletFetch(getDesignerUrl(), 'load-record', {
     rectype: recordType,
     recid: recordId,
-  });
+  }, 'GET', undefined, signal);
   return unwrap<Record<string, unknown>>(result);
 }
 
-export async function autoLoadRecordIfAvailable(): Promise<Record<string, unknown> | null> {
+export async function autoLoadRecordIfAvailable(signal?: AbortSignal): Promise<Record<string, unknown> | null> {
   const ctx = getNsContext();
   if (!ctx?.recordType || !ctx?.recordId) return null;
-  return loadRecordData(ctx.recordType, ctx.recordId);
+  return loadRecordData(ctx.recordType, ctx.recordId, signal);
 }
 
 // ═══════════════════════════════════════
@@ -496,6 +516,8 @@ export async function renderLivePreview(opts: {
   copies?: { th: string; en: string }[] | null;
   /** พรีวิวด้วยข้อมูลตัวอย่างของ engine — ใช้เมื่อเปิดดีไซเนอร์โดยไม่มี record (#191) */
   sample?: boolean;
+  /** Cancels the client fetch, not an already-running server N/render. */
+  signal?: AbortSignal;
 }): Promise<Blob> {
   const baseUrl = getRendererUrl();
   if (!baseUrl) throw new Error('Render Suitelet URL not configured');
@@ -503,7 +525,10 @@ export async function renderLivePreview(opts: {
   const target = new URL(baseUrl, window.location.origin);
   target.searchParams.set('action', 'preview-live');
 
+  opts.signal?.throwIfAborted();
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  opts.signal?.addEventListener('abort', abort, { once: true });
   const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
   try {
     const response = await fetch(target.toString(), {
@@ -531,12 +556,14 @@ export async function renderLivePreview(opts: {
 
     return await response.blob();
   } catch (err) {
+    opts.signal?.throwIfAborted();
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new Error(`Preview render timeout after ${DEFAULT_TIMEOUT_MS}ms`, { cause: err });
     }
     throw err;
   } finally {
     clearTimeout(timeoutId);
+    opts.signal?.removeEventListener('abort', abort);
   }
 }
 

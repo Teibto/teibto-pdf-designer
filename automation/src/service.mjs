@@ -50,7 +50,8 @@ export function createService(config = {}) {
     async status() {
       try { return await coordinator().status(); } catch (error) { throw safeError(error); }
     },
-    async render({ template, outputName, copies = 1, recordId } = {}) {
+    async render({ template, outputName, copies = 1, recordId, measure = false } = {}) {
+      if (typeof measure !== 'boolean') throw new Error('Measure must be a boolean.');
       if (typeof template !== 'string' || !/^[a-z0-9-]+$/.test(template)) throw new Error('Choose a template ID from pdf_list_templates.');
       if (typeof outputName !== 'string' || !validName.test(outputName) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])\./i.test(outputName)) throw new Error('Output must be a simple filename ending in .pdf (letters, numbers, hyphen or underscore).');
       if (!Number.isInteger(copies) || copies < 1 || copies > 10) throw new Error('Copies must be an integer from 1 to 10.');
@@ -73,7 +74,8 @@ export function createService(config = {}) {
         const labels = Array.from({ length: copies }, (_, index) => index === 0
           ? { th: 'ต้นฉบับ', en: 'Original' }
           : { th: `สำเนา ${index}`, en: `Copy ${index}` });
-        const pdf = await coordinator().render({ xml: selected.xml, rectype: selected.rectype, copies: labels, ...(recordId === undefined ? {} : { recordId }) });
+        const rendered = await coordinator().render({ xml: selected.xml, rectype: selected.rectype, copies: labels, ...(measure ? { measure: true } : {}), ...(recordId === undefined ? {} : { recordId }) });
+        const pdf = measure ? rendered.pdf : rendered;
         if (!Buffer.isBuffer(pdf) || pdf.length < 20 || pdf.length > MAX_PDF || pdf.subarray(0, 5).toString() !== '%PDF-' || !pdf.subarray(-1024).includes(Buffer.from('%%EOF'))) {
           throw new Error('Invalid PDF result.');
         }
@@ -87,7 +89,7 @@ export function createService(config = {}) {
         try { await unlink(temporary); }
         catch { cleanupWarning = 'PDF is complete; a private .pld-*.partial hard link remains for operator cleanup.'; }
         temporary = undefined;
-        return { path: destination, bytes: pdf.length, sha256: createHash('sha256').update(pdf).digest('hex'), template, rectype: selected.rectype, copies, mode: recordId === undefined ? 'synthetic' : 'record', account: settings.account, ...(cleanupWarning ? { cleanupWarning } : {}) };
+        return { path: destination, bytes: pdf.length, sha256: createHash('sha256').update(pdf).digest('hex'), template, rectype: selected.rectype, copies, mode: recordId === undefined ? 'synthetic' : 'record', account: settings.account, ...(measure ? { performance: rendered.metrics } : {}), ...(cleanupWarning ? { cleanupWarning } : {}) };
       } catch (error) {
         if (handle) await handle.close().catch(() => {});
         if (temporary) await unlink(temporary).catch(() => {});

@@ -71,7 +71,7 @@ function typedSearchStub(byType) {
  * @param {Array}  opts.documents  transaction rows the screen lists
  * @param {Array}  opts.templates  customrecord_pld_template rows
  * @param {Array}  opts.failIds    record ids whose record.load blows up
- * @param {Function} opts.usage    getRemainingUsage() sequence
+ * @param {Function} opts.usage    current remaining governance (reads consume no units)
  */
 function buildBatch({
   documents = [], templates = [], failIds = [], usage, asString, folders = [],
@@ -327,13 +327,16 @@ test('ใบเดียวพังไม่ล้มทั้งชุด — 
 test('โควตาใกล้หมดแล้วหยุดเอง พร้อมบอกว่าเหลือกี่ใบ — วัด usage จริงต่อใบ', () => {
   // ใบละ 400 units (1000 → 600 → 250) — ก่อนใบที่สาม เหลือ 250 ซึ่งน้อยกว่า
   // 400 (ต้นทุนที่วัดได้ต่อใบ) + 100 (สำรองไว้รวมไฟล์) จึงต้องหยุดตรงนั้น
-  const budget = [1000, 600, 600, 250, 250];
-  let i = 0;
-  const { suitelet, log } = buildBatch({
+  const budget = [1000, 600, 250];
+  let renderCalls = { renderedAsString: 0 };
+  const { suitelet, log, render } = buildBatch({
     documents: DOCS,
     templates: TEMPLATES,
-    usage: () => (i < budget.length ? budget[i++] : 400),
+    // Two render passes complete one document. Observing remaining governance
+    // must not consume it: phase telemetry may read between the batch checks.
+    usage: () => budget[Math.min(Math.floor(renderCalls.renderedAsString / 2), 2)],
   });
+  renderCalls = render.calls;
   const { context, response } = printRequest(['11', '12', '13']);
 
   suitelet.onRequest(context);

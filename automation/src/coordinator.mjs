@@ -46,6 +46,7 @@ async function browserCommand(input) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 45000);
     try {
+      const started = Date.now();
       const response = await fetch(endpoint.href, { method: statusOnly ? 'GET' : 'POST', credentials: 'same-origin', redirect: 'error',
         cache: 'no-store', headers: { 'Content-Type': 'application/json' },
         ...(statusOnly ? {} : { body: JSON.stringify(input.payload) }), signal: controller.signal });
@@ -73,9 +74,20 @@ async function browserCommand(input) {
         return JSON.stringify({ account: input.account, environment: 'SANDBOX', role: Number(context.role), ready: true });
       }
       if (String.fromCharCode(...bytes.subarray(0, 5)) !== '%PDF-') return JSON.stringify({ error: 'PLD_RESPONSE' });
+      const elapsedMs = Date.now() - started;
+      const metrics = { elapsedMs, pdfBytes: size, phases: {}, usage: null };
+      if (input.measure) {
+        const timing = response.headers.get('server-timing') || '';
+        for (const part of timing.split(',')) {
+          const match = /^\s*(total|data|reference|binding|bfo|combine);dur=(\d+(?:\.\d+)?)\s*$/.exec(part);
+          if (match && Number.isFinite(Number(match[2]))) metrics.phases[match[1]] = Number(match[2]);
+        }
+        const usage = response.headers.get('x-pld-usage');
+        if (usage !== null && /^\d+$/.test(usage) && Number.isSafeInteger(Number(usage))) metrics.usage = Number(usage);
+      }
       let binary = '';
       for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-      return JSON.stringify({ pdf: btoa(binary) });
+      return JSON.stringify({ pdf: btoa(binary), ...(input.measure ? { metrics } : {}) });
     } finally { clearTimeout(timer); }
   } catch { return JSON.stringify({ error: 'PLD_TRANSPORT' }); }
 }
@@ -97,14 +109,14 @@ export function createCoordinator(config) {
     return result.stdout;
   });
   let queue = Promise.resolve();
-  async function perform(payload) {
+  async function perform(payload, measure) {
     let directory;
     try {
       const state = JSON.parse(await runner({ action: 'status', account, timeoutMs: 65000 }));
       if (state.account !== account || state.bound !== true || state.browser_running !== true || state.binding_match !== true) throw fail('PLD_SESSION');
       directory = await mkdtemp(path.join(tmpdir(), 'pld-coordinator-'));
       const scriptPath = path.join(directory, 'render.js');
-      await writeFile(scriptPath, `(${browserCommand.toString()})(${JSON.stringify({ account, origin, renderUrl: config.renderUrl, maxPdf: MAX_PDF, payload })})`, { mode: 0o600 });
+      await writeFile(scriptPath, `(${browserCommand.toString()})(${JSON.stringify({ account, origin, renderUrl: config.renderUrl, maxPdf: MAX_PDF, payload, measure })})`, { mode: 0o600 });
       const result = JSON.parse(await runner({ action: 'command', account, targetId, scriptPath, timeoutMs: 65000 }));
       if (!result || typeof result !== 'object') throw fail('PLD_TRANSPORT');
       if (result.error) throw fail(result.error);
@@ -116,6 +128,17 @@ export function createCoordinator(config) {
       const bytes = Buffer.from(result.pdf, 'base64');
       if (bytes.length > MAX_PDF) throw fail('PLD_SIZE');
       if (bytes.subarray(0, 5).toString() !== '%PDF-') throw fail('PLD_RESPONSE');
+      if (measure) {
+        const metrics = result.metrics;
+        if (!metrics || !Number.isFinite(metrics.elapsedMs) || metrics.elapsedMs < 0 || metrics.pdfBytes !== bytes.length ||
+            (metrics.usage !== null && (!Number.isSafeInteger(metrics.usage) || metrics.usage < 0))) throw fail('PLD_RESPONSE');
+        const phases = {};
+        for (const name of ['total', 'data', 'reference', 'binding', 'bfo', 'combine']) {
+          const value = metrics.phases?.[name];
+          if (Number.isFinite(value) && value >= 0) phases[name] = value;
+        }
+        return { pdf: bytes, metrics: { elapsedMs: metrics.elapsedMs, requestBytes: Buffer.byteLength(JSON.stringify(payload)), pdfBytes: bytes.length, usage: metrics.usage, phases } };
+      }
       return bytes;
     } catch (error) {
       throw fail(error?.code);
@@ -126,19 +149,20 @@ export function createCoordinator(config) {
       }
     }
   }
-  function enqueue(payload) {
-    const result = queue.then(() => perform(payload));
+  function enqueue(payload, measure = false) {
+    const result = queue.then(() => perform(payload, measure));
     queue = result.catch(() => {});
     return result;
   }
   return {
     status: () => enqueue(),
-    render: ({ xml, rectype, copies, recordId } = {}) => {
+    render: ({ xml, rectype, copies, recordId, measure = false } = {}) => {
+      if (typeof measure !== 'boolean') return Promise.reject(fail('PLD_INPUT'));
       if (typeof xml !== 'string' || !xml.trim() || Buffer.byteLength(xml) > 2 * 1024 * 1024 ||
           typeof rectype !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(rectype) ||
           (copies !== undefined && (!Array.isArray(copies) || copies.length > 10 || copies.some(c => !c || typeof c.th !== 'string' || typeof c.en !== 'string' || c.th.length > 100 || c.en.length > 100)))) return Promise.reject(fail('PLD_INPUT'));
       if (recordId !== undefined && (config.allowRecords !== true || !/^[1-9]\d{0,14}$/.test(String(recordId)))) return Promise.reject(fail('PLD_INPUT'));
-      return enqueue({ xml, rectype, ...(recordId === undefined ? { sample: true } : { recid: String(recordId) }), ...(copies === undefined ? {} : { copies }) });
+      return enqueue({ xml, rectype, ...(recordId === undefined ? { sample: true } : { recid: String(recordId) }), ...(copies === undefined ? {} : { copies }) }, measure);
     },
   };
 }

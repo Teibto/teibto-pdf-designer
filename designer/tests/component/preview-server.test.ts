@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppStore } from '../../src/state/store';
 import { PldPreviewModal } from '../../src/components/modals/preview-modal';
 import '../../src/components/modals/preview-modal';
+import { getCurrentBfoXml } from '../../src/services/bfo-export.service';
 import { renderLivePreview } from '../../src/services/netsuite-adapter.service';
 
 vi.mock('../../src/services/netsuite-adapter.service', () => ({
@@ -16,8 +17,8 @@ vi.mock('../../src/services/netsuite-adapter.service', () => ({
   renderLivePreview: vi.fn(),
 }));
 vi.mock('../../src/services/bfo-export.service', () => ({
-  getCurrentBfoXml: (state: { editorMode: string; rawXml: string }) =>
-    state.editorMode === 'xml' ? state.rawXml : '<pdf>edited</pdf>',
+  getCurrentBfoXml: vi.fn((state: { editorMode: string; rawXml: string }) =>
+    state.editorMode === 'xml' ? state.rawXml : '<pdf>edited</pdf>'),
 }));
 
 function deferred() {
@@ -46,13 +47,26 @@ describe('server preview lifecycle', () => {
   });
 
   async function open() {
+    const calls = vi.mocked(renderLivePreview).mock.calls.length;
     modal.open = true;
     await modal.updateComplete;
+    await vi.waitFor(() => expect(renderLivePreview).toHaveBeenCalledTimes(calls + 1));
   }
   async function settle() {
     await Promise.resolve();
     await modal.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
+
+  it('commits the loading indicator before exporting XML', async () => {
+    vi.mocked(renderLivePreview).mockResolvedValue(new Blob(['pdf']));
+    modal.open = true;
+    await modal.updateComplete;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector('.spinner')).not.toBeNull();
+    expect(getCurrentBfoXml).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(renderLivePreview).toHaveBeenCalledOnce());
+  });
 
   it('downloads the displayed blob without requesting a default saved template', async () => {
     vi.mocked(renderLivePreview).mockResolvedValue(new Blob(['edited pdf']));
@@ -89,6 +103,8 @@ describe('server preview lifecycle', () => {
     await open();
     modal.open = false;
     await modal.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(vi.mocked(renderLivePreview).mock.calls[0][0].signal?.aborted).toBe(true);
     response.resolve(new Blob(['late']));
     await settle();
     expect(createUrl).not.toHaveBeenCalled();
@@ -101,6 +117,7 @@ describe('server preview lifecycle', () => {
     await open();
     modal.open = false;
     await modal.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 10));
     await open();
     const currentBlob = new Blob(['current']);
     current.resolve(currentBlob);
