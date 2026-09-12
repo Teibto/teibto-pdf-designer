@@ -3,6 +3,7 @@
 <!-- @author Wichit Wongta @since 2026-09-13 -->
 
 Status: local implementation verified; connected PDF acceptance remains pending.
+Draft PR: https://github.com/Teibto/teibto-pdf-designer/pull/204
 
 ## Implemented acceptance scope
 
@@ -70,3 +71,11 @@ cleanup failure after publication returns success with a cleanup warning.
 
 Connected acceptance, CI and repository review protection must be recorded
 separately; local checks are not a release or production sign-off.
+
+## CI infrastructure blocker
+
+[Actions run 34709444618](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34709444618)
+failed before any job steps started. Its check annotation says account payments
+failed or the spending limit must be increased. This is not a test result; no CI
+checks executed. The repository billing administrator must resolve the account
+condition before rerunning. No billing settings were changed by this task.
