@@ -840,9 +840,28 @@ describe('barcode null-safety (#4)', () => {
     },
   );
 
+  it('exports Code39 using the BFO-supported codetype instead of the rejected code3of9 alias', () => {
+    const xml = exportBfoXml(createMockState([makeBarcode({ barcodeType: 'code39', value: 'QA-PLD-199' })]));
+    expect(xml).toContain('codetype="code39"');
+    expect(xml).not.toContain('code3of9');
+  });
+
   it('preserves the requested rectangular dimensions of linear barcodes', () => {
     const xml = exportBfoXml(createMockState([makeBarcode({ w: 180, h: 80 })]));
     expect(xml).toContain('style="width: 180pt; height: 80pt;"');
+  });
+
+  it('sizes EAN13 with bar-width inside its frame without the native-crashing width attribute', () => {
+    const state = createMockState([makeBarcode({ barcodeType: 'ean13', value: '5901234123457', w: 226, h: 70 })]);
+    const before = JSON.stringify(state);
+    const xml = exportBfoXml(state);
+    const symbol = xml.match(/<barcode\b[^>]*>/)?.[0] ?? '';
+    expect(symbol).toContain('codetype="ean13"');
+    expect(symbol).toContain('bar-width="2"');
+    expect(symbol).toContain('style="height: 70pt;"');
+    expect(symbol).not.toMatch(/(?:style="[^\"]*|\s)width[=:]/);
+    expect(xml).toContain('width: 226pt; height: 70pt; border: 0;');
+    expect(JSON.stringify(state)).toBe(before);
   });
 
   it.each(['datamatrix', 'pdf417', 'ean8', 'upca', 'itf14', 'unknown', 'toString', '__proto__', undefined])(
@@ -853,8 +872,8 @@ describe('barcode null-safety (#4)', () => {
     },
   );
 
-  it('skips the whole QR frame when its bound value is absent', () => {
-    const xml = exportBfoXml(createMockState([makeBarcode({ barcodeType: 'qrcode', binding: 'tranid' })]));
+  it.each(['qrcode', 'ean13'])('skips the whole %s frame when its bound value is absent', (barcodeType) => {
+    const xml = exportBfoXml(createMockState([makeBarcode({ barcodeType, binding: 'tranid' })]));
     expect(xml).toContain("<#if (record.tranid!'')?has_content>\n<table cellpadding=");
     expect(xml).toContain('</table>\n</#if>');
     expect(xml).toContain("value=\"${(record.tranid!'')?xml}\"");

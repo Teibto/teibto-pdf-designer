@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+- Correct Code39 export to BFO's supported `code39` codetype; the former `code3of9` alias caused native PDF preview to fail.
+- Size EAN13 through BFO bar-width inside its retained layout frame, avoiding the native engine failure caused by an explicit barcode width.
+
 - Use the saved template's document type for synthetic sample loading and preview; real-record preview keeps the record type paired with its ID and reports missing context explicitly.
 
 - Integrate portable Thai/Latin UI fonts, keyboard-accessible panels and modal controls, responsive drawer focus handling, persistent JSON import errors, and explicit new/unsaved template state. Rebuilding a band layout requires confirmation and remains undoable.

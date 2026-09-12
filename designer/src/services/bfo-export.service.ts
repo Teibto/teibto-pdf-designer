@@ -1036,7 +1036,7 @@ function barcodeToHtml(el: BarcodeElement, recordType: string, useFreeMarker: bo
   // BFO supports barcode rendering via <barcode> tag
   const barcodeTypeMap: Record<string, string> = {
     code128: 'code128',
-    code39: 'code3of9',
+    code39: 'code39',
     ean13: 'ean13',
     qrcode: 'qrcode',
   };
@@ -1048,6 +1048,7 @@ function barcodeToHtml(el: BarcodeElement, recordType: string, useFreeMarker: bo
   // user frame without changing its square modules when switching from a
   // linear barcode or resizing a previously saved rectangular frame.
   const isQr = bfoType === 'qrcode';
+  const isEan = bfoType === 'ean13';
   const qrSide = Math.min(el.w, el.h);
   const width = isQr ? qrSide : el.w;
   const height = isQr ? qrSide : el.h;
@@ -1055,10 +1056,14 @@ function barcodeToHtml(el: BarcodeElement, recordType: string, useFreeMarker: bo
   const symbol = [
     `<!-- Barcode: ${escapeXml(el.name)} -->`,
     `<barcode codetype="${bfoType}" value="${value}"`,
-    `  style="width: ${width}pt; height: ${height}pt;"`,
+    // Native EAN13 rejects width even for valid values. Size its 95 modules plus
+    // 11/7-module quiet zones through bar-width, retaining the requested frame.
+    isEan
+      ? `  bar-width="${el.w / 113}" style="height: ${height}pt;"`
+      : `  style="width: ${width}pt; height: ${height}pt;"`,
     `  showtext="true" />`,
   ].join('\n');
-  const barcodeTag = isQr ? [
+  const barcodeTag = isQr || isEan ? [
     `<table cellpadding="0" cellspacing="0" style="width: ${el.w}pt; height: ${el.h}pt; border: 0;">`,
     `  <tr><td align="center" valign="middle" style="padding: 0;">${symbol}</td></tr>`,
     `</table>`,
