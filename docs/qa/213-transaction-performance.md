@@ -123,6 +123,33 @@ Across that 12-case run the maximum observed load p95/edit p95/long task were
 This serves the exact built bundle locally with mocked account responses; it
 still cannot measure native Suitelet, SuiteQL, File Cabinet or BFO latency.
 
+The first [PR CI run](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34719234955)
+passed all 121 functional browser tests but failed two new benchmark assertions:
+an Invoice 1,000-row aggregate long task was 157 ms against 150 ms, and Purchase
+Order 10,000-row observed-load p95 was 1,504.8 ms against 1,500 ms. The original
+observer retained durations without timestamps, so it could not distinguish
+record processing from startup/layout preparation. Its elapsed gate also charged
+test-side layout setup and tab automation to record loading. Those results remain
+historical observations; they do not prove a record-phase regression or a pass.
+
+The benchmark revision prepares the layout/data tab before releasing the pending
+mock GET and records in-browser response/store/paint/edit markers. It retains the
+overall request metric as information and applies the unchanged 1,500/250/150 ms
+budgets to response-start through form paint, item editing, and tasks overlapping
+those phases. Response-start through paint includes body transfer, decoding,
+`loadJsonData`, pagination and form updates. Timestamped raw observations are
+attached for attribution rather than discarding startup tasks. This is a change
+in measurement scope, not evidence that the product became faster between runs.
+
+The corrected local matrix passed 12/12 cases for each bundle with unchanged
+budgets. The largest response-to-form-paint p95 was 199.7 ms for the web bundle
+and 202.8 ms for the inline NetSuite bundle; edit p95 maxima were 56.4/71.7 ms and
+overlapping long-task maxima 53/55 ms. See
+[`213-record-phase-performance.json`](213-record-phase-performance.json).
+The NetSuite run retained 12 raw JSON files with 10 observations each in local
+`designer/test-results/`; future failed runs attach those files to the browser
+diagnostics. CI must rerun the corrected phase gate before it can be recorded as passing.
+
 For connected acceptance, use identical record/template/copy selections before
 and after deployment. Cover ordinary Invoice and reference Invoice with small,
 medium and large available line counts, one/two copies, then representative
