@@ -124,6 +124,7 @@ jobs:
       # (ต้องมี live NetSuite session) — คงเป็น manual QA บน SB2 ต่อไป ดู designer/tests/e2e/FINDINGS.md
       # production-performance config ใช้ dist ที่ build ไว้ด้านบน, server ใหม่, worker เดียว และ retry 0
       - name: Node — e2e (Playwright, designer/)
+        id: browser-gate
         if: hashFiles('designer/package.json') != ''
         working-directory: designer
         run: |
@@ -131,6 +132,13 @@ jobs:
           npx playwright install chromium
           npm run test:e2e
           npx playwright test --config playwright.performance.config.ts
+
+      # Instrumented runs are diagnostics, never replacement acceptance measurements.
+      - name: Profile failed browser startup
+        if: failure() && steps.browser-gate.outcome == 'failure'
+        working-directory: designer
+        timeout-minutes: 3
+        run: node scripts/profile-startup.mjs
 
       # Only local-app CI output; connected sandbox evidence stays outside these paths.
       - name: Retain failed browser test diagnostics
