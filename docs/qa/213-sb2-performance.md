@@ -125,7 +125,8 @@ passed server validation and installation. All deployed files were read back and
 matched byte-for-byte. The JavaScript actually served by NetSuite matched the
 candidate build hash. The final three-file scheduler overlay also passed server
 validation, installation, byte-exact readback and served-JavaScript verification.
-Final deployed source is `7460586`, retaining the `3c0d69f` backend. The original
+The completed initial SB2 capture used `7460586`, retaining the `3c0d69f` backend.
+The later pagination-cache follow-up and current deployment status are tracked on PR #214. The original
 rollback covers all affected paths. No production deployment is included.
 
 Private ignored evidence retains source, record selections, PDFs, logs, hashes and
@@ -152,3 +153,30 @@ load behavior and production latency remain unverified; repeated single-page rec
 and Original/Copy page sets do not establish multi-page item-flow behavior. The PR
 is stacked on prerequisite #200 and must be retargeted after that prerequisite
 merges; these results do not sign off the parent production-readiness scope.
+
+## Subsequent CI performance finding and row-height follow-up
+
+Both attempts of run 34724370277 on `730933c` passed all 121 functional E2E
+cases and 13/14 web production performance cases, but Credit Memo 10,000 rows
+exceeded an unchanged budget. Attempt 1 recorded a 161 ms edit-phase long task;
+attempt 2 recorded edit p95 283.4 ms and a 170 ms long task. The limits remain
+250 ms edit p95 and 150 ms long task. Raw observations and traces were retained.
+Three unchanged-build local repetitions (30 loads/edits) passed with relevant
+long-task maxima 56/0/0 ms, showing that local success did not close the CI finding.
+
+Review identified repeated intrinsic height measurement for all rows after a
+single-cell edit. Follow-up `36feb36` reuses measurements for unchanged immutable
+rows and columns, keyed by all height inputs. Mutable/accessor/nested values and
+primitive/null rows bypass unsafe reuse; grouping and page packing still rerun.
+A deterministic test verifies 1,000 initial measurements versus one after a
+single-row edit. Cached/cold page-range differential tests and input invalidation
+coverage passed in a 91-test focused suite; TypeScript and lint passed.
+
+Three local 10,000-row Credit Memo repetitions after the change passed unchanged
+budgets. Edit medians were 23.7/24.4/23.5 ms (previous unchanged-build series
+35.6/31.0/35.5 ms); edit p95 values were 43.8/34.1/42.1 ms, with no observed
+long tasks in the measured intervals. This is local synthetic evidence. Native
+follow-up deployment/parity, the full inline-bundle matrix and final-head CI
+results are recorded on [PR #214](https://github.com/Teibto/teibto-pdf-designer/pull/214).
+The earlier 10-run native form series remains attributed to its original frontend;
+it is not relabeled as a measurement of the row-height cache.
