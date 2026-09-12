@@ -51,7 +51,13 @@ is layout evidence with synthetic content, not proof of real-record data parity.
 
 ## Remaining acceptance gates
 
-- Publish final local PDF artifacts and finish PR review/CI.
+- Finish PR review/CI before merge/release. The requested sandbox PDF acceptance is complete.
+
+Final artifacts were published locally as `output/pdf/invoice-reference-real.pdf` and
+`output/pdf/invoice-reference-50-original-copy.pdf`. Their bytes match the verified
+render evidence. A final audit rechecked all ten pages for ordered rows, reset copy
+numbering, logos, Thai fonts, and totals. These account-linked PDF artifacts remain
+outside version control.
 
 ## Connected validation
 
