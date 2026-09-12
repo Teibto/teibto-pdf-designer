@@ -79,7 +79,7 @@ production failure rate below 1%.
 
 ## Acceptance evidence and remaining work
 
-- Engine integrated tests: 425/425 passed using
+- Engine integrated tests: 430/430 passed using
   `node --test --test-isolation=none "engine/tests/**/*.test.js"` on Windows.
 - Automation tests: 25/25 passed, including real local CLI/MCP subprocess tests,
   timing allowlisting, missing measurements and failure denominator handling.
@@ -91,8 +91,9 @@ production failure rate below 1%.
 - The inline NetSuite bundle passed the same 12/12 cases with unchanged budgets;
   `build:netsuite` and provenance staging passed. Existing web-build startup
   benchmarks passed 2/2 and focused pagination browser tests passed 7/7.
-- Connected real-record baseline/candidate timing and PDF inspection: pending
-  sandbox authorization for this task; no new account action has been performed.
+- Authorized connected SB2 before/after data, form and PDF checks passed for the
+  selected small records. See [the connected report](213-sb2-performance.md) for
+  results, follow-up Preview fix, deployment/rollback and coverage gaps.
 
 Local Windows Invoice results (Node 24.18.0; configured Chromium 153.0.8010.12,
 revision 1243; 10 repetitions per size, milliseconds):
@@ -148,7 +149,8 @@ overlapping long-task maxima 53/55 ms. See
 [`213-record-phase-performance.json`](213-record-phase-performance.json).
 The NetSuite run retained 12 raw JSON files with 10 observations each in local
 `designer/test-results/`; future failed runs attach those files to the browser
-diagnostics. CI must rerun the corrected phase gate before it can be recorded as passing.
+diagnostics. The corrected CI gate passed at `ae582ce` in [run 34720077821](https://github.com/Teibto/teibto-pdf-designer/actions/runs/34720077821).
+Final-head CI status is tracked on PR #214.
 
 For connected acceptance, use identical record/template/copy selections before
 and after deployment. Cover ordinary Invoice and reference Invoice with small,
@@ -161,5 +163,6 @@ copy labels, Thai glyphs, pagination, repeated headers and footers. Retain PDF
 page counts and redacted comparison results separately. Mark unavailable types
 or sizes as gaps. Do not change transactions to manufacture a benchmark.
 
-The full objective remains open until connected evidence verifies real loading
-performance and PDF layout parity. Local mock tests cannot close that gate.
+Connected evidence now verifies the selected small-record loading and PDF layout
+paths. Large real-record loading/pagination remains a stated coverage gap; local
+mock tests do not close it. See [the SB2 report](213-sb2-performance.md).
