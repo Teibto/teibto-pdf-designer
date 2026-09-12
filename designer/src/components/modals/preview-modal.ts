@@ -391,10 +391,29 @@ export class PldPreviewModal extends LitElement {
     const controller = this.previewController = new AbortController();
     try {
       await this.updateComplete;
-      // A task after an animation frame lets the loading indicator paint before export.
+      // Allow a visible frame before export, but a background tab may never deliver rAF.
       await new Promise<void>((resolve) => {
-        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0));
-        else setTimeout(resolve, 0);
+        let frame: number | null = null;
+        let afterFrame: ReturnType<typeof setTimeout> | null = null;
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(fallback);
+          if (frame !== null) cancelAnimationFrame(frame);
+          if (afterFrame !== null) clearTimeout(afterFrame);
+          controller.signal.removeEventListener('abort', finish);
+          resolve();
+        };
+        const fallback = setTimeout(finish, 100);
+        controller.signal.addEventListener('abort', finish, { once: true });
+        if (controller.signal.aborted) finish();
+        else if (typeof requestAnimationFrame === 'function') {
+          frame = requestAnimationFrame(() => {
+            frame = null;
+            afterFrame = setTimeout(finish, 0);
+          });
+        } else afterFrame = setTimeout(finish, 0);
       });
       if (controller.signal.aborted || !this.open || !this.isConnected) return;
       if (!rectype) throw new Error('ไม่พบประเภทเอกสารจริง กรุณาเปิด Designer จากรายการอีกครั้ง');

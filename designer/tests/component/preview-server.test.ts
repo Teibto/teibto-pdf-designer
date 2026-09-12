@@ -44,6 +44,7 @@ describe('server preview lifecycle', () => {
   afterEach(() => {
     modal.remove();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   async function open() {
@@ -66,6 +67,46 @@ describe('server preview lifecycle', () => {
     expect(modal.shadowRoot!.querySelector('.spinner')).not.toBeNull();
     expect(getCurrentBfoXml).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(renderLivePreview).toHaveBeenCalledOnce());
+  });
+
+  it('starts preview with the timer fallback when animation frames are suspended', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 17));
+    const cancelFrame = vi.fn();
+    vi.stubGlobal('cancelAnimationFrame', cancelFrame);
+    vi.mocked(renderLivePreview).mockResolvedValue(new Blob(['pdf']));
+    modal.open = true;
+    await modal.updateComplete;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector('.spinner')).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(99);
+    expect(renderLivePreview).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(renderLivePreview).toHaveBeenCalledOnce();
+    expect(cancelFrame).toHaveBeenCalledWith(17);
+  });
+
+  it('settles and cleans up a suspended frame immediately when closed', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 23));
+    const cancelFrame = vi.fn();
+    vi.stubGlobal('cancelAnimationFrame', cancelFrame);
+    modal.open = true;
+    await modal.updateComplete;
+    await modal.updateComplete;
+    const signal = (modal as any).previewController.signal as AbortSignal;
+    const removeListener = vi.spyOn(signal, 'removeEventListener');
+    modal.open = false;
+    await modal.updateComplete;
+    await Promise.resolve();
+    expect(signal.aborted).toBe(true);
+    expect(cancelFrame).toHaveBeenCalledWith(23);
+    expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect((modal as any).serverLoading).toBe(false);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(getCurrentBfoXml).not.toHaveBeenCalled();
+    expect(renderLivePreview).not.toHaveBeenCalled();
+    removeListener.mockRestore();
   });
 
   it('downloads the displayed blob without requesting a default saved template', async () => {
