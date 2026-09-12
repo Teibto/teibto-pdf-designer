@@ -62,6 +62,30 @@ This decision does not grant permission to delete existing account records or ar
 
 ### Verification status
 
+The deployed runtime candidate `05310c9` passed targeted component lint, 26 existing component
+tests, production/NetSuite builds and SDF validation. Actual served JavaScript matched the
+deployed build. Native standalone Data/Preview hints were verified; transaction-context wording
+is source/unit validated and still requires native verification. A synthetic template journey verified native keyboard text
+entry, save, exact XML/JSON readback, fresh-page catalog reload, and a two-page native PDF whose
+downloaded bytes match the displayed response. This is not an entirely keyboard-only journey
+and does not establish real-record Print parity for that fixture.
+
+The unchanged canonical invoice also rendered 100 synthetic rows across six pages on `8cac3b3`:
+all rows appeared once in order, headers and page numbers repeated, and totals followed the last
+row. All six pages were inspected. This proves one-copy pagination, not multipage copy sets.
+Code39 and EAN13 native rendering and decoding were verified after exporter corrections in that
+candidate; its full Designer coverage run passed 830 tests. These scoped results supplement the
+earlier evidence below without closing the broader matrix items. Current remote CI still did not
+start because of account billing/spending restrictions.
+
+Fresh local verification of the `05310c9` runtime passed all 115 Chromium E2E cases with
+one worker and a newly started server. The serial production startup gate passed unchanged:
+20 cold runs had app-ready p95 333.6 ms (max 408.3), and 30 warm runs had p95 125.8 ms
+(max 126.8). Cold encoded transfer was 174,464 bytes, including 103,567 bytes of initial JS;
+maximum long task was 96 ms and TBT 46 ms. Large-data E2E retained all 10,000 rows with only
+50 rows/500 inputs mounted; 100 Design/Flow switches showed no retained DOM/listener growth.
+These local pinned-Chromium results do not establish other browser/device or SB2 capacity limits.
+
 The committed integration `6119e27` passed 827 local Designer tests, full 115-case E2E
 and production startup gates. Coverage was 83.79% statements, 78.63% branches, 86.32%
 functions and 84.96% lines. Current source changes must identify their own follow-up
@@ -92,9 +116,12 @@ Fixtures and outputs are retained until the user explicitly requests deletion.
   direct native private-artifact access checks.
 - BATCH-01/BATCH-02 positive queued and recovery cases await notification authorization;
   the successful synchronous single-document batch does not close them.
-- BATCH-03 covers authenticated published XML-input cleanup. PDF/snapshot/output deletion
-  is deferred until explicitly requested by the user.
-- Complete native multipage/feature and displayed-download parity evidence.
+- BATCH-03 covers authenticated published XML-input cleanup. Live deletion of retained QA
+  artifacts requires an explicit deletion request; read-only and local checks can proceed.
+  PDF/snapshot/output deletion is deferred until explicitly requested by the user.
+- Complete native multipage copy-set and real-record Print parity evidence. Standalone
+  displayed-download byte parity is verified for the current synthetic journey only.
+- Complete the entirely keyboard-only feature journey and remaining panel/theme states.
 - Restore current remote CI after account-owner billing resolution, then satisfy required
   review and release policy. Production deployment requires separate authorization.
 
