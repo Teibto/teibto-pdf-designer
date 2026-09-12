@@ -26,6 +26,8 @@ jobs:
       (github.event_name != 'pull_request' ||
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Linux, teibto-devtools]
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -95,6 +97,12 @@ jobs:
 
       - name: Build/deploy provenance regression tests
         run: node --test scripts/build-provenance.test.mjs
+
+      - name: PDF automation — MCP protocol and service tests
+        working-directory: automation
+        run: |
+          npm ci
+          npm test
 
       # ==================== STACK: Node (designer/) ====================
       # monorepo: แอปหลักอยู่ designer/ — ไม่มี package.json ที่ root
