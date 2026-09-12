@@ -527,7 +527,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // body field decides which customrecord_pld_config row companyConfig.load()
     // matches — empty/absent (non-OneWorld) falls back to the global config.
     var subsidiaryId = bodyValue(rec, 'subsidiary') || '';
-    var cfg = companyConfig.load(subsidiaryId);
+    var cfg = companyConfig.load(subsidiaryId, { forRender: true });
 
     // Bordered key/value grids rendered as PLD tables (ShapeElement has no border,
     // so the doc-info and summary boxes are 2-column tables bound to these arrays).
@@ -749,19 +749,40 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         quantity: 1, units: 'งาน', rate: 130000, amount: 130000 })
     ];
     // ใบเสร็จรับเงินไม่มีบรรทัดสินค้า — แถวของมันคือเอกสารที่ตัดชำระ (#170)
+    // `total` คือยอดเต็มของเอกสารอ้างอิง ส่วน `amount` คือยอดที่รับชำระในครั้งนี้;
+    // ทุกแถวต้องมี amount และผลรวมต้องตรงกับ payment ด้านล่าง โดยตั้งใจให้ใบแรก
+    // ถูกชำระบางส่วนเพื่อกันไม่ให้ sample เผลอใช้ document total แทน paid amount.
     var applyRows = [
-      sampleRow({ refnum: 'INV-2026-0107', applydate: '17/07/2026', total: 160500 }),
-      sampleRow({ refnum: 'INV-2026-0092', applydate: '02/07/2026', total: 32100 })
+      sampleRow({ refnum: 'INV-2026-0107', applydate: '17/07/2026', total: 160500, amount: 128400 }),
+      sampleRow({ refnum: 'INV-2026-0092', applydate: '02/07/2026', total: 32100, amount: 32100 })
     ];
     var rows = isPayment ? applyRows : itemRows;
-    rows.forEach(function (row, index) {
-      row.no = String(index + 1);
-      row.code = row.item || row.refnum || '';
-      row.name = row.description || row.refnum || '';
-      row.memo = '';
-      row.unit = row.units || '';
-      row.unit_price = row.rateText || '';
-      row.discount = '';
+    // Match the live builder's two schemas: designer bindings use curated
+    // display values, while master templates use numeric item/apply aliases.
+    rows.forEach(function (row) {
+      if (isPayment) row.item = row.refnum;
+      if (SUBLIST_ITEMS[type]) {
+        row.rate = null;
+        row.amount = null;
+        row.rateText = '';
+        row.amountText = '';
+      }
+    });
+    var items = rows.map(function (row, index) {
+      var name = wordbreak.breakThai(row.item);
+      var memo = wordbreak.breakThai(row.description);
+      return {
+        no: index + 1,
+        code: isPayment ? '' : row.item,
+        name: name,
+        memo: memo,
+        quantity: row.quantityText,
+        unit: row.units,
+        unit_price: row.rateText,
+        discount: '',
+        amount: row.amountText,
+        description: wordbreak.breakThai(row.item + (row.description ? '\n' + row.description : ''))
+      };
     });
 
     var cfg = {};
@@ -840,7 +861,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         total: totalsText(grandTotal)
       },
       issuer: { createdBy: 'ผู้จัดทำตัวอย่าง' },
-      items: rows,
+      items: items,
       fields: {
         memo: 'เอกสารตัวอย่างสำหรับออกแบบเทมเพลต — ไม่ใช่ข้อมูลจริง',
         salesrep: 'พนักงานขายตัวอย่าง',
@@ -885,7 +906,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       taxtotalText: totalsText(vat),
       totalText: totalsText(grandTotal),
       bahtText: showTotals || isPayment ? bahtText.bahtText(grandTotal) : '',
-      apply: applyRows,
+      apply: rows,
       payment: isPayment ? customerPaid : 0,
       paymentText: isPayment ? money(customerPaid) : '',
       paymentmethod: 'เงินโอน',
@@ -900,8 +921,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   function sampleRow(values) {
     var row = {};
     ITEM_BINDING_KEYS.forEach(function (key) { row[key] = ''; });
+    ['quantity', 'rate', 'amount', 'total'].forEach(function (key) { row[key] = null; });
     Object.keys(values).forEach(function (key) { row[key] = values[key]; });
-    if (values.quantity != null) row.quantityText = money(values.quantity);
+    if (values.quantity != null) row.quantityText = Number(values.quantity).toLocaleString('en-US', { maximumFractionDigits: 2 });
     if (values.rate != null) row.rateText = money(values.rate);
     if (values.amount != null) row.amountText = money(values.amount);
     if (values.total != null) row.totalText = money(values.total);

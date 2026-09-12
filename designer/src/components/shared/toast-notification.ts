@@ -28,26 +28,31 @@ export class PldToast extends LitElement {
   static styles = css`
     :host {
       position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 9999;
+      bottom: var(--s-5);
+      right: var(--s-5);
+      z-index: var(--z-toast);
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: var(--s-2);
       pointer-events: none;
     }
 
     .toast {
-      padding: 10px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 12.5px;
-      font-family: var(--font-sans);
-      color: #fff;
-      animation: slideUp 0.3s ease;
+      appearance: none;
+      padding: var(--s-3) var(--s-4);
+      border: 1px solid var(--c-border);
+      border-left-width: 4px;
+      border-radius: var(--r-md);
+      font-size: var(--t-sm);
+      font-family: var(--f-sans);
+      color: var(--c-text);
+      background: var(--c-surface);
+      animation: slideUp var(--transition-base);
       pointer-events: auto;
       cursor: pointer;
       max-width: 320px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      box-shadow: var(--sh-md);
+      text-align: left;
     }
 
     @keyframes slideUp {
@@ -55,10 +60,13 @@ export class PldToast extends LitElement {
       to   { opacity: 1; transform: translateY(0); }
     }
 
-    .toast.success { background: var(--color-success); color: #0a0b10; }
-    .toast.error   { background: var(--color-danger); }
-    .toast.warning { background: var(--color-warning); color: #0a0b10; }
-    .toast.info    { background: var(--color-accent); }
+    .toast.success { border-left-color: var(--c-success); }
+    .toast.error   { border-left-color: var(--c-danger); }
+    .toast.warning { border-left-color: var(--c-warning); }
+    .toast.info    { border-left-color: var(--c-info); }
+    .toast:focus-visible { outline: none; box-shadow: var(--focus-ring), var(--sh-md); }
+
+    @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
   `;
 
   connectedCallback() {
@@ -90,12 +98,13 @@ export class PldToast extends LitElement {
     return html`
       ${this.toasts.map(
         (t) => html`
-          <div
+          <button type="button"
             class="toast ${t.type}"
+            role="status"
             @click=${() => this._dismiss(t.id)}
           >
             ${t.message}
-          </div>
+          </button>
         `,
       )}
     `;

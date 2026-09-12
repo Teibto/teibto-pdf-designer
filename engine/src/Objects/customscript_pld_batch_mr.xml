@@ -1,3 +1,4 @@
+<!-- @author Wichit Wongta; @since 2026-09-09 -->
 <mapreducescript scriptid="customscript_pld_batch_mr">
   <name>PLD - Batch Print (Map/Reduce)</name>
   <notifyadmins>F</notifyadmins>
@@ -7,22 +8,33 @@
     <scriptcustomfield scriptid="custscript_pld_mr_job">
       <accesslevel>2</accesslevel>
       <applyformatting>F</applyformatting>
-      <description>File Cabinet id ของ job spec (JSON) ที่หน้าจอพิมพ์เป็นชุดเขียนไว้</description>
+      <description>ID ของ customrecord_pld_batch_job ที่หน้าจอพิมพ์เป็นชุดสร้าง (schema v5)</description>
       <displaytype>NORMAL</displaytype>
       <fieldtype>TEXT</fieldtype>
       <isformula>F</isformula>
       <ismandatory>F</ismandatory>
-      <label>PLD batch job file</label>
+      <label>PLD batch job record</label>
       <storevalue>T</storevalue>
     </scriptcustomfield>
   </scriptcustomfields>
   <scriptdeployments>
     <scriptdeployment scriptid="customdeploy_pld_batch_mr">
       <isdeployed>T</isdeployed>
-      <loglevel>DEBUG</loglevel>
-      <runasrole>ADMINISTRATOR</runasrole>
+      <loglevel>AUDIT</loglevel>
+      <runasrole></runasrole>
       <status>NOTSCHEDULED</status>
       <title>PLD Batch Print MR</title>
+      <buffersize>1</buffersize>
+      <concurrencylimit>1</concurrencylimit>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_batch_mr_2">
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <runasrole></runasrole>
+      <status>NOTSCHEDULED</status>
+      <title>PLD Batch Print MR 2</title>
+      <buffersize>1</buffersize>
+      <concurrencylimit>1</concurrencylimit>
     </scriptdeployment>
   </scriptdeployments>
 </mapreducescript>

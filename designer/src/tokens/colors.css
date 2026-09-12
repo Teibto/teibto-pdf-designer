@@ -1,78 +1,104 @@
-/* ═══════════════════════════════════════
-   COLOR TOKENS
-   PDF Layout Designer Design System
-   ═══════════════════════════════════════ */
+/* Teibto Oracle Redwood semantic colour layer.
+ * Canonical names and light values map directly from Teibto/teibto-ui-workspace.
+ * The --color-* aliases keep existing Lit shadow components on the same contract
+ * while the component migration proceeds without a second palette.
+ *
+ * @author Wichit Wongta
+ * @since 2026-09-11
+ */
 
-:root {
-  /* ─── Surface ─── */
-  --color-bg-deep:     #0a0b10;
-  --color-bg-panel:    #12131a;
-  --color-bg-card:     #1a1b25;
-  --color-bg-hover:    #222430;
-  --color-bg-element:  #282a38;
+:root,
+:root[data-theme="light"] {
+  --c-brand: #36677d;
+  --c-brand-strong: #325c72;
+  --c-brand-on: #ffffff;
+  --c-brand-soft: #e7f2f5;
+  --c-sidebar: #325c72;
+  --c-sidebar-text: #ffffff;
+  --c-sidebar-hover: rgba(255, 255, 255, 0.08);
+  --c-sidebar-active: rgba(255, 255, 255, 0.16);
+  --c-sidebar-border: rgba(255, 255, 255, 0.12);
+  --c-bg: #f5f4f2;
+  --c-surface: #ffffff;
+  --c-surface-2: #fbf9f8;
+  --c-surface-3: #f1efed;
+  --c-text: #161513;
+  --c-text-subtle: rgba(22, 21, 19, 0.72);
+  --c-text-muted: rgba(22, 21, 19, 0.70);
+  --c-border: rgba(22, 21, 19, 0.12);
+  --c-border-control: rgba(22, 21, 19, 0.50);
+  --bw-control: 0.8px;
+  --c-success: #436b1d;
+  --c-success-soft: #f4fceb;
+  --c-warning: #8f520a;
+  --c-warning-soft: #fef9f2;
+  --c-danger: #b3311f;
+  --c-danger-soft: #fff8f7;
+  --c-info: #00688c;
+  --c-info-soft: #f6fafc;
+  --c-link: #00688c;
+  --c-console: #201e1c;
+  --c-console-text: #f1efed;
+  --c-console-ok: #6ea73a;
+  --c-console-warn: #eca452;
+  --c-console-err: #ee7362;
+  --c-scrim: rgba(22, 21, 19, 0.50);
 
-  /* ─── Border ─── */
-  --color-border:        #2a2c3a;
-  --color-border-active: #4f6ef7;
-
-  /* ─── Brand / Accent ─── */
-  --color-accent:      #4f6ef7;
-  --color-accent-glow: rgba(79, 110, 247, 0.25);
-  --color-accent2:     #22d3a7;
-  --color-accent3:     #f59e42;
-  --color-accent4:     #e74c8b;
-
-  /* ─── Text ─── */
-  --color-text:        #e8e9f0;
-  --color-text-dim:    #8a8ca0;
-  --color-text-muted:  #5c5e72;
-
-  /* ─── Semantic ─── */
-  --color-danger:      #ef4444;
-  --color-success:     #22d3a7;
-  --color-warning:     #f59e42;
-  --color-info:        #4f6ef7;
-
-  /* ─── JSON Syntax ─── */
-  --color-json-key:    #4f6ef7;
-  --color-json-string: #22d3a7;
-  --color-json-number: #f59e42;
-  --color-json-bool:   #e74c8b;
-
-  /* ─── Element Roles ─── */
-  --color-role-header:    #4f6ef7;
-  --color-role-content:   #8a8ca0;
-  --color-role-table:     #f59e42;
-  --color-role-summary:   #22d3a7;
-  --color-role-footer:    #e74c8b;
-  --color-role-watermark: #6b7280;
+  /* Compatibility aliases: one palette, two naming eras. */
+  --color-bg-deep: var(--c-bg);
+  --color-bg-panel: var(--c-surface);
+  --color-bg-card: var(--c-surface-2);
+  --color-bg-hover: var(--c-surface-3);
+  --color-bg-element: var(--c-surface-3);
+  --color-border: var(--c-border);
+  --color-border-active: var(--c-brand);
+  --color-accent: var(--c-brand);
+  --color-accent-glow: var(--c-brand-soft);
+  --color-accent2: var(--c-success);
+  --color-accent3: var(--c-warning);
+  --color-accent4: var(--c-danger);
+  --color-text: var(--c-text);
+  --color-text-dim: var(--c-text-subtle);
+  --color-text-muted: var(--c-text-muted);
+  --color-danger: var(--c-danger);
+  --color-success: var(--c-success);
+  --color-warning: var(--c-warning);
+  --color-info: var(--c-info);
+  --color-json-key: var(--c-info);
+  --color-json-string: var(--c-success);
+  --color-json-number: var(--c-warning);
+  --color-json-bool: var(--c-danger);
+  --color-role-header: var(--c-brand);
+  --color-role-content: var(--c-text-subtle);
+  --color-role-table: var(--c-warning);
+  --color-role-summary: var(--c-success);
+  --color-role-footer: var(--c-danger);
+  --color-role-watermark: var(--c-text-muted);
 }
 
-/* ═══════════════════════════════════════
-   LIGHT THEME (#121) — override เฉพาะ surface / border / text
-   accent · semantic · role · json syntax คงเดิม (ใช้ได้ทั้งสองโหมด)
-   เปิดใช้ด้วย data-theme="light" บน <html> (theme service)
-   ═══════════════════════════════════════ */
-:root[data-theme="light"] {
-  /* ─── Surface ─── */
-  --color-bg-deep:     #eef0f5;
-  --color-bg-panel:    #f6f7fa;
-  --color-bg-card:     #ffffff;
-  --color-bg-hover:    #e9ebf2;
-  --color-bg-element:  #dfe2ec;
-
-  /* ─── Border ─── */
-  --color-border:        #d4d7e2;
-  --color-border-active: #4f6ef7;
-
-  /* ─── Accent (darken เล็กน้อยให้ contrast บนพื้นสว่างพอ) ─── */
-  --color-accent-glow: rgba(79, 110, 247, 0.18);
-
-  /* ─── Text ─── */
-  --color-text:        #1a1c28;
-  --color-text-dim:    #5c5e72;
-  --color-text-muted:  #9497a8;
-
-  /* ─── Element Roles (เข้มขึ้นเพื่อ contrast บนพื้นขาว) ─── */
-  --color-role-content: #6b6d80;
+:root[data-theme="dark"] {
+  --c-brand: #8fb9c7;
+  --c-brand-strong: #acd0db;
+  --c-brand-on: #161513;
+  --c-brand-soft: #243b44;
+  --c-sidebar: #284c5b;
+  --c-bg: #161513;
+  --c-surface: #201e1c;
+  --c-surface-2: #292623;
+  --c-surface-3: #332f2b;
+  --c-text: #f5f4f2;
+  --c-text-subtle: rgba(245, 244, 242, 0.76);
+  --c-text-muted: rgba(245, 244, 242, 0.68);
+  --c-border: rgba(245, 244, 242, 0.16);
+  --c-border-control: rgba(245, 244, 242, 0.52);
+  --c-success: #9bc76d;
+  --c-success-soft: #27351f;
+  --c-warning: #f0b366;
+  --c-warning-soft: #3b2c1c;
+  --c-danger: #f28b7c;
+  --c-danger-soft: #422520;
+  --c-info: #72bdd5;
+  --c-info-soft: #20353d;
+  --c-link: #72bdd5;
+  --c-scrim: rgba(0, 0, 0, 0.66);
 }

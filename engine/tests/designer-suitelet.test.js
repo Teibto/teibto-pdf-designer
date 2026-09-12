@@ -24,7 +24,12 @@ const CFG_TYPE = 'customrecord_pld_config';
 const ADMIN = 3;
 const CLERK = 1042;
 
-function buildDesigner({ role = ADMIN, editorRoles = '' } = {}) {
+function buildDesigner({
+  role = ADMIN,
+  editorRoles = '',
+  companyConfig = companyConfigStub,
+  scriptParameters = {},
+} = {}) {
   const store = recordStoreStub({
     [`${CFG_TYPE}:1`]: { custrecord_pld_cfg_editor_roles: editorRoles },
   });
@@ -38,12 +43,15 @@ function buildDesigner({ role = ADMIN, editorRoles = '' } = {}) {
       create: () => { throw new Error('designer Suitelet must not create files'); },
       Type: { XMLDOC: 'XMLDOC' },
     },
-    'N/runtime': runtimeStub({ user: { id: 9, name: 'QA Tester', email: 'qa@example.test', role, subsidiary: 2 } }),
+    'N/runtime': runtimeStub({
+      user: { id: 9, name: 'QA Tester', email: 'qa@example.test', role, subsidiary: 2 },
+      parameters: scriptParameters,
+    }),
     'N/url': { resolveScript: () => '/app/site/hosting/scriptlet.nl?script=1&deploy=1' },
     'N/search': storeSearchStub(store).module,
     'N/record': store.module,
     'N/log': log.module,
-    './pld_lib_company_config': companyConfigStub,
+    './pld_lib_company_config': companyConfig,
     './pld_lib_invoice_data': { isSupportedType: () => false, buildTransactionData: () => ({}) },
   };
   return { suitelet: loadAmd('./pld_sl_designer', stubs), store, log };
@@ -86,4 +94,45 @@ test('หน้าที่เสิร์ฟบอก SPA ว่า role นี
   const ctx = injectedContext(ctxB.response.state.body);
   assert.equal(ctx.canEditTemplates, false, 'ไม่ได้อยู่ใน allowlist = อ่านอย่างเดียว');
   assert.equal(ctx.role, CLERK, 'role ที่ส่งให้ SPA คือ role ที่ engine ใช้ตัดสินจริง');
+});
+
+test('bootstrap font context uses the same render-required company config and ignores legacy parameters', () => {
+  const loads = [];
+  const configured = buildDesigner({
+    companyConfig: {
+      load: (subsidiaryId, options) => {
+        loads.push({ subsidiaryId, forRender: options && options.forRender });
+        return { fontRegular: '/cfg/regular.ttf', fontBold: '/cfg/bold.ttf' };
+      },
+    },
+    scriptParameters: {
+      custscript_pld_font_regular: '/legacy/regular.ttf',
+      custscript_pld_font_bold: '/legacy/bold.ttf',
+    },
+  });
+  const page = contextStub({ parameters: {} });
+
+  configured.suitelet.onRequest(page.context);
+
+  const ctx = injectedContext(page.response.state.body);
+  assert.deepEqual(loads, [{ subsidiaryId: 2, forRender: true }]);
+  assert.equal(ctx.fontRegularUrl, '/cfg/regular.ttf');
+  assert.equal(ctx.fontBoldUrl, '/cfg/bold.ttf');
+});
+
+test('broken render company config leaves bootstrap fonts empty despite legacy parameters', () => {
+  const broken = buildDesigner({
+    companyConfig: { load: () => { throw new Error('missing required Thai font'); } },
+    scriptParameters: {
+      custscript_pld_font_regular: '/legacy/regular.ttf',
+      custscript_pld_font_bold: '/legacy/bold.ttf',
+    },
+  });
+  const page = contextStub({ parameters: {} });
+
+  broken.suitelet.onRequest(page.context);
+
+  const ctx = injectedContext(page.response.state.body);
+  assert.equal(ctx.fontRegularUrl, null, 'SPA must keep the missing-font warning visible');
+  assert.equal(ctx.fontBoldUrl, null, 'legacy deployment params cannot make preview look configured');
 });

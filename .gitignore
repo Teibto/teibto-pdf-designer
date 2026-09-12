@@ -10,6 +10,8 @@ storybook-static/
 playwright-report/
 test-results/
 coverage/
+__pycache__/
+*.pyc
 
 # Secrets — R6 (ห้าม commit เด็ดขาด)
 .env

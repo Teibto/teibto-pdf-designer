@@ -1,6 +1,6 @@
 # Architecture Overview — teibto-pdf-designer
 
-> อัปเดตล่าสุด: 2026-07-16 · สรุปจาก code review ตั้งต้นของ codebase `pdf-layout-designer-v3.2`
+> อัปเดตล่าสุด: 2026-09-11 · ตรวจเทียบกับ architecture ของ branch ปัจจุบัน
 >
 > จะลงมือแก้โค้ด (ลูป PR + verify gate + กับดักเฉพาะ repo): อ่าน [`docs/RUNBOOK.md`](../RUNBOOK.md)
 
@@ -25,10 +25,12 @@
 └──────────────────────────┬──────────────────────────────────┘
                            │ deploy (custom record / File Cabinet)
 ┌─ ชั้น 1: engine/ ────────▼──────────────────────────────────┐
-│ pld_sl_render_pdf.js  Suitelet: load XML → N/render → PDF   │
-│ pld_sl_designer.js    Suitelet: host SPA + template CRUD    │
-│ pld_ue_button.js      UE: ปุ่ม Print/Download/Design PDF     │
-│ customrecord_pld_template: name, xml, rectype, is_default   │
+│ pld_sl_render_pdf.js  Print/live preview + template CRUD     │
+│ pld_sl_designer.js    host SPA + read-only bootstrap         │
+│ pld_sl_batch_print.js queue/status/download/recovery         │
+│ pld_mr_batch_*        durable PART → bounded CHUNK pipeline  │
+│ pld_ue_button.js      UE: ปุ่ม Print/Download/Design PDF      │
+│ custom records        template/config/history/job/artifact   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -40,14 +42,25 @@
 | BFO export | `services/bfo-export.service.ts` | **หัวใจ product** — state → BFO XML + FreeMarker |
 | Data binding | `services/binding.service.ts` | resolve `{{path}}` |
 | Pagination | `services/pagination.service.ts` | row/height-based, role-aware |
-| PDF client | `services/pdf-export.service.ts` + worker | jsPDF preview (แผน: แทนด้วย server-side preview — ดู Issue) |
-| Canvas | `components/canvas/`, `components/elements/` | design surface |
+| Server preview | `services/netsuite-adapter.service.ts`, `components/modals/preview-modal.ts` | ส่ง XML ปัจจุบันไป `preview-live` และแสดง PDF blob ที่ BFO render จริง |
+| Editor | `components/canvas/band-view.ts`, `components/flow/flow-view.ts` | band/flow design surface |
+| UX system | `tokens/`, `components/layout/`, [`REDWOOD-UX.md`](REDWOOD-UX.md) | Oracle Redwood tokens, workspace shell, responsive rails and accessibility contract |
 | Models | `models/element.ts`, `models/template.ts` | 8 element types, 6 roles |
 
-## Known gaps จาก review ตั้งต้น (2026-07-16) — ติดตามใน GitHub Issues
+## สถานะ architecture ปัจจุบันและหลักฐานที่ยังขาด
 
-1. **WYSIWYG gap**: canvas เป็น x/y อิสระ แต่ BFO export ทิ้งพิกัด → ผลพิมพ์จริงไม่ตรง preview ฝั่ง jsPDF (แผนระยะยาว: band-based layout model)
-2. **BFO ที่ generate มีจุด render ไม่ได้**: CSS `@page` margin boxes + `counter()` (ต้องใช้ `<macrolist>` + `<pagenumber/>`), FreeMarker ternary `${a ? b : c}` ใน fallback generator (invalid syntax), `action=preview` ปล่อย `${line.x}` ค้างหลัง strip `<#list>`, ไม่มี null-safety `!""`
-3. **ฟอนต์ไทยฝั่ง server ยังไม่มี**: BFO ไม่มี Tahoma/Sarabun — ต้อง `<link type="font">` จาก File Cabinet
-4. **Generator ซ้ำ 2 ชุด**: client TS + Suitelet fallback (`generateXmlFromDesignerData`) — ต้องลบ fallback
-5. CSS ที่ BFO ไม่รองรับหลุดเข้า palette ได้: `object-fit`, `text-overflow: ellipsis`
+1. **Preview และ Print ใช้ BFO pipeline เดียวกันแล้ว**: designer ส่ง XML ที่ยังไม่บันทึกผ่าน
+   `preview-live`; engine ใช้ `pld_lib_render.js` ร่วมกับ Print และ batch. ยังต้องพิสูจน์
+   save/reload/preview/download/print parity บน NetSuite sandbox ก่อน release.
+2. **มี BFO generator ชุดเดียว**: `bfo-export.service.ts` เป็นผู้สร้าง XML; Suitelet รับ เก็บ
+   และ render เท่านั้น. Engine test ป้องกันไม่ให้มีจุด bind/render pipeline ที่สอง.
+3. **Layout ใช้ band/flow model** และ live preview แสดงผลจาก BFO จริงแทน client PDF engine.
+   ความเท่ากันของ Thai glyph, multipage table, header/footer และ spacing ยังเป็น connected QA gate.
+4. **ฟอนต์ไทย resolve ตอน runtime** ผ่าน File Cabinet URL ใน company config; package มีไฟล์
+   THSarabunPSK แต่ทุก account ยังต้องตั้งค่า/ตรวจสิทธิ์และ render glyph จริง. ห้ามอาศัย host font.
+5. **ข้อจำกัด BFO ถูกกันที่ exporter/lint/validator**: ห้าม C-ternary, binding ที่ไม่ null-safe
+   หรือไม่ escape, `counter(page)`, `object-fit` และ `text-overflow`. การผ่าน local test ไม่แทน
+   FreeMarker/BFO render จริงบน sandbox.
+6. **Designer UX ใช้ Oracle Redwood contract**: light theme เป็นค่าเริ่มต้น, shell แยก top bar /
+   context bar / tool rail / canvas / inspector และจอ `1023px` ลงไปเปลี่ยน rail เป็น drawer.
+   Lit + shadow DOM ยังเป็น runtime เดิมและไม่มีการนำ generator หรือ render path ใหม่เข้ามา.

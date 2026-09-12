@@ -36,8 +36,31 @@ describe('hasThaiFontConfigured', () => {
     expect(hasThaiFontConfigured()).toBe(false);
   });
 
-  it('true once a font URL is resolved server-side', () => {
+  it('false when only the regular font URL is resolved server-side', () => {
     setContext({ userName: 'QA', fontRegularUrl: '/core/media/media.nl?id=101&h=abc' });
+    expect(hasThaiFontConfigured()).toBe(false);
+  });
+
+  it('false when only the bold font URL is resolved server-side', () => {
+    setContext({ userName: 'QA', fontBoldUrl: '/core/media/media.nl?id=102&h=def' });
+    expect(hasThaiFontConfigured()).toBe(false);
+  });
+
+  it('false when either configured value is not a File Cabinet URL', () => {
+    setContext({
+      userName: 'QA',
+      fontRegularUrl: '/core/media/media.nl?id=101&h=abc',
+      fontBoldUrl: 'https://cdn.example.com/THSarabunNew-Bold.ttf',
+    });
+    expect(hasThaiFontConfigured()).toBe(false);
+  });
+
+  it('true once both File Cabinet font URLs are resolved server-side', () => {
+    setContext({
+      userName: 'QA',
+      fontRegularUrl: '/core/media/media.nl?id=101&h=abc',
+      fontBoldUrl: 'https://123456.app.netsuite.com/core/media/media.nl?id=102&h=def',
+    });
     expect(hasThaiFontConfigured()).toBe(true);
   });
 });
@@ -66,7 +89,12 @@ describe('BFO export modal — missing Thai font warning', () => {
   });
 
   it('stays quiet when a font is configured', async () => {
-    setContext({ userName: 'QA', recordType: 'invoice', fontRegularUrl: '/core/media/media.nl?id=101' });
+    setContext({
+      userName: 'QA',
+      recordType: 'invoice',
+      fontRegularUrl: '/core/media/media.nl?id=101',
+      fontBoldUrl: '/core/media/media.nl?id=102',
+    });
     const el = await openModal();
 
     expect(el.shadowRoot?.textContent ?? '').not.toContain('ยังไม่ได้ตั้งฟอนต์ไทย');

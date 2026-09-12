@@ -199,6 +199,74 @@ test('งานพิมพ์ไม่ถูกกระทบ — role เด�
 // 2) ประวัติเวอร์ชัน
 // ═══════════════════════════════════════════════════
 
+test('omitted save metadata preserves stored type/default and complete version metadata', () => {
+  const { suitelet, store, log } = buildSuitelet({ seed: seedTemplate(7) });
+  const { context, response } = contextStub({ parameters: { action: 'save' }, method: 'POST',
+    body: JSON.stringify({ id: '7', xml: NEW_XML }) });
+  suitelet.onRequest(context);
+  assert.equal(JSON.parse(response.state.body).success, true);
+  const saved = store.records[`${TPL_TYPE}:7`];
+  assert.equal(saved.custrecord_pld_tpl_rectype, 'invoice');
+  assert.equal(saved.custrecord_pld_tpl_default, true);
+  assert.equal(saved.custrecord_pld_tpl_name, 'ใบแจ้งหนี้');
+  const latest = versionsOf(store, 7).at(-1);
+  assert.equal(latest.custrecord_pld_ver_rectype, 'invoice');
+  assert.equal(latest.custrecord_pld_ver_data, '{"copies":[]}');
+  assert.ok(log.entries.some((e) => e.details && e.details.isDefault === true));
+});
+
+test('explicit false removes default while omitted type remains invoice', () => {
+  const { suitelet, store } = buildSuitelet({ seed: seedTemplate(7) });
+  const { context, response } = contextStub({ parameters: { action: 'save' }, method: 'POST',
+    body: JSON.stringify({ id: '7', xml: NEW_XML, isDefault: false }) });
+  suitelet.onRequest(context);
+  assert.equal(JSON.parse(response.state.body).success, true);
+  assert.equal(store.records[`${TPL_TYPE}:7`].custrecord_pld_tpl_default, false);
+  assert.equal(store.records[`${TPL_TYPE}:7`].custrecord_pld_tpl_rectype, 'invoice');
+});
+
+test('promoting a template with omitted type clears only defaults of its stored type', () => {
+  const { suitelet, store } = buildSuitelet({ seed: {
+    ...seedTemplate(7, { custrecord_pld_tpl_default: false }), ...seedTemplate(8),
+    ...seedTemplate(9, { custrecord_pld_tpl_rectype: 'purchaseorder' }),
+  } });
+  const { context, response } = contextStub({ parameters: { action: 'save' }, method: 'POST',
+    body: JSON.stringify({ id: '7', xml: NEW_XML, isDefault: true }) });
+  suitelet.onRequest(context);
+  assert.equal(JSON.parse(response.state.body).success, true);
+  assert.equal(store.records[`${TPL_TYPE}:7`].custrecord_pld_tpl_default, true);
+  assert.equal(store.records[`${TPL_TYPE}:8`].custrecord_pld_tpl_default, false);
+  assert.equal(store.records[`${TPL_TYPE}:9`].custrecord_pld_tpl_default, true);
+});
+
+test('invalid default metadata is rejected before template or history mutations', () => {
+  const { suitelet, store } = buildSuitelet({ seed: seedTemplate(7) });
+  const { context, response } = contextStub({ parameters: { action: 'save' }, method: 'POST',
+    body: savePayload({ isDefault: 'false' }) });
+  suitelet.onRequest(context);
+  assert.match(response.state.body, /isDefault must be a boolean/);
+  assert.equal(store.records[`${TPL_TYPE}:7`].custrecord_pld_tpl_xml, OLD_XML);
+  assert.equal(versionsOf(store, 7).length, 0);
+});
+
+test('default cleanup failure returns durable ID and warning with a complete new version', () => {
+  const { suitelet, store, log } = buildSuitelet({ seed: {
+    ...seedTemplate(7, { custrecord_pld_tpl_default: false }), ...seedTemplate(8),
+  } });
+  store.module.submitFields = () => { throw new Error('Permission denied on other template'); };
+  const { context, response } = contextStub({ parameters: { action: 'save' }, method: 'POST',
+    body: JSON.stringify({ id: '7', xml: NEW_XML, isDefault: true }) });
+  suitelet.onRequest(context);
+  const result = JSON.parse(response.state.body);
+  assert.equal(String(result.id), '7');
+  assert.equal(result.success, true, 'content was saved: client must retain its identity');
+  assert.match(result.warning, /บันทึกเนื้อหาแล้ว.*default/);
+  assert.equal(store.records[`${TPL_TYPE}:7`].custrecord_pld_tpl_xml, NEW_XML);
+  assert.equal(versionsOf(store, 7).at(-1).custrecord_pld_ver_xml, NEW_XML);
+  assert.equal(store.records[`${TPL_TYPE}:8`].custrecord_pld_tpl_default, true);
+  assert.ok(log.entries.some((e) => e.title === 'PLD saved template default reconciliation failed'));
+});
+
 test('สร้างเทมเพลตใหม่ได้เวอร์ชัน 1 พร้อมชื่อผู้แก้และ role', () => {
   const { suitelet, store } = buildSuitelet({});
   const { context, response } = contextStub({

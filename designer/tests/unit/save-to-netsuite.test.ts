@@ -13,7 +13,8 @@ vi.mock('idb-keyval', () => {
   const mem = new Map<string, unknown>();
   return {
     get: async (k: string) => mem.get(k),
-    set: async (k: string, v: unknown) => { mem.set(k, v); },
+    update: async (k: string, fn: (v: unknown) => unknown) => { mem.set(k, fn(mem.get(k))); },
+    set: vi.fn(async (k: string, v: unknown) => { mem.set(k, v); }),
     del: async (k: string) => { mem.delete(k); },
     keys: async () => [...mem.keys()],
   };
@@ -21,7 +22,8 @@ vi.mock('idb-keyval', () => {
 
 import { AppStore } from '../../src/state/store';
 import { addElementToNewBand } from '../../src/state/actions';
-import { saveTemplateToNetSuite } from '../../src/services/template.service';
+import { set } from 'idb-keyval';
+import { saveDraft, getDraft, saveTemplate, saveTemplateToNetSuite } from '../../src/services/template.service';
 
 const savedBodies: Record<string, unknown>[] = [];
 const originalWindow = (globalThis as { window?: unknown }).window;
@@ -60,6 +62,126 @@ describe('saveTemplateToNetSuite (#137)', () => {
     return store;
   }
 
+  it('rejects a standalone new save before sending any request and releases the save lock', async () => {
+    mockNs({ userId: 1, recordType: null });
+    const store = storeWithContent();
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow('เลือกประเภทเอกสาร');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(store.state.template.id).toBeNull();
+    await expect(saveTemplateToNetSuite(store, { rectype: 'invoice', isDefault: false })).resolves.toEqual({ id: '42' });
+    expect(savedBodies[0]).toMatchObject({ rectype: 'invoice', isDefault: false });
+  });
+
+  it('requires selection for loaded blank metadata even when the launch context has a type', async () => {
+    const store = storeWithContent();
+    store.dispatch(d => { d.template.id = '44'; d.template.nsMetadata = { rectype: '', isDefault: false }; });
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow('เลือกประเภทเอกสาร');
+    expect(fetch).not.toHaveBeenCalled();
+    await saveTemplateToNetSuite(store, { rectype: 'purchaseorder', isDefault: false });
+    expect(savedBodies[0]).toMatchObject({ id: '44', rectype: 'purchaseorder', isDefault: false });
+  });
+
+  it.each([undefined, { rectype: 'purchaseorder', isDefault: false }])('preserves server fields for an existing ID with metadata %j', async metadata => {
+    mockNs({ userId: 1, recordType: null });
+    const store = storeWithContent();
+    store.dispatch(d => { d.template.id = '42'; d.template.nsMetadata = metadata; });
+    await saveTemplateToNetSuite(store);
+    expect(savedBodies[0]).not.toHaveProperty('rectype');
+    expect(savedBodies[0]).not.toHaveProperty('isDefault');
+    expect(store.state.template.nsMetadata).toEqual(metadata);
+  });
+
+  it('does not mark a newer local edit clean when IndexedDB finishes', async () => {
+    let complete!: () => void;
+    vi.mocked(set).mockImplementationOnce(() => new Promise<void>((resolve) => { complete = resolve; }));
+    const store = storeWithContent();
+    const pending = saveTemplate(store);
+    store.dispatch((d) => { d.template.name = 'Newer draft'; });
+    complete();
+    await pending;
+    expect(store.state.template).toMatchObject({ name: 'Newer draft', isDirty: true });
+  });
+
+  it('prevents concurrent create requests and releases the lock after failure', async () => {
+    let reject!: (reason: Error) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((_, fail) => { reject = fail; }));
+    const store = storeWithContent();
+    const first = saveTemplateToNetSuite(store);
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow('กำลังบันทึก');
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    reject(new Error('failed'));
+    await expect(first).rejects.toThrow('failed');
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ id: '42', success: true })));
+    await expect(saveTemplateToNetSuite(store)).resolves.toEqual({ id: '42' });
+  });
+
+  it.each(['edit', 'switch', 'reset'] as const)('preserves unsaved state after %s during save', async (change) => {
+    const store = storeWithContent();
+    let complete!: (value: Response) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store);
+    if (change === 'edit') store.dispatch((d) => { d.elements[0].x += 1; });
+    if (change === 'switch') store.dispatch((d) => { d.template.id = 'other'; });
+    if (change === 'reset') store.reset();
+    const current = store.state;
+    complete(new Response(JSON.stringify({ id: '42', success: true })));
+    await pending;
+    if (change === 'edit') {
+      expect(store.state.template).toMatchObject({ id: '42', isDirty: true });
+      expect(store.state.elements).toBe(current.elements);
+    } else expect(store.state).toBe(current);
+  });
+
+  it('updates the created record on the next save after editing during creation', async () => {
+    const store = storeWithContent();
+    let complete!: (value: Response) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store);
+    store.dispatch((d) => { d.template.name = 'Edited while creating'; });
+    complete(new Response(JSON.stringify({ id: '42', success: true })));
+    await pending;
+    expect(store.state.template).toMatchObject({ id: '42', isDirty: true });
+    globalThis.fetch = vi.fn(async (_input, init) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({ id: '42', name: 'Edited while creating' });
+      return new Response(JSON.stringify({ id: '42', success: true }));
+    });
+    await saveTemplateToNetSuite(store);
+    expect(store.state.template.isDirty).toBe(false);
+  });
+
+  it('does not acknowledge a reloaded session even with identical template ID and content', async () => {
+    const store = storeWithContent();
+    let complete!: (value: Response) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store);
+    store.beginDocumentSession();
+    const current = store.state;
+    complete(new Response(JSON.stringify({ id: '42', success: true })));
+    await pending;
+    expect(store.state).toBe(current);
+  });
+
+  it('still acknowledges a save when only selection or zoom changes', async () => {
+    const store = storeWithContent();
+    let complete!: (value: Response) => void;
+    globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store);
+    store.dispatch((d) => { d.zoom = 150; d.selectedId = null; });
+    complete(new Response(JSON.stringify({ id: '42', success: true })));
+    await pending;
+    expect(store.state.template).toMatchObject({ id: '42', isDirty: false });
+  });
+
+  it.each([503, 'network', 'timeout'] as const)('never retries ambiguous save failure %s', async (failure) => {
+    globalThis.fetch = vi.fn(async () => {
+      if (failure === 'network') throw new TypeError('connection lost');
+      if (failure === 'timeout') throw new DOMException('aborted', 'AbortError');
+      return new Response('', { status: failure });
+    });
+    await expect(saveTemplateToNetSuite(storeWithContent())).rejects.toThrow();
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('POSTs designer JSON + generated BFO XML to the save action', async () => {
     const store = storeWithContent();
     const result = await saveTemplateToNetSuite(store);
@@ -74,6 +196,57 @@ describe('saveTemplateToNetSuite (#137)', () => {
     const data = JSON.parse(body.data);
     expect(data.bands).toBeTruthy();
     expect(data.elements).toHaveLength(1);
+  });
+
+  it('retains the durable saved ID and propagates server warnings', async () => {
+    const store = storeWithContent();
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: '42', success: true, warning: 'Default conflict' }), { status: 200 }));
+    const result = await saveTemplateToNetSuite(store, { isDefault: true });
+    expect(result).toEqual({ id: '42', warning: 'Default conflict' });
+    expect(store.state.template.id).toBe('42');
+    expect(store.state.template.isDirty).toBe(false);
+  });
+
+  it('quick-save preserves existing server metadata even when launched from another record type', async () => {
+    const store = storeWithContent();
+    store.dispatch((d) => {
+      d.template.id = '42';
+      d.template.nsMetadata = { rectype: 'purchaseorder', isDefault: true };
+    });
+    await saveTemplateToNetSuite(store);
+    expect(savedBodies[0]).not.toHaveProperty('rectype');
+    expect(savedBodies[0]).not.toHaveProperty('isDefault');
+  });
+
+  it('dialog service save clears only its own saved-session draft', async () => {
+    const store = storeWithContent();
+    await saveDraft(store, '2026-09-09T00:00:00Z');
+    await saveTemplateToNetSuite(store, { rectype: 'purchaseorder', isDefault: false });
+    expect(await getDraft()).toBeNull();
+    expect(store.state.template.nsMetadata).toEqual({ rectype: 'purchaseorder', isDefault: false });
+  });
+
+  it('preserves a newer draft while the NetSuite save request is in flight', async () => {
+    const store = storeWithContent();
+    await saveDraft(store, '2026-09-09T00:00:00Z');
+    let complete!: (response: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise<Response>((resolve) => { complete = resolve; }));
+    const pending = saveTemplateToNetSuite(store, { isDefault: false });
+    store.dispatch((d) => { d.template.name = 'Newer work'; d.template.isDirty = true; });
+    await saveDraft(store, '2026-09-09T00:00:01Z');
+    complete(new Response(JSON.stringify({ id: '42', success: true }), { status: 200 }));
+    await pending;
+    expect((await getDraft())?.templateName).toBe('Newer work');
+    expect(store.state.template.isDirty).toBe(true);
+  });
+
+  it('saving one editor preserves another editor recovery draft', async () => {
+    const store = storeWithContent();
+    const other = storeWithContent();
+    other.dispatch((d) => { d.template.name = 'Other editor'; });
+    await saveDraft(other, '2026-09-09T00:00:00Z');
+    await saveTemplateToNetSuite(store);
+    expect((await getDraft())?.templateName).toBe('Other editor');
   });
 
   it('defaults rectype to the record the designer was opened from', async () => {

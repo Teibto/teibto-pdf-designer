@@ -138,11 +138,31 @@ test('footer markup becomes plain text with line breaks and single entity decodi
   assert.equal(encoded.helper.enrich(encoded.data, '123').document.footerText, '&lt;literal&gt;');
 });
 
-test('missing setup, empty selected footer and missing selection context fail loudly', () => {
+test('no matching setup uses the reference generic default footer', () => {
+  for (const setups of [[], [setup('10', '12', 'Other subsidiary')]]) {
+    const h = harness({ setups });
+    const footer = h.helper.enrich(h.data, '123').document.footerText;
+    assert.match(footer, /^เอกสารฉบับนี้ออกโดยผู้มีอํานาจ/);
+    assert.match(footer, /This document is issued and approved electronically by authorized person via internal system\./);
+    assert.match(footer, /Please refer PO no in related documents\.$/);
+    assert.equal(footer.split('\n').length, 3);
+    assert.doesNotMatch(footer, /Other subsidiary/);
+  }
+});
+
+test('selected empty subsidiary or global footer stays empty instead of using default prose', () => {
+  for (const setups of [
+    [setup('11', '2', ''), setup('10', '', 'Global must not replace selected blank')],
+    [setup('11', '', '')]
+  ]) {
+    const h = harness({ setups });
+    assert.equal(h.helper.enrich(h.data, '123').document.footerText, '');
+    assert.equal(h.data.document.footerText, undefined);
+  }
+});
+
+test('missing selection context fails loudly', () => {
   const cases = [
-    [{ setups: [] }, 'PLD_REFERENCE_SETUP_MISSING'],
-    [{ setups: [setup('10', '12', 'Other subsidiary')] }, 'PLD_REFERENCE_SETUP_MISSING'],
-    [{ setups: [setup('11', '2', ''), setup('10', '', 'Global must not replace selected blank')] }, 'PLD_REFERENCE_FOOTER_MISSING'],
     [{ body: { ntype: '' } }, 'PLD_REFERENCE_SETUP_CONTEXT_MISSING'],
     [{ body: { custbody_thl_docprintouttype: '' } }, 'PLD_REFERENCE_SETUP_CONTEXT_MISSING']
   ];

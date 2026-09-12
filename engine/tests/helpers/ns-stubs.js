@@ -222,6 +222,8 @@ function renderStub({ pdfName = 'out.pdf', asString = '<pdf><body>ok</body></pdf
   let fileSeq = 500;
   const pdfFile = () => ({
     name: pdfName,
+    size: 21,
+    getContents: () => Buffer.from('%PDF-1.4 synthetic QA').toString('base64'),
     save() {
       const id = String(fileSeq++);
       calls.savedFiles.push({ id, name: this.name, folder: this.folder });
@@ -276,10 +278,11 @@ function fileSystemStub({ files = {}, folder = 90 } = {}) {
     contents,
     register(id, body) { contents[id] = body; },
     module: {
-      Type: { PLAINTEXT: 'PLAINTEXT', JSON: 'JSON' },
+      Type: { PLAINTEXT: 'PLAINTEXT', JSON: 'JSON', PDF: 'PDF' },
       Encoding: { UTF8: 'UTF-8' },
       create(opts) {
         return Object.assign({}, opts, {
+          getContents() { return opts.contents; },
           save() {
             const id = String(seq++);
             created.push(Object.assign({ id }, opts));

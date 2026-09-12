@@ -7,6 +7,7 @@
  */
 import type { AppStore } from '../state/store';
 import { updateElement } from '../state/actions';
+import { assertSupportedEmbeddedImageData } from './bfo-export.service';
 
 /** Maximum image dimension (width or height) in pixels */
 const MAX_DIMENSION = 1200;
@@ -15,7 +16,37 @@ const MAX_DIMENSION = 1200;
 const MAX_DATA_LENGTH = 2_000_000;
 
 /** Accepted image MIME types */
-const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml'];
+const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
+const MAX_SOURCE_DIMENSION = 8192;
+const MAX_SOURCE_PIXELS = 40_000_000;
+
+const UPLOAD_TYPE_ERROR = 'รองรับเฉพาะไฟล์ PNG หรือ JPEG เท่านั้น '
+  + '(Only PNG and JPEG image uploads are supported.)';
+
+const uploadGenerations = new WeakMap<AppStore, Map<string, number>>();
+
+function nextUploadGeneration(store: AppStore, elementId: string): number {
+  let generations = uploadGenerations.get(store);
+  if (!generations) {
+    generations = new Map();
+    uploadGenerations.set(store, generations);
+  }
+  const generation = (generations.get(elementId) ?? 0) + 1;
+  generations.set(elementId, generation);
+  return generation;
+}
+
+function isCurrentUpload(
+  store: AppStore,
+  elementId: string,
+  generation: number,
+  documentSession: number,
+  originalElement: object,
+): boolean {
+  return uploadGenerations.get(store)?.get(elementId) === generation
+    && store.documentSession === documentSession
+    && store.state.elements.find((element) => element.id === elementId) === originalElement;
+}
 
 /**
  * Read a File as a base64 data URL.
@@ -96,11 +127,29 @@ export async function uploadImageToElement(
   file: File,
 ): Promise<void> {
   if (!ACCEPTED_TYPES.includes(file.type)) {
-    throw new Error(`Unsupported image type: ${file.type}`);
+    throw new Error(`${UPLOAD_TYPE_ERROR} Received: ${file.type || 'unknown'}`);
   }
 
+  const originalElement = store.state.elements.find((element) => element.id === elementId);
+  if (!originalElement || originalElement.type !== 'image') return;
+  const generation = nextUploadGeneration(store, elementId);
+  const documentSession = store.documentSession;
+
   const dataUrl = await readFileAsDataURL(file);
+  if (!isCurrentUpload(store, elementId, generation, documentSession, originalElement)) return;
+  const declaredMimeMatches = file.type === 'image/png'
+    ? dataUrl.startsWith('data:image/png;base64,')
+    : /^data:image\/jpe?g;base64,/i.test(dataUrl);
+  if (!declaredMimeMatches) throw new Error(UPLOAD_TYPE_ERROR);
+  // Permit ordinary camera images to reach the resize step, but reject extreme
+  // dimensions/decompression bombs before assigning the data URL to Image.src.
+  assertSupportedEmbeddedImageData(dataUrl, {
+    maxDimension: MAX_SOURCE_DIMENSION,
+    maxPixels: MAX_SOURCE_PIXELS,
+  });
   const resized = await resizeImage(dataUrl);
+  if (!isCurrentUpload(store, elementId, generation, documentSession, originalElement)) return;
+  assertSupportedEmbeddedImageData(resized);
 
   updateElement(store, elementId, 'imageData' as any, resized);
 }
@@ -163,7 +212,7 @@ export async function handleDropImage(
 export function openImagePicker(store: AppStore, elementId: string): void {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml';
+  input.accept = 'image/png,image/jpeg,image/jpg,.png,.jpg,.jpeg';
   input.style.display = 'none';
 
   input.addEventListener('change', async () => {
@@ -187,6 +236,7 @@ export function openImagePicker(store: AppStore, elementId: string): void {
  * Clear the image from an image element.
  */
 export function clearElementImage(store: AppStore, elementId: string): void {
+  nextUploadGeneration(store, elementId);
   updateElement(store, elementId, 'imageData' as any, undefined);
   updateElement(store, elementId, 'src' as any, undefined);
 }

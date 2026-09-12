@@ -12,8 +12,10 @@
  *   </pld-modal>
  *
  * @author Wichit Wongta
+ * @since 2026-09-09
  */
-import { LitElement, html, css, nothing } from 'lit';
+import { icon } from './icon';
+import { LitElement, html, css, nothing, type PropertyValues } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
 @customElement('pld-modal')
@@ -30,14 +32,26 @@ export class PldModal extends LitElement {
     .backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.65);
-      z-index: 500;
+      background: transparent;
+      border: 0;
+      padding: var(--s-4);
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+      box-sizing: border-box;
       display: flex;
       align-items: center;
       justify-content: center;
-      animation: backdropIn 0.2s ease;
-      backdrop-filter: blur(4px);
+      animation: backdropIn var(--transition-base);
     }
+
+    .backdrop::backdrop {
+      background: var(--c-scrim);
+    }
+
+    .backdrop:not([open]) { display: none; }
 
     @keyframes backdropIn {
       from { opacity: 0; }
@@ -45,15 +59,17 @@ export class PldModal extends LitElement {
     }
 
     .card {
-      background: var(--color-bg-panel, #12131a);
-      border: 1px solid var(--color-border, #2a2c3a);
-      border-radius: var(--radius-lg, 14px);
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      background: var(--c-surface);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--sh-lg);
       display: flex;
       flex-direction: column;
       max-height: 90vh;
-      animation: cardIn 0.25s ease;
+      animation: cardIn var(--transition-base);
       overflow: hidden;
+      max-width: 100%;
     }
 
     @keyframes cardIn {
@@ -72,15 +88,16 @@ export class PldModal extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--color-border, #2a2c3a);
+      min-height: 56px;
+      padding: 0 var(--s-5);
+      border-bottom: 1px solid var(--c-border);
       flex-shrink: 0;
     }
 
     .header h2 {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      font-size: var(--t-lg);
+      font-weight: var(--w-bold);
+      color: var(--c-text);
       margin: 0;
       display: flex;
       align-items: center;
@@ -88,45 +105,51 @@ export class PldModal extends LitElement {
     }
 
     .close-btn {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a);
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
-      font-size: 14px;
+      width: var(--tap-min);
+      height: var(--tap-min);
+      border-radius: var(--r-md);
+      border: 0;
+      background: transparent;
+      color: var(--c-text-subtle);
+      font-size: var(--t-md);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s;
+      transition: background var(--transition-fast), color var(--transition-fast);
     }
 
     .close-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
-      border-color: var(--color-danger, #ef4444);
+      background: var(--c-surface-3);
+      color: var(--c-danger);
     }
 
     /* ─── Body ─── */
     .body {
       flex: 1;
       overflow-y: auto;
-      padding: 20px;
+      padding: var(--s-5);
       min-height: 0;
     }
 
     /* ─── Footer ─── */
     .footer {
-      padding: 14px 20px;
-      border-top: 1px solid var(--color-border, #2a2c3a);
+      padding: var(--s-3) var(--s-5);
+      border-top: 1px solid var(--c-border);
+      background: var(--c-surface-2);
       flex-shrink: 0;
     }
 
     .footer ::slotted(*) {
       display: flex;
-      gap: 8px;
+      gap: var(--s-2);
       justify-content: flex-end;
+    }
+
+    .close-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .backdrop, .card { animation: none; }
     }
   `;
 
@@ -134,12 +157,13 @@ export class PldModal extends LitElement {
     if (!this.open) return nothing;
 
     return html`
-      <div class="backdrop" @click=${this._onBackdropClick}>
+      <dialog class="backdrop" aria-labelledby="modal-heading" aria-modal="true"
+        @cancel=${this._onCancel} @keydown=${this._onKeydown} @click=${this._onBackdropClick}>
         <div class="card ${this.size}" @click=${(e: Event) => e.stopPropagation()}>
           <!-- Header -->
           <div class="header">
-            <h2>${this.modalTitle}</h2>
-            <button class="close-btn" @click=${this._close}>✕</button>
+            <h2 id="modal-heading">${this.modalTitle || this.title || 'กล่องโต้ตอบ'}</h2>
+            <button class="close-btn" type="button" aria-label="ปิด / Close" @click=${this._close}>${icon('close')}</button>
           </div>
 
           <!-- Body -->
@@ -152,7 +176,7 @@ export class PldModal extends LitElement {
             <slot name="footer"></slot>
           </div>
         </div>
-      </div>
+      </dialog>
     `;
   }
 
@@ -164,25 +188,43 @@ export class PldModal extends LitElement {
     this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
   }
 
-  /** Close on Escape key */
-  connectedCallback() {
-    super.connectedCallback();
-    this._keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.open) {
-        this._close();
-      }
-    };
-    window.addEventListener('keydown', this._keyHandler);
+  // Native modal dialogs make the rest of the document inert, including across
+  // shadow roots. The browser also handles slotted focus order and nested dialogs.
+  protected willUpdate(changed: PropertyValues<this>) {
+    if (changed.has('open') && !this.open) this._dialog?.close();
   }
 
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    if (this._keyHandler) {
-      window.removeEventListener('keydown', this._keyHandler);
+  protected updated() {
+    if (this.open && this.isConnected && this._dialog && !this._dialog.open) {
+      this._dialog.showModal();
     }
   }
 
-  private _keyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private get _dialog() {
+    return this.shadowRoot?.querySelector('dialog');
+  }
+
+  private _onCancel(event: Event) {
+    // Preserve the controlled .open API: a caller may refuse close while saving.
+    event.preventDefault();
+    event.stopPropagation();
+    this._close();
+  }
+
+  private _onKeydown(event: KeyboardEvent) {
+    // Modal input must not trigger editor shortcuts on window/document.
+    event.stopPropagation();
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  disconnectedCallback() {
+    this._dialog?.close();
+    super.disconnectedCallback();
+  }
 }
 
 declare global {

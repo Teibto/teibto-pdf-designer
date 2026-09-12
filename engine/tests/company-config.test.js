@@ -26,7 +26,7 @@ const FIELD = {
 };
 
 /** N/file stub: returns a URL that carries a FRESH token per load, and counts loads. */
-function fileStub({ fail = [] } = {}) {
+function fileStub({ fail = [], empty = [] } = {}) {
   const loads = [];
   return {
     loads,
@@ -34,15 +34,16 @@ function fileStub({ fail = [] } = {}) {
       load({ id }) {
         loads.push(String(id));
         if (fail.indexOf(String(id)) !== -1) throw new Error('That record does not exist. id=' + id);
+        if (empty.indexOf(String(id)) !== -1) return { url: '' };
         return { url: `/core/media/media.nl?id=${id}&c=4089685_SB2&h=FRESH${id}&_xt=.ttf` };
       },
     },
   };
 }
 
-function buildLoader({ rows, fail } = {}) {
+function buildLoader({ rows, fail, empty } = {}) {
   const search = searchStub(rows || []);
-  const file = fileStub({ fail });
+  const file = fileStub({ fail, empty });
   const log = logStub();
   const lib = loadAmd('./pld_lib_company_config', {
     'N/search': search.module,
@@ -87,7 +88,7 @@ test('a non-File-Cabinet URL is used exactly as configured', () => {
   assert.deepEqual(file.loads, [], 'nothing to resolve → no governance spent');
 });
 
-test('an unresolvable file id keeps the configured value and says why in the log', () => {
+test('setup inspection retains an unresolvable font value for repair and logs why', () => {
   const { lib, log } = buildLoader({
     rows: rowWith({ [FIELD.fontRegular]: '9999' }),
     fail: ['9999'],
@@ -95,7 +96,7 @@ test('an unresolvable file id keeps the configured value and says why in the log
 
   const cfg = lib.load();
 
-  assert.equal(cfg.fontRegular, '9999', 'never turn a font problem into a failed print');
+  assert.equal(cfg.fontRegular, '9999', 'setup must be able to inspect and repair the value');
   const audits = log.entries.filter((e) => e.level === 'audit');
   assert.equal(audits.length, 1);
   assert.match(audits[0].title, /file url unresolved/);
@@ -103,7 +104,7 @@ test('an unresolvable file id keeps the configured value and says why in the log
   assert.match(audits[0].details, /9999/);
 });
 
-test('empty font/logo fields stay empty (null-safe bindings render on)', () => {
+test('setup inspection permits empty font/logo fields', () => {
   const { lib, file } = buildLoader({ rows: rowWith({}) });
 
   const cfg = lib.load();
@@ -133,29 +134,90 @@ test('non-URL fields are untouched by the resolver', () => {
 });
 
 // ─── subsidiary scoping (#144) — no coverage existed for this either ──────────
-test('subsidiary config wins, then global, then the first active row', () => {
+test('subsidiary config wins, then explicit global; another subsidiary never supplies a transaction', () => {
   const rows = [
     { id: '1', values: { [FIELD.name]: 'FIRST', [FIELD.subsidiary]: '7' } },
     { id: '2', values: { [FIELD.name]: 'GLOBAL', [FIELD.subsidiary]: '' } },
     { id: '3', values: { [FIELD.name]: 'SUB20', [FIELD.subsidiary]: '20' } },
   ];
+  rows.forEach(row => Object.assign(row.values, { [FIELD.fontRegular]: '4021', [FIELD.fontBold]: '4022' }));
 
   assert.equal(buildLoader({ rows }).lib.load('20').name, 'SUB20');
   assert.equal(buildLoader({ rows }).lib.load('99').name, 'GLOBAL', 'unknown subsidiary → global');
   assert.equal(buildLoader({ rows }).lib.load().name, 'GLOBAL', 'no record context → global');
-  assert.equal(
-    buildLoader({ rows: [rows[0]] }).lib.load('99').name,
-    'FIRST',
-    'no global row → first active (legacy single-subsidiary accounts)',
-  );
+  assert.throws(() => buildLoader({ rows: [rows[0]] }).lib.load('99'), { name: 'PLD_COMPANY_CONFIG_MISSING' });
+  assert.equal(buildLoader({ rows: [rows[0]] }).lib.load().name, 'FIRST', 'setup preserves legacy selection without transaction context');
 });
 
 test('no active config logs the reason and returns empty values', () => {
   const { lib, log } = buildLoader({ rows: [] });
 
-  const cfg = lib.load('20');
+  const cfg = lib.load();
 
   assert.equal(cfg.name, '');
   assert.equal(cfg.fontRegular, '');
   assert.match(log.entries[0].title, /company config missing/);
+});
+
+test('render requires active company config both with and without subsidiary context', () => {
+  const { lib } = buildLoader();
+  assert.throws(() => lib.load('20'), { name: 'PLD_COMPANY_CONFIG_MISSING' });
+  assert.throws(() => lib.load(undefined, { forRender: true }), { name: 'PLD_COMPANY_CONFIG_MISSING' });
+});
+
+test('render rejects each missing required Thai font before producing a PDF', () => {
+  for (const missing of ['fontRegular', 'fontBold']) {
+    const values = { [FIELD.fontRegular]: '4021', [FIELD.fontBold]: '4022', [FIELD[missing]]: ' ' };
+    const { lib } = buildLoader({ rows: rowWith(values) });
+    assert.throws(() => lib.load(undefined, { forRender: true }), error => error.name === 'PLD_FONT_MISSING' && error.message.includes(missing));
+    assert.throws(() => lib.load('20'), { name: 'PLD_FONT_MISSING' });
+  }
+});
+
+test('render rejects unresolved font IDs and stale URLs instead of returning their configured values', () => {
+  for (const alias of ['fontRegular', 'fontBold']) {
+    for (const value of ['9999', '/core/media/media.nl?id=9999&h=STALE']) {
+      const { lib } = buildLoader({
+        rows: rowWith({ [FIELD.fontRegular]: '4021', [FIELD.fontBold]: '4022', [FIELD[alias]]: value }),
+        fail: ['9999'],
+      });
+      assert.throws(() => lib.load(undefined, { forRender: true }), error => error.name === 'PLD_FONT_UNRESOLVED' && error.message.includes(alias));
+    }
+  }
+});
+
+test('render requires fonts backed by File Cabinet and does not treat arbitrary URL IDs as files', () => {
+  const { lib, file } = buildLoader({ rows: rowWith({
+    [FIELD.fontRegular]: 'https://fonts.example.test/font.ttf?id=4021', [FIELD.fontBold]: '4022',
+  }) });
+  assert.throws(() => lib.load(undefined, { forRender: true }), { name: 'PLD_FONT_UNRESOLVED' });
+  assert.deepEqual(file.loads, []);
+});
+
+test('a loaded font without a URL fails visibly and is not cached as a usable font', () => {
+  const { lib, file } = buildLoader({
+    rows: rowWith({ [FIELD.fontRegular]: '4021', [FIELD.fontBold]: '4022' }), empty: ['4021'],
+  });
+  assert.throws(() => lib.load(undefined, { forRender: true }), { name: 'PLD_FONT_UNRESOLVED' });
+  assert.throws(() => lib.load(undefined, { forRender: true }), { name: 'PLD_FONT_UNRESOLVED' });
+  assert.deepEqual(file.loads, ['4021', '4021']);
+});
+
+test('optional broken logo is omitted while correctly configured fonts render', () => {
+  const { lib, log } = buildLoader({
+    rows: rowWith({ [FIELD.fontRegular]: '4021', [FIELD.fontBold]: '4022', [FIELD.logo]: '9999' }),
+    fail: ['9999'],
+  });
+  const cfg = lib.load(undefined, { forRender: true });
+  assert.equal(cfg.logo, '');
+  assert.match(cfg.fontRegular, /FRESH4021/);
+  assert.match(log.entries[0].details, /logo/);
+});
+
+test('an exact subsidiary with missing fonts cannot borrow healthy global company identity', () => {
+  const { lib } = buildLoader({ rows: [
+    { id: '1', values: { [FIELD.name]: 'GLOBAL', [FIELD.fontRegular]: '4021', [FIELD.fontBold]: '4022' } },
+    { id: '2', values: { [FIELD.name]: 'SUB20', [FIELD.subsidiary]: '20' } },
+  ] });
+  assert.throws(() => lib.load('20'), { name: 'PLD_FONT_MISSING' });
 });

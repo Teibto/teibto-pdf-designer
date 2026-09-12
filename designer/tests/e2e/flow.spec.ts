@@ -5,7 +5,7 @@
  * @since 2026-07-23
  */
 import { test, expect } from '@playwright/test';
-import { gotoApp, loadSample, headerBtn, toast } from './_helpers';
+import { gotoApp, loadSample, headerBtn, openHeaderMore, toast } from './_helpers';
 
 const flow = (p: import('@playwright/test').Page) => p.locator('pld-flow-view');
 
@@ -33,6 +33,7 @@ test.describe('Flow map', () => {
     // Load the sample from within flow view (chips are hidden here, so we can't
     // use the chip-waiting loadSample helper). The state-changed event fires
     // while flow-view is mounted, so its listener populates the map.
+    await openHeaderMore(page);
     await headerBtn(page, 'ตัวอย่าง').click();
     await expect(toast(page, 'Loaded sample')).toBeVisible();
     await expect(flow(page).locator('.column-header', { hasText: 'JSON Data Keys' })).toBeVisible();

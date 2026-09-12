@@ -13,6 +13,7 @@ vi.mock('idb-keyval', () => {
   const mem = new Map<string, unknown>();
   return {
     get: async (k: string) => mem.get(k),
+    update: async (k: string, fn: (v: unknown) => unknown) => { mem.set(k, fn(mem.get(k))); },
     set: async (k: string, v: unknown) => { mem.set(k, v); },
     del: async (k: string) => { mem.delete(k); },
     keys: async () => [...mem.keys()],
@@ -21,7 +22,7 @@ vi.mock('idb-keyval', () => {
 
 import { AppStore } from '../../src/state/store';
 import { addElement, regenerateBands, setColumnWidth } from '../../src/state/actions';
-import { saveDraft, getDraft, clearDraft, DRAFT_KEY } from '../../src/services/template.service';
+import { saveDraft, getDraft, clearDraft, claimDraft, dismissDraft, saveTemplate, DRAFT_KEY } from '../../src/services/template.service';
 
 const NOW = '2026-07-24T09:00:00.000Z';
 
@@ -106,5 +107,32 @@ describe('clearDraft (#140)', () => {
 describe('DRAFT_KEY (#140)', () => {
   it('is the fixed key documented in the issue', () => {
     expect(DRAFT_KEY).toBe('pld-draft-current');
+  });
+});
+
+
+describe('recovery entry ownership', () => {
+  it('immediate save after restoring clears the claimed draft without waiting for autosave', async () => {
+    const previous = new AppStore();
+    addElement(previous, 'text', 0, 0);
+    await saveDraft(previous, NOW);
+    const restored = (await getDraft())!;
+    const current = new AppStore();
+    current.dispatch((d) => { d.elements = restored.elements; d.template.isDirty = true; });
+    await claimDraft(current, restored);
+    await saveTemplate(current);
+    expect(await getDraft()).toBeNull();
+  });
+
+  it('restoring or discarding an older banner preserves a different editor newer draft', async () => {
+    const previous = new AppStore();
+    await saveDraft(previous, NOW);
+    const reviewed = (await getDraft())!;
+    const other = new AppStore();
+    other.dispatch((d) => { d.template.name = 'Newer recovery'; });
+    await saveDraft(other, NOW);
+    await claimDraft(previous, reviewed);
+    await dismissDraft(reviewed);
+    expect((await getDraft())?.templateName).toBe('Newer recovery');
   });
 });

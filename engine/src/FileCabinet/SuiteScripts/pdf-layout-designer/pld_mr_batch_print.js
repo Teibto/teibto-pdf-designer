@@ -1,266 +1,316 @@
-/**
+/** Render stage: immutable per-document artifacts, followed by a durable chunk plan.
  * @NApiVersion 2.1
  * @NScriptType MapReduceScript
  * @NModuleScope SameAccount
- *
- * PDF Layout Designer — พิมพ์เป็นชุดขนาดใหญ่ (#181)
- *
- * หน้าจอ `pld_sl_batch_print` พิมพ์สดได้ราวสิบใบต่อครั้ง (วัดจริงบน SB2: ใบแจ้งหนี้
- * 2 สำเนา ≈ 160 usage units/ใบ จาก 1,000 units ของ Suitelet) เกินกว่านั้นมันจะส่ง
- * งานมาที่สคริปต์ตัวนี้ ซึ่งได้ **1,000 units ต่อหนึ่ง map invocation** — หนึ่ง
- * เอกสารต่อหนึ่ง key จึงไม่มีวันเต็มโควตา ไม่ว่าชุดจะใหญ่แค่ไหน
- *
- * ทุกใบ render ผ่าน `pld_lib_render` ตัวเดียวกับปุ่ม Print และหน้าจอพิมพ์เป็นชุด
- * (CLAUDE.md — BFO เป็น render engine เดียว) ผลลัพธ์คือไฟล์ PDF ก้อนเดียวใน File
- * Cabinet แล้วอีเมลลิงก์ให้คนสั่งพิมพ์
- *
- * ทำไมต้องพักเป็นไฟล์ระหว่างทาง: การรวมเอกสารเป็น `<pdfset>` ต้องใช้ **XML ที่
- * FreeMarker resolve แล้ว** ของทุกใบพร้อมกัน ซึ่งใหญ่เกินกว่าจะส่งผ่าน key/value
- * ของ Map/Reduce · map จึงเขียน XML ของใบตัวเองเป็นไฟล์ชั่วคราวแล้วส่งต่อแค่
- * file id · summarize โหลดกลับมาต่อกันครั้งเดียว แล้วลบไฟล์ชั่วคราวทิ้ง
- *
- * job spec (ไฟล์ JSON ที่ Suitelet เขียนไว้) ส่งมาทาง script parameter
- * `custscript_pld_mr_job` = file id — parameter เก็บ id ตัวเดียว ไม่ใช่รายการ
- * เอกสารทั้งชุด (ชุด 300 ใบยาวเกินกว่าจะยัดลง parameter)
- *
  * @author Wichit Wongta
- * @since 2026-07-25
+ * @since 2026-09-09
  */
 define([
-  'N/file',
-  'N/render',
-  'N/runtime',
-  'N/log',
-  'N/email',
-  'N/url',
-  './pld_lib_render'
-], function (file, render, runtime, log, email, url, pldRender) {
-
-  var JOB_PARAM = 'custscript_pld_mr_job';
-
-  // ═══════════════════════════════════════════════════
-  // getInputData — หนึ่งเอกสาร = หนึ่ง key
-  // ═══════════════════════════════════════════════════
-
+  "N/file",
+  "N/runtime",
+  "N/task",
+  "N/log",
+  "./pld_lib_render",
+  "./pld_lib_batch_jobs",
+  "./pld_lib_batch_integrity",
+  "./pld_lib_batch_artifacts",
+  "./pld_lib_batch_pipeline",
+], function (
+  file,
+  runtime,
+  task,
+  log,
+  pldRender,
+  jobs,
+  integrity,
+  artifacts,
+  pipeline,
+) {
+  var PARAM = "custscript_pld_mr_job";
   function getInputData() {
-    var job = loadJob();
-    log.audit({
-      title: 'PLD batch job started',
-      details: { jobId: job.jobId, rectype: job.rectype, tplid: job.tplid, count: job.ids.length }
-    });
-
-    return job.ids.map(function (id, i) {
+    var job = pipeline.loadJob(PARAM);
+    if (job.durable.plan) return [];
+    for (var claimAttempt = 0; claimAttempt < 2; claimAttempt++) {
+      try {
+        jobs.update(job.jobId, { status: "RUNNING", phase: "RENDERING" }, {
+          status: job.durable.status, phase: job.durable.phase, task: job.durable.task, plan: "", outputs: "",
+        });
+        break;
+      } catch (claimError) {
+        // A restart can overlap planning/finalization. Never reopen a published job
+        // or replace the merge phase using a snapshot read before that transition.
+        var current = jobs.load(job.jobId);
+        if (current.plan || ["COMPLETE", "PARTIAL", "FAILED"].indexOf(current.status) >= 0) return [];
+        // submit() may start this worker before its caller persists the returned
+        // task ID. Retry that exact metadata-only acknowledgement once.
+        if (claimAttempt === 0 && !job.durable.task && current.task && Object.keys(current).every(function (key) {
+          return key === "task" || current[key] === job.durable[key];
+        })) {
+          job.durable = current;
+          continue;
+        }
+        var acknowledged = !job.durable.task && current.task && Object.keys(current).every(function (key) {
+          return ["status", "phase", "task"].indexOf(key) >= 0 || current[key] === job.durable[key];
+        });
+        if (current.status !== "RUNNING" || current.phase !== "RENDERING" || (current.task !== job.durable.task && !acknowledged) ||
+          current.snapshotdigest !== job.snapshotDigest || current.outputs) throw claimError;
+        // Another input invocation for this same task already claimed rendering.
+        // Returning the same immutable keys is safe; each map verifies its ledger winner.
+        break;
+      }
+    }
+    return job.ids.map(function (id, seq) {
       return {
-        seq: i,
+        seq: seq,
         recid: String(id),
         jobId: job.jobId,
         rectype: job.rectype,
-        tplid: job.tplid || '',
-        folder: job.folder
+        folder: job.folder,
       };
     });
   }
-
-  /**
-   * job spec จาก File Cabinet — พังต้องดังตั้งแต่ getInputData (R4)
-   * ไม่ใช่ปล่อยให้ map วิ่งเปล่าแล้วผู้ใช้ได้อีเมลว่า "สำเร็จ 0 ใบ"
-   */
-  function loadJob() {
-    var fileId = runtime.getCurrentScript().getParameter({ name: JOB_PARAM });
-    if (!fileId) {
-      throw new Error('ไม่ได้ระบุ job file (script parameter ' + JOB_PARAM + ') — ' +
-        'สั่งงานนี้จากหน้าจอพิมพ์เป็นชุดเท่านั้น');
-    }
-    var job = JSON.parse(file.load({ id: fileId }).getContents());
-    if (!job.rectype || !Array.isArray(job.ids) || job.ids.length === 0) {
-      throw new Error('job file ' + fileId + ' ไม่มี rectype หรือรายการเอกสาร');
-    }
-    job.jobFileId = fileId;
-    return job;
-  }
-
-  // ═══════════════════════════════════════════════════
-  // map — render หนึ่งใบ แล้วพักไว้เป็นไฟล์
-  // ═══════════════════════════════════════════════════
-
   function map(context) {
     var entry = JSON.parse(context.value);
-
-    var tpl = pldRender.resolveTemplate(entry.tplid, entry.rectype);
-    var copies = pldRender.resolveCopies(tpl.copies, entry.rectype);
-    var out = pldRender.renderDocumentXml(tpl.xml, entry.rectype, entry.recid, copies, null);
-
-    // ตรวจว่า XML ที่ resolve แล้วอ่านได้จริงตั้งแต่ตอนนี้ ไม่ใช่ไปพังตอนรวมไฟล์
-    // ซึ่งจะทำให้ทั้งชุดล่มโดยไม่รู้ว่าใบไหนเป็นต้นเหตุ (อาการเดียวกับ #184)
-    var contents = out.docs.join('\n');
-    if (contents.indexOf('<pdf>') === -1) {
-      throw new Error('เอกสาร ' + entry.recid + ' ไม่ได้ resolve เป็น <pdf>');
-    }
-
-    var partId = file.create({
-      name: partName(entry.jobId, entry.seq),
-      fileType: file.Type.PLAINTEXT,
-      contents: contents,
-      encoding: file.Encoding.UTF8,   // ข้อความไทยใน XML ต้องไม่เพี้ยนตอนอ่านกลับ
-      folder: entry.folder,
-      isOnline: false
-    }).save();
-
-    context.write({
-      key: sortKey(entry.seq),
-      value: JSON.stringify({ partId: partId, recid: entry.recid, tranId: out.tranId || entry.recid })
-    });
-  }
-
-  /** key ต้องเรียงแบบสตริงได้ — เอกสารในไฟล์รวมต้องอยู่ตามลำดับที่ผู้ใช้เลือก */
-  function sortKey(seq) {
-    var s = '00000' + seq;
-    return s.slice(-6);
-  }
-
-  function partName(jobId, seq) {
-    return 'pld_part_' + jobId + '_' + sortKey(seq) + '.txt';
-  }
-
-  // ═══════════════════════════════════════════════════
-  // summarize — รวมเป็นไฟล์เดียว เก็บกวาด แล้วแจ้งผล
-  // ═══════════════════════════════════════════════════
-
-  function summarize(summary) {
-    var job = loadJob();
-
-    var parts = [];
-    summary.output.iterator().each(function (key, value) {
-      var v = JSON.parse(value);
-      v.key = key;
-      parts.push(v);
-      return true;
-    });
-    parts.sort(function (a, b) { return a.key < b.key ? -1 : (a.key > b.key ? 1 : 0); });
-
-    var failures = collectErrors(summary);
-
-    var result = { pdfId: '', pdfUrl: '', printed: parts.length, failed: failures.length };
-    if (parts.length > 0) {
-      result = mergeParts(job, parts, failures.length);
-    }
-
-    cleanUp(parts, job);
-    notify(job, result, failures);
-
-    log.audit({
-      title: 'PLD batch job finished',
-      details: {
-        jobId: job.jobId, rectype: job.rectype, requested: job.ids.length,
-        printed: result.printed, failed: failures.length, pdfId: result.pdfId,
-        seconds: summary.seconds, usage: summary.usage
-      }
-    });
-  }
-
-  /** ใบที่ map พังต้องถูกรายงานทีละใบ ไม่ใช่หายไปเงียบ ๆ จากชุด (R4) */
-  function collectErrors(summary) {
-    var failures = [];
-    summary.mapSummary.errors.iterator().each(function (key, error) {
-      var message = error;
-      try { message = JSON.parse(error).message || error; } catch (e) { /* ข้อความดิบ */ }
-      failures.push({ key: key, message: String(message) });
-      return true;
-    });
-    return failures;
-  }
-
-  /** ต่อ XML ของทุกใบเป็น <pdfset> เดียว แล้วเก็บ PDF ลง File Cabinet */
-  function mergeParts(job, parts, failedCount) {
-    var docs = [];
-    parts.forEach(function (p) {
-      docs.push(file.load({ id: p.partId }).getContents());
-    });
-
-    var pdfFile = pldRender.combinePdfDocs(docs);
-    pdfFile.name = 'batch_' + job.rectype + '_' + parts.length + '_' + job.jobId + '.pdf';
-    pdfFile.folder = job.folder;
-    pdfFile.isOnline = false;
-    var pdfId = pdfFile.save();
-
-    return {
-      pdfId: pdfId,
-      pdfUrl: absoluteUrl(file.load({ id: pdfId }).url),
-      printed: parts.length,
-      failed: failedCount
-    };
-  }
-
-  /** ไฟล์ชั่วคราวต้องไม่ค้างใน File Cabinet ของลูกค้า */
-  function cleanUp(parts, job) {
-    parts.forEach(function (p) {
-      try { file.delete({ id: p.partId }); } catch (e) {
-        log.error({ title: 'PLD batch cleanup', details: { partId: p.partId, message: e.message } });
-      }
-    });
-    try { file.delete({ id: job.jobFileId }); } catch (e) {
-      log.error({ title: 'PLD batch cleanup (job spec)', details: { id: job.jobFileId, message: e.message } });
-    }
-  }
-
-  /** URL ของ File Cabinet เป็น path — เติม domain ให้กดจากอีเมลได้ */
-  function absoluteUrl(fileUrl) {
-    try {
-      return 'https://' + url.resolveDomain({ hostType: url.HostType.APPLICATION }) + fileUrl;
-    } catch (e) {
-      return fileUrl;
-    }
-  }
-
-  /**
-   * แจ้งผลกลับไปหาคนที่กดสั่งพิมพ์ — เป็นการแจ้งภายในถึงตัวผู้ใช้เอง
-   * (ไม่ใช่การส่งเอกสารออกไปหาลูกค้า ซึ่งเป็นงานคนละใบของ #181)
-   */
-  function notify(job, result, failures) {
-    var requester = job.requester && job.requester.id;
-    if (!requester) {
-      log.audit({ title: 'PLD batch: no requester to notify', details: { jobId: job.jobId } });
+    var job = pipeline.loadJob(PARAM);
+    if (job.durable.plan) throw new Error("Batch render plan already sealed");
+    if (
+      !Number.isInteger(entry.seq) ||
+      entry.seq < 0 ||
+      entry.seq >= job.ids.length ||
+      String(entry.recid) !== String(job.ids[entry.seq])
+    )
+      throw new Error("Invalid batch map entry");
+    var ctx = pipeline.artifactContext(job);
+    var part = artifacts.get(ctx, "PART", entry.seq) || artifacts.recover(ctx, "PART", entry.seq);
+    if (part) {
+      pipeline.verifyPart(job, part);
+      context.write({
+        key: pipeline.sortKey(entry.seq),
+        value: JSON.stringify(part),
+      });
       return;
     }
-
-    var lines = [
-      'พิมพ์เอกสารเป็นชุดเสร็จแล้ว',
-      '',
-      'ประเภทเอกสาร: ' + job.rectype,
-      'เลือกไว้: ' + job.ids.length + ' ใบ',
-      'สร้างสำเร็จ: ' + result.printed + ' ใบ',
-      'ล้มเหลว: ' + failures.length + ' ใบ'
-    ];
-    if (result.pdfUrl) {
-      lines.push('', 'ไฟล์รวม: ' + result.pdfUrl);
+    var rendered = pldRender.renderDocumentXml(
+      job.templateSnapshot.xml,
+      job.rectype,
+      String(entry.recid),
+      job.templateSnapshot.copies,
+      null,
+    );
+    var contents = rendered.docs.join("\n");
+    if (contents.indexOf("<pdf>") < 0)
+      throw new Error("Document did not resolve to <pdf>");
+    var bytes = pipeline.utf8Bytes(contents);
+    pipeline.assertXmlBudget(bytes + pipeline.framingBytes);
+    var hash = integrity.digest(contents);
+    var prepared = artifacts.prepare(ctx, "PART", entry.seq, {
+      jobId: job.jobId,
+      snapshotDigest: job.snapshotDigest,
+      folder: String(job.folder),
+      seq: entry.seq,
+      recid: String(entry.recid),
+      tranId: String(rendered.tranId || entry.recid),
+      name: artifacts.name(ctx, "PART", entry.seq, hash),
+      bytes: bytes,
+      contentsHash: hash,
+    });
+    if (prepared.committed) {
+      pipeline.verifyPart(job, prepared.committed);
+      context.write({ key: pipeline.sortKey(entry.seq), value: JSON.stringify(prepared.committed) });
+      return;
     }
-    if (failures.length > 0) {
-      lines.push('', 'ใบที่สร้างไม่สำเร็จ (ลำดับในชุด — สาเหตุ):');
-      failures.slice(0, 20).forEach(function (f) {
-        lines.push('  ' + f.key + ' — ' + f.message);
-      });
-      if (failures.length > 20) lines.push('  … อีก ' + (failures.length - 20) + ' ใบ (ดูใน Script Execution Log)');
-    }
-
+    jobs.assertFolder(job.durable);
+    var partId = String(
+      file
+        .create({
+          name: prepared.intent.name,
+          fileType: file.Type.PLAINTEXT,
+          contents: contents,
+          encoding: file.Encoding.UTF8,
+          folder: job.folder,
+          isOnline: false,
+        })
+        .save(),
+    );
+    part = {
+      partId: partId,
+      recid: String(entry.recid),
+      tranId: String(rendered.tranId || entry.recid),
+      key: pipeline.sortKey(entry.seq),
+    };
+    part.proof = integrity.seal("part", Object.assign({}, prepared.intent, { partId: partId }));
+    pipeline.verifyPart(job, part);
+    // The unique durable ledger is authoritative even if context.write is lost.
+    part = artifacts.commit(ctx, "PART", entry.seq, part, prepared.token);
+    pipeline.verifyPart(job, part);
+    context.write({
+      key: pipeline.sortKey(entry.seq),
+      value: JSON.stringify(part),
+    });
+  }
+  function summarize(summary) {
+    var durable = jobs.load(
+      runtime.getCurrentScript().getParameter({ name: PARAM }),
+    );
+    if (["COMPLETE", "PARTIAL", "FAILED"].indexOf(durable.status) >= 0) return;
+    var job;
     try {
-      email.send({
-        author: requester,
-        recipients: requester,
-        subject: 'พิมพ์เอกสารเป็นชุด — ' + result.printed + '/' + job.ids.length + ' ใบ',
-        body: lines.join('\n')
-      });
-    } catch (e) {
-      // อีเมลส่งไม่ออกต้องไม่ทำให้ผลลัพธ์หาย — ไฟล์อยู่ใน File Cabinet แล้ว
+      job = pipeline.loadJob(PARAM);
+      // Never resubmit an already planned job: prior submission may have been accepted.
+      if (job.durable.plan) {
+        pipeline.readPlan(job);
+        if (job.durable.phase !== "MERGE_PENDING") return;
+      } else {
+        if (summary.inputSummary && summary.inputSummary.error)
+          throw new Error("Batch render input failed");
+        var ctx = pipeline.artifactContext(job);
+        var parts = artifacts.list(ctx, "PART");
+        var bySeq = {};
+        parts.forEach(function (part) {
+          var proof = integrity.open("part", part.proof);
+          var seq = proof.seq;
+          if (
+            !Number.isInteger(seq) ||
+            seq < 0 ||
+            seq >= job.ids.length ||
+            bySeq[seq] ||
+            part.key !== pipeline.sortKey(seq)
+          )
+            throw new Error("Invalid batch artifact sequence");
+          bySeq[seq] = { part: part, bytes: proof.bytes };
+        });
+        var errors = {};
+        if (summary.mapSummary && summary.mapSummary.errors)
+          summary.mapSummary.errors.iterator().each(function (key) {
+            var seq = Number(key);
+            if (Number.isInteger(seq) && seq >= 0 && seq < job.ids.length)
+              errors[seq] = true;
+            return true;
+          });
+        var plan = {
+          jobId: job.jobId,
+          snapshotDigest: job.snapshotDigest,
+          chunks: [],
+          requested: job.ids.length,
+          failed: [],
+        };
+        var chunk = null;
+        var bytes = 0;
+        job.ids.forEach(function (id, seq) {
+          var item = bySeq[seq];
+          if (!item) {
+            plan.failed.push({
+              seq: seq,
+              recid: String(id),
+              code: errors[seq] ? "RENDER_FAILED" : "NO_COMMITTED_PART",
+            });
+            return;
+          }
+          pipeline.assertXmlBudget(item.bytes + pipeline.framingBytes);
+          if (
+            !chunk ||
+            chunk.sequences.length >= 25 ||
+            bytes + 1 + item.bytes > 8 * 1024 * 1024
+          ) {
+            chunk = { ordinal: plan.chunks.length, sequences: [] };
+            plan.chunks.push(chunk);
+            bytes = pipeline.framingBytes;
+          }
+          bytes += item.bytes + (chunk.sequences.length ? 1 : 0);
+          chunk.sequences.push(seq);
+        });
+        jobs.update(
+          job.jobId,
+          {
+            plan: integrity.seal("plan", plan),
+            phase: "MERGE_PENDING",
+            status: "RUNNING",
+          },
+          { plan: "", status: job.durable.status },
+        );
+        if (!plan.chunks.length) {
+          jobs.update(job.jobId, {
+            status: "FAILED",
+            phase: "DONE",
+            printed: 0,
+            failed: job.ids.length,
+          });
+          pipeline.notify(
+            job,
+            { printed: 0, failed: job.ids.length },
+            plan.failed.map(function (f) {
+              return { key: pipeline.sortKey(f.seq), message: f.code };
+            }),
+          );
+          return;
+        }
+      }
+    } catch (error) {
+      // A competing summarizer may already have sealed and submitted this plan.
+      if (jobs.load(durable.id).plan) throw error;
+      jobs.update(durable.id, {
+        status: "FAILED",
+        phase: "DONE",
+        printed: 0,
+        failed: Number(durable.requested),
+      }, { plan: "", outputs: "" });
+      pipeline.notify(job || { jobId: durable.id, durable: durable, requester: { id: durable.requester } },
+        { printed: 0, failed: Number(durable.requested) }, [{ key: "render", message: "สร้างเอกสารไม่สำเร็จ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงาน" }]);
+      throw error;
+    }
+    // Persist the intent before calling an external scheduler; ambiguity is operator-visible.
+    var mergeClaim;
+    try {
+      mergeClaim = jobs.update(
+        job.jobId,
+        { phase: "MERGE_SUBMITTING", mergetask: "" },
+        { phase: "MERGE_PENDING", status: "RUNNING" },
+      );
+    } catch (claimError) {
+      if (jobs.load(job.jobId).phase !== "MERGE_PENDING") return;
+      throw claimError;
+    }
+    var taskId;
+    try {
+      var pending = task.create({ taskType: task.TaskType.MAP_REDUCE });
+      pending.scriptId = "customscript_pld_batch_merge";
+      // Leave deployment selection to NetSuite; retain the caller and fixed script.
+      pending.params = { custscript_pld_merge_job: job.jobId };
+      taskId = pending.submit();
+      if (typeof taskId !== "string" || !taskId.trim()) throw new Error("Merge task submission returned no task ID");
+    } catch (error) {
+      var rejected = !!error && (error.name === "FAILED_TO_SUBMIT_JOB_REQUEST_1" || error.code === "FAILED_TO_SUBMIT_JOB_REQUEST_1");
+      var waitingPersisted = false;
+      try {
+        jobs.update(job.jobId, { phase: rejected ? "MERGE_WAITING" : "MERGE_SUBMIT_UNKNOWN" },
+          { status: "RUNNING", phase: "MERGE_SUBMITTING", mergetask: "", outputs: "", result: "",
+            snapshot: mergeClaim.snapshot, snapshotdigest: mergeClaim.snapshotdigest, plan: mergeClaim.plan });
+        waitingPersisted = rejected;
+      } catch (persistError) {
+        log.error({
+          title: "PLD merge submission state unavailable",
+          details: { jobId: job.jobId, message: persistError.message },
+        });
+      }
+      if (rejected) {
+        if (waitingPersisted) pipeline.notifyDeferred(job);
+        log.audit({ title: "PLD merge submission rejected; explicit retry required", details: { jobId: job.jobId } });
+        return;
+      }
+      throw error;
+    }
+    try {
+      jobs.update(job.jobId, { mergetask: String(taskId) });
+    } catch (error) {
       log.error({
-        title: 'PLD batch: ส่งอีเมลแจ้งผลไม่สำเร็จ',
-        details: { jobId: job.jobId, requester: requester, pdfId: result.pdfId, message: e.message }
+        title: "PLD merge task accepted; task metadata not persisted",
+        details: {
+          jobId: job.jobId,
+          taskId: String(taskId),
+          message: error.message,
+        },
       });
     }
   }
-
-  return {
-    getInputData: getInputData,
-    map: map,
-    summarize: summarize
-  };
+  return { getInputData: getInputData, map: map, summarize: summarize };
 });

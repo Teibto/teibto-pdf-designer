@@ -4,12 +4,40 @@
  * @author Wichit Wongta
  */
 import { describe, it, expect } from 'vitest';
-import { exportBfoXml, renderBandsBody, type BfoExportOptions } from '../../src/services/bfo-export.service';
+import { exportBfoXml, renderBandsBody } from '../../src/services/bfo-export.service';
 import { elementsToBands } from '../../src/services/band-layout.service';
 import type { AppState } from '../../src/state/app-state';
 import { createDefaultPage } from '../../src/models/page';
 import { createDefaultPagination } from '../../src/models/template';
 import type { TextElement, TableElement, ShapeElement, LineElement, ImageElement } from '../../src/models/element';
+
+const VALID_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+const VALID_JPEG_PAYLOAD = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/EB//xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/EB//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/EB//2Q==';
+
+function crc32(bytes: Uint8Array, start: number, end: number): number {
+  let crc = 0xffffffff;
+  for (let index = start; index < end; index++) {
+    crc ^= bytes[index];
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngWithDimensions(width: number, height: number): string {
+  const bytes = Uint8Array.from(atob(VALID_PNG.split(',')[1]), (char) => char.charCodeAt(0));
+  for (const [offset, value] of [[16, width], [20, height]] as const) {
+    bytes[offset] = value >>> 24;
+    bytes[offset + 1] = value >>> 16;
+    bytes[offset + 2] = value >>> 8;
+    bytes[offset + 3] = value;
+  }
+  const crc = crc32(bytes, 12, 29);
+  bytes[29] = crc >>> 24;
+  bytes[30] = crc >>> 16;
+  bytes[31] = crc >>> 8;
+  bytes[32] = crc;
+  return `data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`;
+}
 
 function createMockState(elements: any[]): AppState {
   return {
@@ -657,6 +685,91 @@ describe('null-safe bindings (#4)', () => {
     expect(xml).not.toContain('&quot;}');
   });
 
+  it('uploaded static image exports imageData instead of an empty src', () => {
+    const img = {
+      id: 'img-upload', type: 'image', name: 'Uploaded Logo', role: 'content',
+      x: 0, y: 0, w: 100, h: 50, zIndex: 0, locked: false, visible: true,
+      src: '', imageData: VALID_PNG, objectFit: 'contain',
+    } as ImageElement;
+    const xml = exportBfoXml(createMockState([img]), { useFreeMarker: true });
+
+    expect(xml).toContain(`src="${VALID_PNG}"`);
+    expect(xml).not.toContain('<img src=""');
+  });
+
+  it('static image without imageData still exports src with XML escaping', () => {
+    const img = {
+      id: 'img-src', type: 'image', name: 'File Cabinet Logo', role: 'content',
+      x: 0, y: 0, w: 100, h: 50, zIndex: 0, locked: false, visible: true,
+      src: '/core/media/media.nl?id=10&c=SB2', objectFit: 'contain',
+    } as ImageElement;
+    const xml = exportBfoXml(createMockState([img]), { useFreeMarker: true });
+
+    expect(xml).toContain('src="/core/media/media.nl?id=10&amp;c=SB2"');
+  });
+
+  it('bound image keeps the FreeMarker source and guard when imageData is present', () => {
+    const img = {
+      id: 'img-bound', type: 'image', name: 'Bound Logo', role: 'content',
+      x: 0, y: 0, w: 100, h: 50, zIndex: 0, locked: false, visible: true,
+      src: '/fallback.png', imageData: 'data:image/png;base64,STATIC', objectFit: 'contain',
+      binding: 'custbody_logo_url',
+    } as ImageElement;
+    const xml = exportBfoXml(createMockState([img]), { useFreeMarker: true });
+
+    expect(xml).toContain("<#if (record.custbody_logo_url!'')?length != 0>");
+    expect(xml).toContain("src=\"${(record.custbody_logo_url!'')?xml}\"");
+    expect(xml).not.toContain('data:image/png;base64,STATIC');
+    expect(xml).not.toContain('/fallback.png');
+  });
+
+  it.each([
+    ['JPEG', `data:image/jpeg;base64,${VALID_JPEG_PAYLOAD}`],
+    ['JPG MIME alias', `data:image/jpg;base64,${VALID_JPEG_PAYLOAD}`],
+  ])('exports a valid embedded %s image', (_label, imageData) => {
+    const img = {
+      id: 'img-jpeg', type: 'image', name: 'Photo', role: 'content',
+      x: 0, y: 0, w: 100, h: 50, zIndex: 0, locked: false, visible: true,
+      src: '', imageData, objectFit: 'contain',
+    } as ImageElement;
+
+    expect(exportBfoXml(createMockState([img]))).toContain(`src="${imageData}"`);
+  });
+
+  it.each([
+    ['GIF', 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA=='],
+    ['WebP', 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4TA=='],
+    ['SVG with external content', 'data:image/svg+xml;base64,PHN2Zz48aW1hZ2UgaHJlZj0iaHR0cHM6Ly9leGFtcGxlLmNvbS90cmFjay5wbmciLz48L3N2Zz4='],
+    ['non-base64 data URL', 'data:image/png,<svg/>'],
+    ['malformed base64', 'data:image/png;base64,not_base64!'],
+    ['PNG MIME with non-PNG bytes', 'data:image/png;base64,U29tZSB0ZXh0'],
+    ['truncated PNG with a valid prefix', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA=='],
+    ['truncated JPEG with a valid prefix', 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='],
+    ['PNG dimension bomb', pngWithDimensions(4097, 1)],
+  ])('rejects unsupported embedded %s before BFO export', (_label, imageData) => {
+    const img = {
+      id: 'img-invalid', type: 'image', name: 'Unsafe image', role: 'content',
+      x: 0, y: 0, w: 100, h: 50, zIndex: 0, locked: false, visible: true,
+      src: '', imageData, objectFit: 'contain',
+    } as ImageElement;
+
+    expect(() => exportBfoXml(createMockState([img])))
+      .toThrow(/กรุณาอัปโหลดไฟล์ PNG\/JPEG ใหม่.*base64 PNG\/JPEG/);
+  });
+
+  it('rejects a PNG whose chunk data fails its CRC', () => {
+    const bytes = Uint8Array.from(atob(VALID_PNG.split(',')[1]), (char) => char.charCodeAt(0));
+    bytes[41] ^= 1;
+    const imageData = `data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`;
+    const img = {
+      id: 'img-corrupt', type: 'image', name: 'Corrupt image', role: 'content',
+      x: 0, y: 0, w: 100, h: 50, zIndex: 0, locked: false, visible: true,
+      src: '', imageData, objectFit: 'contain',
+    } as ImageElement;
+
+    expect(() => exportBfoXml(createMockState([img]))).toThrow(/Invalid or unsupported embedded image/);
+  });
+
   it('no unsafe interpolation remains for bound elements', () => {
     const state = createMockState([
       makeText({ binding: 'custbody_a' }),
@@ -712,6 +825,58 @@ describe('barcode null-safety (#4)', () => {
 
     expect(xml).toContain('value="STATIC123"');
     expect(xml).not.toContain('<#if');
+  });
+
+  it.each([[180, 80, 80], [60, 140, 60], [100, 100, 100]])(
+    'keeps QR modules square within a %s × %s frame without mutating the document',
+    (w, h, side) => {
+      const state = createMockState([makeBarcode({ barcodeType: 'qrcode', w, h })]);
+      const xml = exportBfoXml(state, { useFreeMarker: true });
+      expect(xml).toContain('codetype="qrcode"');
+      expect(xml).toContain(`style="width: ${side}pt; height: ${side}pt;"`);
+      expect(xml).toContain(`style="width: ${w}pt; height: ${h}pt; border: 0;"`);
+      expect(xml).toContain('align="center" valign="middle"');
+      expect(state.elements[0]).toMatchObject({ w, h });
+    },
+  );
+
+  it('exports Code39 using the BFO-supported codetype instead of the rejected code3of9 alias', () => {
+    const xml = exportBfoXml(createMockState([makeBarcode({ barcodeType: 'code39', value: 'QA-PLD-199' })]));
+    expect(xml).toContain('codetype="code39"');
+    expect(xml).not.toContain('code3of9');
+  });
+
+  it('preserves the requested rectangular dimensions of linear barcodes', () => {
+    const xml = exportBfoXml(createMockState([makeBarcode({ w: 180, h: 80 })]));
+    expect(xml).toContain('style="width: 180pt; height: 80pt;"');
+  });
+
+  it('sizes EAN13 with bar-width inside its frame without the native-crashing width attribute', () => {
+    const state = createMockState([makeBarcode({ barcodeType: 'ean13', value: '5901234123457', w: 226, h: 70 })]);
+    const before = JSON.stringify(state);
+    const xml = exportBfoXml(state);
+    const symbol = xml.match(/<barcode\b[^>]*>/)?.[0] ?? '';
+    expect(symbol).toContain('codetype="ean13"');
+    expect(symbol).toContain('bar-width="2"');
+    expect(symbol).toContain('style="height: 70pt;"');
+    expect(symbol).not.toMatch(/(?:style="[^\"]*|\s)width[=:]/);
+    expect(xml).toContain('width: 226pt; height: 70pt; border: 0;');
+    expect(JSON.stringify(state)).toBe(before);
+  });
+
+  it.each(['datamatrix', 'pdf417', 'ean8', 'upca', 'itf14', 'unknown', 'toString', '__proto__', undefined])(
+    'rejects unsupported runtime format %s instead of exporting another symbology',
+    (barcodeType) => {
+      expect(() => exportBfoXml(createMockState([makeBarcode({ barcodeType })])))
+        .toThrow(/Unsupported barcode type/);
+    },
+  );
+
+  it.each(['qrcode', 'ean13'])('skips the whole %s frame when its bound value is absent', (barcodeType) => {
+    const xml = exportBfoXml(createMockState([makeBarcode({ barcodeType, binding: 'tranid' })]));
+    expect(xml).toContain("<#if (record.tranid!'')?has_content>\n<table cellpadding=");
+    expect(xml).toContain('</table>\n</#if>');
+    expect(xml).toContain("value=\"${(record.tranid!'')?xml}\"");
   });
 });
 

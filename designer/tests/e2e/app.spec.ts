@@ -49,17 +49,17 @@ test.describe('Theme toggle', () => {
   test('flips dark ↔ light and persists on the document element', async ({ page }) => {
     await gotoApp(page);
 
-    // Default is dark → button offers "Light".
-    const btn = headerBtn(page, 'Light');
+    // Oracle Redwood is light by default → button offers the optional dark theme.
+    const btn = headerBtn(page, 'Dark');
     await expect(btn).toBeVisible();
 
     await btn.click();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect(headerBtn(page, 'Dark')).toBeVisible();
-
-    await headerBtn(page, 'Dark').click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect(headerBtn(page, 'Light')).toBeVisible();
+
+    await headerBtn(page, 'Light').click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(headerBtn(page, 'Dark')).toBeVisible();
   });
 });
 
@@ -95,5 +95,38 @@ test.describe('Left sidebar tabs', () => {
 
     await sidebar.locator('.tab', { hasText: 'องค์ประกอบ' }).click();
     await expect(sidebar.locator('.element-grid')).toBeVisible();
+  });
+});
+
+test.describe('Responsive Redwood workspace', () => {
+  test('turns both sidebars into mutually exclusive drawers', async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 800 });
+    await gotoApp(page);
+
+    const leftPanel = page.locator('.workspace-panel.left');
+    const rightPanel = page.locator('.workspace-panel.right');
+    await expect(leftPanel).not.toHaveClass(/open/);
+    await expect(rightPanel).not.toHaveClass(/open/);
+
+    await page.getByRole('button', { name: 'เปิดเครื่องมือ' }).click();
+    await expect(leftPanel).toHaveClass(/open/);
+    await expect(page.getByRole('button', { name: 'ปิดแผงด้านข้าง' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'เปิดคุณสมบัติ' }).click();
+    await expect(leftPanel).not.toHaveClass(/open/);
+    await expect(rightPanel).toHaveClass(/open/);
+
+    await page.keyboard.press('Escape');
+    await expect(rightPanel).not.toHaveClass(/open/);
+  });
+
+  test('keeps the workspace within the viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoApp(page);
+    const metrics = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      scroll: document.documentElement.scrollWidth,
+    }));
+    expect(metrics.scroll).toBeLessThanOrEqual(metrics.viewport);
   });
 });

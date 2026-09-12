@@ -12,6 +12,13 @@
  */
 define(['N/search', 'N/record', 'N/file', './pld_lib_thai_wordbreak'],
 function (search, record, file, wordbreak) {
+  // Generic default wording from the reference invoice print script. This is
+  // document content, not customer data. Match its precedence: use this only
+  // when no setup matches; a selected setup may intentionally supply no footer.
+  var DEFAULT_REFERENCE_FOOTER =
+    'เอกสารฉบับนี้ออกโดยผู้มีอํานาจซึ่งได้รับการอนุมัติผ่านระบบงานของบริษัทฯ ไม่จําเป็นต้องมีลายเซ็นผู้อนุมัติลงนาม / ห้ามโอนสิทธิเรียกร้อง / โปรดระบุเลขที่งานในเอกสารที่เกี่ยวข้อง \n' +
+    'เพื่อความสะดวกในการตรวจรับและชําระเงิน / This document is issued and approved electronically by authorized person via internal system. \n' +
+    'Authorized signature is not required. / No assignment of rights and obligations. / Please refer PO no in related documents.';
   var COMPANY_JOIN = 'CUSTBODY_THL_COMPANYBRANCHADDRESS';
   var COMPANY_FIELDS = {
     name: 'custrecord_cba_companyname',
@@ -126,7 +133,7 @@ function (search, record, file, wordbreak) {
       }
     }
     if (globalRow) return globalRow;
-    fail('PLD_REFERENCE_SETUP_MISSING', 'No active Thai print-form setup matches the invoice type, print-out type, and subsidiary. Configure the reference footer before rendering.');
+    return null;
   }
 
   function enrich(data, recordId) {
@@ -136,8 +143,7 @@ function (search, record, file, wordbreak) {
     var invoice = record.load({ type: 'invoice', id: text(recordId), isDynamic: false });
     var company = companyForInvoice(text(recordId));
     var setup = footerSetup(invoice, data);
-    var footer = plainText(setup.getValue({ name: 'custrecord_pf_footer_description' }));
-    if (!footer) fail('PLD_REFERENCE_FOOTER_MISSING', 'The selected Thai print-form setup has no footer text. Configure it before rendering the reference invoice.');
+    var footer = plainText(setup ? setup.getValue({ name: 'custrecord_pf_footer_description' }) : DEFAULT_REFERENCE_FOOTER);
     var result = Object.assign({}, data);
     result.referenceCompany = company;
     result.document = Object.assign({}, data.document, { footerText: wordbreak.breakThai(footer) });
