@@ -291,7 +291,7 @@ test('legacy item selection, contiguous discount consumption and signed totals a
       { custrecord_sum_type: '7', custrecord_sum_total: '-4' },
       { custrecord_sum_type: '5', custrecord_sum_taxrate: '0.07' },
       { custrecord_sum_type: '7', custrecord_sum_total: '-6' },
-      { custrecord_sum_type: '5', custrecord_sum_taxrate: '7.0' }
+      { custrecord_sum_type: '5', custrecord_sum_taxrate: '7.0%' }
     ],
     body: { taxtotal: 11.9 }
   });

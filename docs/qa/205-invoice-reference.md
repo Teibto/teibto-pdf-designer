@@ -39,7 +39,7 @@ The current template uses one outer header table, fixed cell widths, explicit
 BFO alignment and a full-width page-count table. The revised five-page result
 passed the checks above.
 
-Local verification: 358 engine tests, seven templates and seven samples,
+Local verification: 365 engine tests, seven templates and seven samples,
 JavaScript syntax, AI workspace validation and secret scan passed.
 The engine suite used `--test-isolation=none` because the Windows sandbox blocked
 Node child-process creation; this is local evidence, not a replacement for CI.
@@ -51,13 +51,47 @@ is layout evidence with synthetic content, not proof of real-record data parity.
 
 ## Remaining acceptance gates
 
-- Server validation and targeted installation of the five changed engine files.
-- Real invoice render verifies currency SuiteQL and branch/setup field access.
-- Compare the real short invoice to the selected reference for exact geometry,
-  text, totals, logo and original/copy behavior.
-- Render both copies of the 50-row fixture and verify page numbering resets,
-  complete rows and per-copy totals.
 - Publish final local PDF artifacts and finish PR review/CI.
+
+## Connected validation
+
+Explicitly authorized server validation and targeted five-file deployment passed
+on SB2. Readback hashes matched all five candidate files; the four pre-existing
+files retained identical File Cabinet attributes. The new helper was subsequently
+updated within the same scope and verified by readback again.
+
+The first real-record probe exposed a material mismatch with the reference form's
+advance-item arithmetic. The reference-only helper now consumes the same scoped
+transaction and summary searches: types 0/1/2 print, only 0/1 contribute to gross,
+contiguous discount rows modify their preceding item, and signed deductions feed
+customer-paid totals. A blank advance rate produces zero instead of falling back
+to the generic invoice line amount. The corrected live two-copy render matches
+the reference financial values and amount words. Generic invoice data stays
+unchanged outside the opt-in reference path. Focused synthetic tests cover these
+rules; no actual transaction values are stored in this report.
+
+The supplied 50-row fixture rendered as ten pages: Original pages 1/5 through
+5/5, then Copy pages 1/5 through 5/5. Each copy contains precisely rows 001-050
+once, in order, with one totals block; every page has a logo and embedded Thai
+fonts. All ten page images were inspected for clipping and footer overlap.
+
+The initial CI run passed engine tests, Designer lint/unit/build and all 121
+functional E2E tests, but failed the existing cold-start performance budget:
+one longest task measured 125ms against a less-than-100ms limit. A subsequent
+run must establish CI status; this result is not recorded as a pass.
+
+The final real invoice comparison matches content on Original and Copy except
+the runtime printed timestamp. Logo and title bounds match exactly. Party text
+baselines match within 0.01pt, memo and amount words within 0.01pt; remaining
+measured layout differences are below 0.5pt. The reference's leading nonbreaking
+spaces are retained in metadata values. The VAT rate has exactly one percent
+suffix, with a regression for the native percent-field string.
+
+The canonical XML was saved as a new nondefault template through the existing
+versioned API, then rendered through the normal saved-template route as two
+pages. Native Long Text storage removes the final newline after the closing PDF
+tag; all preceding XML characters are retained. No existing default or invoice
+record was changed. Designer XML editing is tracked separately in issue #207.
 
 The current SB2 engine source matched integration #199, not main. That branch was
 merged into this work to preserve its deployed safeguards and snapshot behavior.

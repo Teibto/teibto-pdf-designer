@@ -184,7 +184,8 @@ function (search, record, file, wordbreak, amountWords) {
       var type = Number(row.getValue({ name: 'custrecord_sum_type' }));
       // Source assignments use the final matching row, not a sum/absolute value.
       if (type === 7) wht = number(row.getValue({ name: 'custrecord_sum_total' }), 'withholding tax');
-      if (type === 5) vatRate = text(row.getValue({ name: 'custrecord_sum_taxrate' }));
+      // Saved percent fields may include the suffix; the template owns "%".
+      if (type === 5) vatRate = text(row.getValue({ name: 'custrecord_sum_taxrate' })).trim().replace(/\s*%$/, '');
     });
     var base = gross + specialDiscount + advance;
     var vat = number(invoice.getValue({ fieldId: 'taxtotal' }), 'taxtotal');

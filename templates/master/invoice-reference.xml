@@ -28,15 +28,18 @@
     .title { color: #293CE7; font-size: 21pt; text-align: center; }
     .metadata td { border: 0.1pt solid #696969; padding: 0 2pt; }
     .party-label { background-color: #D9EEFF; color: #293CE7; padding: 0 2pt; }
-    .party-content { padding: 3pt 2pt 0; }
+    .party-content { padding: 2.01pt 2pt 0; }
     .items th { background-color: #D9EEFF; color: #293CE7; border: 0.1pt solid #696969; vertical-align: middle; padding: 2pt; }
     .items td { border-left: 0.1pt solid #696969; border-right: 0.1pt solid #696969; padding: 2pt; }
+    .items td p { font-size: 11pt; color: #231F20; }
+    .items td b { font-size: 11.04pt; color: #000000; }
     .items { border-bottom: 0.1pt solid #696969; }
     .totals td { height: 16pt; border-bottom: 0.1pt solid #696969; vertical-align: middle; padding: 0 2pt; }
     .amount-words { background-color: #D9EEFF; border-bottom: 0.1pt solid #696969; height: 20pt; padding: 3pt 2pt; }
     .remark { border: 0.1pt solid #696969; padding: 2.28pt 4.8pt 3pt; }
-    .footer-box { border: 0.1pt solid #696969; color: #293CE7; }
-    .footer-box td { padding: 1pt 2pt; }
+    .footer-box { border: 0.08pt solid #696969; color: #293CE7; }
+    .footer-box td { padding: 0; }
+    .footer-box b { font-size: 11pt; }
     .footer-text { font-size: 10pt; text-align: center; }
     .party-label p, .items th p, .footer-box p, .footer-box b { color: #293CE7; }
     .remark p, .remark b { font-size: 11pt; }
@@ -64,12 +67,12 @@
             <p style="text-align: left;">Branch / สาขา : ${(record.referenceCompany.branchCode!"")?xml}</p>
           </td>
           <td style="width: 50%; padding-left: 18pt;">
-            <table class="metadata">
-              <tr><td style="width: 45%;"><p style="text-align: left;">Doc No. / เลขที่เอกสาร</p></td><td style="width: 55%;"><p class="blue" style="text-align: left;">${(record.document.number!"")?xml}</p></td></tr>
-              <tr><td><p style="text-align: left;">Date / วันที่</p></td><td><p class="blue" style="text-align: left;">${(record.document.date!"")?xml}</p></td></tr>
-              <tr><td><p style="text-align: left;">Due Date / วันครบกำหนดชำระ</p></td><td><p class="blue" style="text-align: left;">${(record.document.dueDate!"")?xml}</p></td></tr>
-              <tr><td><p style="text-align: left;">Ref. SO / เลขที่การขาย</p></td><td><p class="blue" style="text-align: left;">${(record.document.refSo!"")?xml}</p></td></tr>
-              <tr><td><p style="text-align: left;">Ref. No / เลขที่อ้างอิง</p></td><td><p class="blue" style="text-align: left;">${(record.document.refNo!"")?xml}</p></td></tr>
+            <table class="metadata" style="table-layout: fixed;">
+              <tr><td width="106.52pt" style="width: 106.52pt;"><p style="text-align: left; padding-left: 1.065pt;">Doc No. / เลขที่เอกสาร</p></td><td width="136.98pt" style="width: 136.98pt;"><p class="blue" style="text-align: left;">&#160;${(record.document.number!"")?xml}</p></td></tr>
+              <tr><td><p style="text-align: left; padding-left: 1.065pt;">Date / วันที่</p></td><td><p class="blue" style="text-align: left;">&#160;${(record.document.date!"")?xml}</p></td></tr>
+              <tr><td><p style="text-align: left; padding-left: 1.065pt;">Due Date / วันครบกำหนดชำระ</p></td><td><p class="blue" style="text-align: left;">&#160;${(record.document.dueDate!"")?xml}</p></td></tr>
+              <tr><td><p style="text-align: left; padding-left: 1.065pt;">Ref. SO / เลขที่การขาย</p></td><td><p class="blue" style="text-align: left;">&#160;${(record.document.refSo!"")?xml}</p></td></tr>
+              <tr><td><p style="text-align: left; padding-left: 1.065pt;">Ref. No / เลขที่อ้างอิง</p></td><td><p class="blue" style="text-align: left;">&#160;${(record.document.refNo!"")?xml}</p></td></tr>
             </table>
           </td>
         </tr>
@@ -84,27 +87,29 @@
         </tr>
         <tr>
           <td class="party-content">
+            <table width="216pt" style="width: 216pt; table-layout: fixed;"><tr><td>
             <p style="text-align: left;">${(record.customer.name!"")?xml}</p>
             <p style="text-align: left;">${(record.customer.address!"")?xml}</p>
             <p style="text-align: left;">Tax ID/ เลขประจำตัวผู้เสียภาษี: ${(record.customer.taxId!"")?xml}</p>
             <p style="text-align: left;">Branch / สาขา : ${(record.customer.branchCode!"")?xml}</p>
+            </td></tr></table>
           </td>
           <td></td>
-          <td class="party-content"><p style="text-align: left;">${(record.shipTo.address!"")?xml}</p></td>
+          <td class="party-content"><table width="184pt" style="width: 184pt; table-layout: fixed;"><tr><td><p style="text-align: left;">${(record.shipTo.address!"")?xml}</p></td></tr></table></td>
           <td></td>
         </tr>
       </table>
       </td></tr></table>
     </macro>
     <macro id="reference-footer">
-      <table class="footer-box">
+      <table class="footer-box" width="523.2pt" style="width: 523.2pt;">
         <tr>
-          <td style="width: 55%; height: 16pt;"><p style="text-align: left;"><b>ผู้ออกเอกสาร/User ID : </b>${(record.issuer.createdBy!"")?xml}</p></td>
-          <td style="width: 45%;" align="right"><p text-align="right" class="right" style="text-align: right;">Printed Date : ${(record.document.printedDate!"")?xml}</p></td>
+          <td style="width: 55%; height: 16pt;"><p style="text-align: left;"><b>&#160;ผู้ออกเอกสาร/User ID : </b>${(record.issuer.createdBy!"")?xml}</p></td>
+          <td style="width: 45%;" align="right"><p text-align="right" class="right" style="text-align: right;">Printed Date : ${(record.document.printedDate!"")?xml}&#160;</p></td>
         </tr>
-        <tr><td colspan="2" align="center" style="height: 32pt;"><#list (record.document.footerText!"")?split("\n") as footerLine><p text-align="center" class="footer-text" style="text-align: center;">${(footerLine!"")?xml}</p></#list></td></tr>
+        <tr><td colspan="2" align="center" style="height: 32pt;"><p text-align="center" class="footer-text" style="text-align: center;">${(record.document.footerText!"")?xml}</p></td></tr>
       </table>
-      <table width="100%" style="margin-top: -0.2pt;"><tr><td align="right"><p text-align="right" class="right" style="text-align: right;">Page <pagenumber/> / <totalpages/></p></td></tr></table>
+      <table width="523.2pt" style="width: 523.2pt; margin-top: -0.2pt;"><tr><td align="right"><p text-align="right" class="right" style="text-align: right;">Page <pagenumber/>&#160;/&#160;<totalpages/></p></td></tr></table>
     </macro>
   </macrolist>
 </head>
@@ -115,7 +120,8 @@
   <#list invoiceRows as row>
     <#if (row.name!"")?length gt 60 || (row.memo!"")?length gt 90 || (row.memo!"")?contains("\n")><#assign compactRows = false></#if>
     <#assign occupiedHeight = occupiedHeight + 16>
-    <#if (row.memo!"") != ""><#assign occupiedHeight = occupiedHeight + 16></#if>
+    <#-- Offset the measured memo-gap increase minus the 11.04-to-11pt line-height change. -->
+    <#if (row.memo!"") != ""><#assign occupiedHeight = occupiedHeight + 17.317></#if>
   </#list>
   <table class="items" width="100%" style="table-layout: fixed;">
     <thead><tr style="height: 40pt;">
@@ -131,7 +137,7 @@
       <#list invoiceRows as row>
       <tr style="height: 16pt;">
         <td width="4.62%" style="width: 4.62%;" align="center"><p text-align="center" class="center" style="text-align: center;">${row_index + 1}</p></td>
-        <td width="40%" style="width: 40%;"><p style="text-align: left;"><b>${(row.name!"")?xml}</b></p><#if (row.memo!"") != ""><#list (row.memo!"")?split("\n") as memoLine><p style="text-align: left; margin-top: 3pt;">${(memoLine!"")?xml}</p></#list></#if></td>
+        <td width="40%" style="width: 40%;"><p style="text-align: left;"><b>${(row.name!"")?xml}</b></p><#if (row.memo!"") != ""><#list (row.memo!"")?split("\n") as memoLine><p style="text-align: left; margin-top: 4.359pt;">${(memoLine!"")?xml}</p></#list></#if></td>
         <td width="6.92%" style="width: 6.92%;" align="center"><p text-align="center" class="center" style="text-align: center;">${(row.quantity!"")?xml}</p></td>
         <td width="6.92%" style="width: 6.92%;" align="center"><p text-align="center" class="center" style="text-align: center;">${(row.unit!"")?xml}</p></td>
         <td width="13.85%" style="width: 13.85%;" align="right"><p text-align="right" class="right" style="text-align: right;">${(row.unit_price!"")?xml}</p></td>
@@ -158,7 +164,7 @@
         <tr><td align="right" style="padding-right: 4.54pt;"><p text-align="right" class="right" style="text-align: right;"><b>Customer Paid / ยอดชำระ (${(record.document.currencyCode!"")?xml})</b></p></td><td align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.customerPaid!"")?xml}</p></td></tr>
       </table>
     </td></tr>
-    <tr><td colspan="2" class="amount-words" align="right"><p text-align="right" class="right" style="text-align: right;">${(record.totals.amountInWords!"")?xml}</p></td></tr>
+    <tr><td colspan="2" class="amount-words" align="right"><p text-align="right" class="right" style="text-align: right; margin-top: 1.035pt;">${(record.totals.amountInWords!"")?xml}</p></td></tr>
   </table>
   <table style="margin-top: 16pt; page-break-inside: avoid;"><tr><td class="remark" style="height: 48pt;">
     <p style="text-align: left;"><b>Remark / หมายเหตุ:</b></p>
