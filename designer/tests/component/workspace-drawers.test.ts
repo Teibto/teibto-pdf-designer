@@ -15,6 +15,58 @@ vi.mock('../../src/services/template.service', async (original) => ({
 
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); });
 
+it('stages the workspace in a later task while updateComplete remains full-app readiness', async () => {
+  vi.useFakeTimers();
+  try {
+    const shell = document.createElement('pld-app-shell');
+    document.body.append(shell);
+    const ready = shell.updateComplete;
+    let didResolve = false;
+    void ready.then(() => { didResolve = true; });
+
+    // Flush Lit's initial microtasks without advancing the workspace timer.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(shell.shadowRoot!.querySelector('pld-header')).toBeTruthy();
+    expect(shell.shadowRoot!.querySelector('pld-sidebar-left')).toBeNull();
+    expect(shell.shadowRoot!.querySelector('.main-content')!.getAttribute('aria-busy')).toBe('true');
+    expect(didResolve).toBe(false);
+
+    await vi.runAllTimersAsync();
+    await ready;
+    expect(shell.shadowRoot!.querySelector('pld-sidebar-left')).toBeTruthy();
+    expect(shell.shadowRoot!.querySelector('pld-band-view')).toBeTruthy();
+    expect(shell.shadowRoot!.querySelector('pld-sidebar-right')).toBeTruthy();
+    expect(shell.shadowRoot!.querySelector('.main-content')!.getAttribute('aria-busy')).toBe('false');
+    expect(didResolve).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('finishes workspace readiness after reconnecting during the staged update', async () => {
+  vi.useFakeTimers();
+  try {
+    const shell = document.createElement('pld-app-shell');
+    document.body.append(shell);
+    const firstReady = shell.updateComplete;
+
+    // Run the mount timer synchronously, then reconnect before Lit settles the
+    // state update that the timer requested.
+    vi.advanceTimersByTime(0);
+    shell.remove();
+    document.body.append(shell);
+    await vi.runAllTimersAsync();
+
+    await firstReady;
+    await shell.updateComplete;
+    expect(shell.shadowRoot!.querySelector('pld-sidebar-left')).toBeTruthy();
+    expect(shell.shadowRoot!.querySelector('.main-content')!.getAttribute('aria-busy')).toBe('false');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('each drawer toggle fires once after 100 reconnects and resize listeners detach', async () => {
   const media = new EventTarget() as EventTarget & { matches: boolean };
   media.matches = true;

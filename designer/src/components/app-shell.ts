@@ -66,6 +66,11 @@ export class PldAppShell extends LitElement {
   private _cleanupKeyboard: (() => void) | null = null;
   private _cleanupMiddleware: (() => void) | null = null;
   private _connectionGeneration = 0;
+  private _workspaceMountTimer: number | null = null;
+  private _resolveWorkspaceReady: (() => void) | null = null;
+  private readonly _workspaceReady = new Promise<void>((resolve) => {
+    this._resolveWorkspaceReady = resolve;
+  });
   private _dataLoadGeneration = 0;
   private _jsonDataRevision = 0;
   private _observedJsonData: Readonly<Record<string, unknown>> | null = null;
@@ -159,6 +164,7 @@ export class PldAppShell extends LitElement {
 
   @state() private view: 'design' | 'flow' = 'design';
   @state() private editorMode: 'visual' | 'xml' = 'visual';
+  @state() private workspaceMounted = false;
   @state() private narrow = false;
   private _drawerMedia: MediaQueryList | null = null;
   private _drawerTrigger: HTMLElement | null = null;
@@ -354,6 +360,22 @@ export class PldAppShell extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     const generation = ++this._connectionGeneration;
+    // Mount the editor workspace in a task after the shell chrome. The workspace
+    // creates most of the initial DOM and layout tree, so this boundary avoids
+    // one cold-start long task without making an incomplete workspace observable
+    // through updateComplete.
+    if (!this.workspaceMounted && this._workspaceMountTimer === null) {
+      this._workspaceMountTimer = window.setTimeout(() => {
+        this._workspaceMountTimer = null;
+        if (!this._isCurrentConnection(generation)) return;
+        this.workspaceMounted = true;
+        void this._completeWorkspaceMount(generation);
+      }, 0);
+    } else if (this.workspaceMounted && this._resolveWorkspaceReady) {
+      // A host can detach after the timer sets workspaceMounted but before Lit's
+      // update settles. Resume readiness for the new connection generation.
+      void this._completeWorkspaceMount(generation);
+    }
     this._drawerMedia = window.matchMedia?.(`(max-width: ${DRAWER_MAX_WIDTH}px)`) ?? null;
     this.narrow = this._drawerMedia?.matches ?? false;
     this._drawerMedia?.addEventListener('change', this._mediaHandler);
@@ -469,6 +491,10 @@ export class PldAppShell extends LitElement {
   }
 
   disconnectedCallback() {
+    if (this._workspaceMountTimer !== null) {
+      window.clearTimeout(this._workspaceMountTimer);
+      this._workspaceMountTimer = null;
+    }
     this._drawerMedia?.removeEventListener('change', this._mediaHandler);
     this._drawerMedia = null;
     ++this._connectionGeneration;
@@ -486,6 +512,21 @@ export class PldAppShell extends LitElement {
     this._paginationInputs = null;
     this.store.removeEventListener('state-changed', this._autosaveHandler);
     this._autosaveDebounced.cancel();
+  }
+
+  /** Preserve Lit's readiness contract while the first workspace render is staged. */
+  protected override async getUpdateComplete(): Promise<boolean> {
+    const complete = await super.getUpdateComplete();
+    if (this.isConnected) await this._workspaceReady;
+    return complete;
+  }
+
+  private async _completeWorkspaceMount(generation: number): Promise<void> {
+    // Bypass the override above: it intentionally waits for this method.
+    await super.getUpdateComplete();
+    if (!this._isCurrentConnection(generation)) return;
+    this._resolveWorkspaceReady?.();
+    this._resolveWorkspaceReady = null;
   }
 
   private _isCurrentConnection(generation: number): boolean {
@@ -526,7 +567,7 @@ export class PldAppShell extends LitElement {
   render() {
     return html`
       <pld-header>
-        ${this.editorMode === 'visual' ? html`
+        ${this.workspaceMounted && this.editorMode === 'visual' ? html`
           <button slot="tools-toggle" class="drawer-toggle" type="button" aria-label="เปิดเครื่องมือ (Open tools)"
             aria-expanded=${this.leftPanelOpen} aria-controls="tools-panel" @click=${this._toggleLeftHandler}>${icon('menu')}</button>
           <button slot="properties-toggle" class="drawer-toggle" type="button" aria-label="เปิดคุณสมบัติ (Open properties)"
@@ -545,8 +586,8 @@ export class PldAppShell extends LitElement {
           `
         : ''}
 
-      <div class="main-content">
-        ${this.editorMode === 'xml' ? html`<pld-canonical-xml-editor></pld-canonical-xml-editor>` : html`
+      <div class="main-content" aria-busy=${String(!this.workspaceMounted)}>
+        ${!this.workspaceMounted ? '' : this.editorMode === 'xml' ? html`<pld-canonical-xml-editor></pld-canonical-xml-editor>` : html`
         ${this.leftPanelOpen || this.rightPanelOpen
           ? html`<button class="drawer-scrim" type="button" aria-label="ปิดแผงด้านข้าง"
               @click=${this._closePanels}></button>`
