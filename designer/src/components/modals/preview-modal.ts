@@ -5,6 +5,7 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
@@ -13,12 +14,12 @@ import type { AppState } from '../../state/app-state';
 import type { CanvasElement, TextElement, TableElement, ShapeElement, LineElement, ListElement, BarcodeElement, ImageElement } from '../../models/element';
 import { ELEMENT_ROLES } from '../../constants/roles';
 import { resolveTemplateString, resolveBinding } from '../../services/binding.service';
-import { computePagination, finalizePagination } from '../../services/pagination.service';
+import { computePagination, finalizePagination, getPageData } from '../../services/pagination.service';
 import { formatCellValue } from '../../utils/format';
-import { getCachedBarcodeSvg } from '../../services/barcode.service';
-import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
+import { clearBarcodeCache, getCachedBarcodeSvg } from '../../services/barcode.service';
+import { getCurrentBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { isNetSuiteEnv, getNsContext, renderLivePreview } from '../../services/netsuite-adapter.service';
-import { DEFAULT_RECORD_TYPE } from '../../constants/record-types';
+import { resolveSampleRecordType } from '../../services/sample-record-type.service';
 import '../shared/modal';
 
 @customElement('pld-preview-modal')
@@ -45,8 +46,8 @@ export class PldPreviewModal extends LitElement {
       justify-content: space-between;
       margin-bottom: 16px;
       padding: 8px 12px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 8px;
     }
 
@@ -59,10 +60,10 @@ export class PldPreviewModal extends LitElement {
     .nav-btn {
       width: 30px;
       height: 30px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 6px;
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
+      background: var(--c-surface-2);
+      color: var(--c-text-subtle);
       font-size: 14px;
       cursor: pointer;
       display: flex;
@@ -72,8 +73,8 @@ export class PldPreviewModal extends LitElement {
     }
 
     .nav-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     .nav-btn:disabled {
@@ -84,7 +85,7 @@ export class PldPreviewModal extends LitElement {
     .page-info {
       font-size: 12px;
       font-family: var(--font-mono, monospace);
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
     }
 
     .zoom-controls {
@@ -94,19 +95,19 @@ export class PldPreviewModal extends LitElement {
     }
 
     .zoom-label {
-      font-size: 11px;
+      font-size: var(--t-sm);
       font-family: var(--font-mono, monospace);
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       min-width: 40px;
       text-align: center;
     }
 
     .export-btn {
       padding: 8px 20px;
-      background: linear-gradient(135deg, #22d3a7, #4f6ef7);
+      background: var(--c-brand);
       border: none;
       border-radius: 6px;
-      color: #fff;
+      color: var(--c-brand-on);
       font-size: 12.5px;
       font-weight: 600;
       cursor: pointer;
@@ -129,7 +130,7 @@ export class PldPreviewModal extends LitElement {
     .server-frame {
       width: 100%;
       height: 68vh;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 8px;
       background: #fff;
     }
@@ -141,15 +142,15 @@ export class PldPreviewModal extends LitElement {
       justify-content: center;
       gap: 14px;
       height: 68vh;
-      color: var(--color-text-dim, #8a8ca0);
+      color: var(--c-text-subtle);
       font-size: 13px;
     }
 
     .server-status .spinner {
       width: 34px;
       height: 34px;
-      border: 3px solid var(--color-border, #2a2c3a);
-      border-top-color: #4f6ef7;
+      border: 3px solid var(--c-border);
+      border-top-color: var(--c-brand);
       border-radius: 50%;
       animation: pld-spin 0.8s linear infinite;
     }
@@ -159,14 +160,14 @@ export class PldPreviewModal extends LitElement {
     }
 
     .server-status.error {
-      color: #f87171;
+      color: var(--c-danger);
       text-align: center;
       padding: 0 24px;
     }
 
     .server-hint {
-      font-size: 11px;
-      color: var(--color-text-dim, #8a8ca0);
+      font-size: var(--t-sm);
+      color: var(--c-text-subtle);
     }
 
     /* ─── Page Preview ─── */
@@ -176,7 +177,7 @@ export class PldPreviewModal extends LitElement {
       overflow: auto;
       max-height: 60vh;
       padding: 10px;
-      background: var(--color-bg-deep, #0a0b10);
+      background: var(--c-bg);
       border-radius: 8px;
     }
 
@@ -192,6 +193,8 @@ export class PldPreviewModal extends LitElement {
       box-sizing: border-box;
     }
 
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
     /* ─── Band-flow layout (#107): bands stack like BFO print ─── */
     .flow-row {
       display: flex;
@@ -288,7 +291,7 @@ export class PldPreviewModal extends LitElement {
 
     .break-indicator .break-line {
       flex: 1;
-      border-top: 1.5px dashed var(--break-color, #e74c8b);
+      border-top: 1.5px dashed var(--break-color, #b3311f);
     }
 
     .break-indicator .break-label {
@@ -297,18 +300,18 @@ export class PldPreviewModal extends LitElement {
       letter-spacing: 0.5px;
       text-transform: uppercase;
       color: #fff;
-      background: var(--break-color, #e74c8b);
+      background: var(--break-color, #b3311f);
       padding: 1px 5px;
       border-radius: 3px;
       white-space: nowrap;
     }
 
     .break-indicator.force-break {
-      --break-color: #f59e42;
+      --break-color: var(--c-warning);
     }
 
     .break-indicator.page-end {
-      --break-color: #4f6ef7;
+      --break-color: var(--c-brand);
     }
 
     .continuation-badge {
@@ -320,15 +323,18 @@ export class PldPreviewModal extends LitElement {
       font-weight: 600;
       letter-spacing: 0.5px;
       text-transform: uppercase;
-      color: var(--color-text-dim, #8a8ca0);
-      background: rgba(79, 110, 247, 0.12);
-      border: 1px solid rgba(79, 110, 247, 0.25);
+      color: var(--c-text-subtle);
+      background: var(--c-brand-soft);
+      border: 1px solid var(--c-brand);
       padding: 1px 6px;
       border-radius: 3px;
       z-index: 9999;
       pointer-events: none;
     }
-  `;
+      button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   /**
    * พรีวิวผ่าน BFO จริงทำได้ทุกครั้งที่อยู่ใน NetSuite (#191) — ไม่มี record ก็ยัง
@@ -353,6 +359,7 @@ export class PldPreviewModal extends LitElement {
         if (this._serverMode) this._loadServerPreview();
       } else {
         this._clearServerPreview();
+        clearBarcodeCache();
       }
     }
   }
@@ -360,6 +367,7 @@ export class PldPreviewModal extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._clearServerPreview();
+    clearBarcodeCache();
   }
 
   /**
@@ -370,7 +378,9 @@ export class PldPreviewModal extends LitElement {
     const ctx = getNsContext();
     if (!ctx) return;
     const sample = this._sampleMode;
-    const rectype = ctx.recordType || DEFAULT_RECORD_TYPE;
+    const rectype = sample
+      ? resolveSampleRecordType(this.store.state.template.nsMetadata?.rectype, ctx.recordType)
+      : ctx.recordType?.trim();
     if (!sample && !ctx.recordId) return;
 
     this._clearServerPreview();
@@ -378,10 +388,11 @@ export class PldPreviewModal extends LitElement {
     this.serverLoading = true;
     this.serverError = '';
     try {
+      if (!rectype) throw new Error('ไม่พบประเภทเอกสารจริง กรุณาเปิด Designer จากรายการอีกครั้ง');
       // Font comes from the config record via ${company.fontRegular} (#156) — the
       // preview therefore fails/succeeds on fonts exactly like Print does.
       const options: BfoExportOptions = { useBands: true }; // band layout is authoritative (#47 cutover)
-      const xml = exportBfoXml(this.store.state, options);
+      const xml = getCurrentBfoXml(this.store.state, options);
       const blob = await renderLivePreview({
         xml,
         rectype,
@@ -409,7 +420,7 @@ export class PldPreviewModal extends LitElement {
     }
   }
 
-  /** Download the exact PDF displayed, including unsaved changes and sample data. */
+  /** Download the displayed PDF, including unsaved layout edits and server-sourced data. */
   private _printServer() {
     if (!this.serverPdfUrl || this.serverLoading) return;
     const link = document.createElement('a');
@@ -424,12 +435,16 @@ export class PldPreviewModal extends LitElement {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="▶ PDF Preview"
+        modalTitle="PDF Preview"
         size="xl"
         @close=${this._close}
       >
         <div slot="body">
-          ${this._serverMode ? this._renderServerBody() : this._renderSimBody()}
+          ${this._serverMode
+            ? this._renderServerBody()
+            : this.store.state.editorMode === 'xml'
+              ? html`<div class="server-status error">Canonical XML preview requires the NetSuite BFO render service.</div>`
+              : this._renderSimBody()}
         </div>
       </pld-modal>
     `;
@@ -441,11 +456,11 @@ export class PldPreviewModal extends LitElement {
       <div class="preview-toolbar">
         <span class="server-hint">
           ${this._sampleMode
-            ? 'เรนเดอร์โดย NetSuite N/render ด้วย ข้อมูลตัวอย่าง — ฟอนต์ หัว-ท้ายกระดาษ และชุดสำเนา ตรงกับ Print จริง ส่วนตัวเลขและชื่อเป็นของสมมติ'
-            : 'พรีวิวแบบปัจจุบัน รวมการแก้ไขที่ยังไม่บันทึก — บันทึกก่อนสั่ง Print จากเอกสาร'}
+            ? 'พรีวิวด้วยข้อมูลตัวอย่างของระบบ รวมการแก้ไขแบบที่ยังไม่บันทึก ข้อมูลที่แก้ในแผง Data ใช้จำลองบนพื้นที่ออกแบบเท่านั้น'
+            : 'พรีวิวด้วยข้อมูลจากเอกสารจริง รวมการแก้ไขแบบที่ยังไม่บันทึก ข้อมูลที่แก้ในแผง Data ใช้จำลองบนพื้นที่ออกแบบเท่านั้น บันทึกแบบก่อนสั่ง Print จากเอกสาร'}
         </span>
         <button class="export-btn" ?disabled=${this.serverLoading || !this.serverPdfUrl}
-          @click=${this._printServer}>📄 ดาวน์โหลด PDF ที่แสดง</button>
+          @click=${this._printServer}>${icon('file')} ดาวน์โหลด PDF ที่แสดง</button>
       </div>
 
       ${this.serverLoading
@@ -453,7 +468,7 @@ export class PldPreviewModal extends LitElement {
         : this.serverError
           ? html`<div class="server-status error">
               <span>เรนเดอร์ล้มเหลว: ${this.serverError}</span>
-              <button class="nav-btn" style="width:auto;padding:0 12px;" @click=${this._loadServerPreview}>↻ ลองใหม่</button>
+              <button class="nav-btn" style="width:auto;padding:0 12px;" @click=${this._loadServerPreview}>${icon('refresh')} ลองใหม่</button>
             </div>`
           : this.serverPdfUrl
             ? html`<iframe class="server-frame" src=${this.serverPdfUrl} title="PDF Preview"></iframe>`
@@ -470,11 +485,11 @@ export class PldPreviewModal extends LitElement {
       <!-- Toolbar -->
       <div class="preview-toolbar">
         <div class="preview-nav">
-          <button class="nav-btn" ?disabled=${this.previewPage <= 1}
-            @click=${() => this.previewPage--}>‹</button>
+          <button class="nav-btn" aria-label="หน้าก่อนหน้า" ?disabled=${this.previewPage <= 1}
+            @click=${() => this.previewPage--}>${icon('left')}</button>
           <span class="page-info">${this.previewPage} / ${this.totalPages}</span>
-          <button class="nav-btn" ?disabled=${this.previewPage >= this.totalPages}
-            @click=${() => this.previewPage++}>›</button>
+          <button class="nav-btn" aria-label="หน้าถัดไป" ?disabled=${this.previewPage >= this.totalPages}
+            @click=${() => this.previewPage++}>${icon('right')}</button>
         </div>
 
         <div class="zoom-controls">
@@ -499,7 +514,7 @@ export class PldPreviewModal extends LitElement {
   private _renderPageElements(state: Readonly<AppState>, pageNum: number) {
     const totalPages = this.totalPages;
     const paginationResult = finalizePagination(computePagination(state), state);
-    const pageData = paginationResult.pagesData.find((p) => p.pageNumber === pageNum);
+    const pageData = getPageData(paginationResult, pageNum);
 
     // Per-element visibility from the pagination engine (headerMode, roles)
     const visibleIds = new Set<string>();
@@ -534,7 +549,7 @@ export class PldPreviewModal extends LitElement {
           const els = band.rows.flatMap((r) => r.columns.flatMap((c) => resolve(c.elementIds)));
           if (els.length === 0) return nothing;
           return html`<div class="watermark-overlay">
-            ${els.map((el) => this._renderElement(el, state.jsonData, pageNum))}
+            ${els.map((el) => this._renderElement(el, state.jsonData, pageNum, pageData))}
           </div>`;
         }
 
@@ -546,7 +561,7 @@ export class PldPreviewModal extends LitElement {
               ${row.columns.map((col) => html`
                 <div class="flow-col" style="width: ${col.widthPct}%;">
                   ${resolve(col.elementIds).map((el) => html`
-                    <div class="flow-el">${this._renderElement(el, state.jsonData, pageNum)}</div>
+                    <div class="flow-el">${this._renderElement(el, state.jsonData, pageNum, pageData)}</div>
                   `)}
                 </div>
               `)}
@@ -611,7 +626,12 @@ export class PldPreviewModal extends LitElement {
     return { before, after };
   }
 
-  private _renderElement(el: CanvasElement, jsonData: Record<string, unknown> | null, pageNum: number) {
+  private _renderElement(
+    el: CanvasElement,
+    jsonData: Record<string, unknown> | null,
+    pageNum: number,
+    pageData?: import('../../services/pagination.service').PageData,
+  ) {
     // Conditional visibility (#90) — mirror the export-side FreeMarker guard
     if (el.visibleIf && jsonData) {
       const v = resolveBinding(jsonData, el.visibleIf);
@@ -641,7 +661,7 @@ export class PldPreviewModal extends LitElement {
       }
       case 'table': {
         const te = el as TableElement;
-        return this._renderTablePreview(te, jsonData, pageNum);
+        return this._renderTablePreview(te, jsonData, pageNum, pageData);
       }
       case 'barcode': {
         const be = el as BarcodeElement;
@@ -681,7 +701,12 @@ export class PldPreviewModal extends LitElement {
     }
   }
 
-  private _renderTablePreview(el: TableElement, jsonData: Record<string, unknown> | null, pageNum: number) {
+  private _renderTablePreview(
+    el: TableElement,
+    jsonData: Record<string, unknown> | null,
+    pageNum: number,
+    pageData?: import('../../services/pagination.service').PageData,
+  ) {
     const cols = el.columns.filter((c) => !c.hidden);
     if (cols.length === 0) return html`<div style="color: #999; font-size: 10px; padding: 8px;">ยังไม่ได้ตั้งค่าคอลัมน์</div>`;
 
@@ -690,10 +715,6 @@ export class PldPreviewModal extends LitElement {
       const data = resolveBinding(jsonData, el.binding);
       if (Array.isArray(data)) rows = data as Record<string, unknown>[];
     }
-
-    // Use pagination result for accurate row slicing
-    const paginationResult = finalizePagination(computePagination(this.store.state), this.store.state);
-    const pageData = paginationResult.pagesData.find((p) => p.pageNumber === pageNum);
 
     let rowOffset = 0;
     if (pageData) {

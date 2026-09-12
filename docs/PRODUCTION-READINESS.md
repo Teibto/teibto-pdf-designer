@@ -7,12 +7,27 @@ Status: **not approved for production**. This plan preserves the full goal: secu
 operation, Thai UX and PDFs, reliable editing, measured performance, fleet delivery and live QA.
 Local test doubles do not execute FreeMarker/BFO or establish NetSuite role permissions.
 
+## Current integrated scope
+
+The current acceptance matrix and retention decision are in
+[`architecture/PRODUCTION-ACCEPTANCE.md`](architecture/PRODUCTION-ACCEPTANCE.md).
+The user selected indefinite retention until explicit deletion (2026-09-12); historical notes
+below that call age-based retention unfinished are superseded by that decision. Native
+permissions, complete batch execution and integrated UI/PDF evidence remain mandatory gates.
+
 ## Review and implementation sequence
 
 | Priority | Work | State / acceptance evidence required |
 |---|---|---|
 | P1 | Save race, duplicate POST retries, nested-input keyboard shortcuts | Implemented locally; deferred-response, double-save and editable/IME regressions. Preserve new edits and document identity, including a new template saved while editing. |
+| P1 | Undo reports success without restoring PDF settings, and can cross document sessions | Fixed locally: history snapshots now restore page, pagination, copies, bands/elements and selected state; bounded content-addressed retention restores deleted uploaded-image payloads. Every document-session boundary clears both stacks and suppresses only its paired replacement dispatch. Page/copy/pagination, reset, template/sample/draft switch and image-deletion regressions pass. |
+| P1 | Slow autoload/sample/template responses overwrite newer user intent | Fixed locally: app-shell record/sample data loads are latest-wins and fenced by connection, document session and JSON-data revision. Local and NetSuite template loads stage away from the live store, recheck current intent after awaits and suppress stale completions/errors. Reverse-resolution, local-edit and document-switch regressions pass. |
 | P1 | Download differs from current preview; stale responses after reopen | Implemented locally; download displayed blob and discard superseded responses. Three component regressions. Live save/reload/print parity still required. |
+| P1 | Uploaded image appears in designer preview but disappears from exported BFO | Fixed locally in the single exporter: static images prefer validated base64 PNG/JPEG `imageData`, retain escaped URL fallback, and bound images retain their guarded FreeMarker source. The uploader and exporter (including imported `imageData`) reject GIF/WebP/SVG, malformed/truncated data, MIME/signature mismatch, invalid PNG CRC/chunk order, incomplete JPEG marker structure and unsafe dimensions/pixel counts before BFO. Overlapping uploads are latest-wins and fenced by document session plus element identity. Live BFO rendering of both allowed raster formats and the existing CLOB size guard remain acceptance gates. |
+| P1 | Linear barcode preview always falls back to “Invalid barcode” | Fixed locally for locked bwip-js 4.11.4: linear formats omit the invalid present-but-undefined `width` option while QR/Data Matrix retain square dimensions. All nine exposed encoder adapters render real SVGs in tests. Identical pending work is deduplicated; input is capped at 4,096 characters, pending work at 64 distinct renders and 16 subscribers per key, and completed SVGs use access-order LRU bounded to 128 entries and 1 MiB including keys. Closing/disconnecting preview clears the generation-fenced cache. A tree-shakeable generic adapter removes unused encoders. This changes simulated HTML preview only and does not alter the BFO/N-render path. |
+| P1 | Live preview accepts unbounded request/XML/data payloads | Fixed locally: reject request bodies above 8 MiB UTF-8 before JSON parsing, XML above 1,000,000 characters, and aggregate XML/data/copies above 8 MiB before `N/render`. Boundary tests cover multibyte Thai and the exact XML-character limit; browser abort still does not cancel server work. |
+| P1 | Synchronous batch accepts unbounded IDs and accumulated XML | Fixed locally: reject selections above 300 without truncation and count exact `<pdfset>` UTF-8 bytes incrementally, stopping before 8 MiB without retaining the over-budget record or combining a partial result. Large selections remain queue work; live governance/memory evidence is pending. |
+| P2 | Coverage thresholds are configured but never executable or enforced | Fixed locally: exact `@vitest/coverage-v8` 5.0.0 is lockfile-pinned to Vitest 5.0.0, `npm run test:coverage` is the CI gate, and a clean `npm ci` plus the current full gate pass 733/733 tests at 83.06% statements, 77.46% branches, 85.23% functions and 84.31% lines against 70/60/70/70 thresholds. Component code remains intentionally outside this core-code metric and is covered separately by component/Chromium suites. |
 | P1 | Wrong subsidiary config and unusable Thai fonts silently print | Implemented locally; require matching/global config and valid File Cabinet fonts for render, retain setup inspection. Live missing-font and subsidiary tests required. |
 | P1 | All-role Suitelets execute as Administrator | Candidate emits empty runasrole and disables anonymous Suitelet access. User-facing overrides need SDF/readback; MR caller-role inheritance depends on programmatic submission, not its fixed Administrator UI field. Restricted-user execution matrix remains a release blocker; XML tests alone do not prove runtime authorization. |
 | P1 | Shared batch folder exposes job JSON/XML and other users' output | Local candidate adds durable requester/role/owner identity, per-job private folder readback and job-authorized download. My Files now isolates loaded unsigned/corrupt rows without disclosing them or masking an account-wide crypto outage. Native record/file permissions, direct URLs, weaker-role access and retention remain release blockers; local stubs cannot establish account privacy. |
@@ -25,7 +40,8 @@ Local test doubles do not execute FreeMarker/BFO or establish NetSuite role perm
 | P2 | Save dialog metadata/draft consistency | Implemented omitted metadata preservation, explicit false default removal and atomic session-owned draft acknowledgement across saves. Corrected original review: server previously ignored false rather than unsetting on quick-save. Durable content/default-cleanup warning retains ID/version; conflicting defaults now block print. Cross-record default updates still require live permission/concurrency QA. |
 | P2 | Dependency security | Full dependency audit now reports zero findings after Vite 6.4.3, Vitest 3.2.7, Storybook 9.1.20 and ESLint 10 migration. Lockfile/runtime upgrades verified with unit tests, builds and Chromium. Continue monitoring advisories. |
 | P2 | Build / deployment provenance | Local manifest seals complete designer inputs/environment hashes and assets; stale/tampered --no-build reuse fails before SuiteCloud. Stamp includes staged/untracked dirty state and scoped engine payload hash. CI now requires provenance tests and all three builds. This detects consistency, not artifact signing or live deployment parity; runner policy remains separate in PR #198. |
-| P2 | Startup size and large-designer interaction | Fixed sampled pagination cache missing arbitrary row/column changes; immutable store inputs use reference hits, mutable inputs use complete keys. Synthetic 100/1,000/10,000-row regressions pass. Current NetSuite JS is 1,320.04 kB / 354.65 kB gzip; real startup, drag/edit/undo and server capacity remain unmeasured. |
+| P2 | Startup size and large-designer interaction | Fixed sampled pagination cache missing arbitrary row/column changes; app-shell invalidates from complete immutable inputs without serializing the dataset. Simulated preview caches finalized pagination by immutable result/header mode and uses O(1) page lookup; derived `totalPages` cannot create an undo boundary. JSON editor preserves raw drafts, defers serialization while Form view is active, clears store data when emptied and performs zero serialization across unrelated state changes; every newer local/external mutation invalidates an in-flight record reload. Visual-form edits use path structural sharing and preserve the full store/BFO dataset while the DOM is capped at 1,000 controls, 20 columns and 20 top-level sections; oversized simple arrays and nested payloads show truthful JSON-view summaries. Fixed-Chromium 10,000-row × 10-field runs report 64.0–79.5 ms mount, 34.6–35.1 ms page-switch p95, 51.1 ms observed max, at most one 51 ms long task and exactly 50 rows/500 inputs in DOM. A 500-element real pointer resize reports 17.7 ms pointer-to-two-frame p95, 18.8 ms observed max, zero long tasks and correct final 55/45 widths. The serial production-preview gate builds first, starts a fresh server, disables retries and uses one pinned Chromium worker: 20 cold contexts report 570.7 ms app-ready p95 / 627.9 ms max, while 30 post-warmup loads report 122.2/122.9 ms; cold startup uses 3 resources / 99,501 encoded bytes, initial JS is 94,533 bytes, long-task/TBT are zero and no barcode chunk is requested. After forced GC, 100 Design/Flow switches show zero retained document/node/listener growth and an exact active-listener set match; a separate component regression reconnects the same app shell 100 times and retains exactly-once actions/history. Current production main JS is 370.04 kB / 94.53 kB gzip plus lazy barcode chunks totaling 280.23 kB / 94.05 kB gzip; NetSuite JS is 651.86 kB / 188.30 kB gzip. Cross-browser/device, long-duration heap and server-capacity measurements remain open. |
+| P2 | AI agent workspace can drift outside CI | Fixed locally: CI runs five negative governance regressions plus `scripts/validate-ai-workspace.py`. The validator requires AGENTS import, matching profile names/descriptions, exact normalized Codex/Claude behavioral instructions, consistent read-only metadata, registered safety clauses and an exact minimal skill router with no extra executable prose. |
 
 ## Architecture decisions
 
@@ -33,6 +49,17 @@ Keep canonical templates in `templates/master/`, one BFO exporter in the designe
 `pld_lib_render` server pipeline. Cache transaction data only inside one render request. Preserve
 copy-specific bindings through immutable overlays. Keep runtime font resolution in company config.
 Do not turn missing configuration, access failures or incomplete batches into successful empty PDFs.
+
+Checked-in fixed-Chromium budgets are: cold production app-ready p95 below 750 ms, warm p95 below
+400 ms, startup long tasks below 100 ms, TBT below 150 ms, at most 4 cold resources / 120 KiB encoded
+with initial JS at most 110 KiB and no eager barcode request; 10,000-row form mount below 500 ms and
+page navigation p95/max below 100/150 ms; 500-element pointer-to-two-frame resize p95/max below
+50/100 ms; at most one resize dispatch per animation frame plus the exact final pointer-up flush; and
+an exact active-listener-set match with no retained CDP counter growth after 100 Design/Flow toggles.
+Timing budgets apply to the serial pinned local runner. They are not an SB2 or end-user network SLO.
+For connected rendering, record p50/p95 latency, governance use, input/output bytes and pages before
+freezing an SLO; the provisional targets are p95 below 5 seconds for one copy and below 10 seconds
+for two copies, with less than 1% timeout/error rate on the agreed synthetic fixture.
 
 Permission design should use the caller's restrictions wherever possible, with explicit minimum
 template/config/File Cabinet permissions. Oracle recommends current-role execution to avoid
@@ -60,7 +87,7 @@ cd designer
 npm ci
 npm audit --audit-level=high
 npm run lint
-npm test -- --run
+npm run test:coverage
 npm run build
 npm run build:netsuite
 npm run storybook:build
@@ -80,7 +107,7 @@ The dependency findings recorded in earlier rounds were resolved; they are not c
 
 The synthetic row-mode pagination probe covers 100/1,000/10,000 Thai rows with complete,
 non-overlapping slices (4/40/400 pages) and 1,000 identical cache hits per fixture. One local Node
-run measured cold computation 0.664/0.203/0.625 ms and all 1,000 cache hits 0.465/0.271/0.287 ms.
+run measured cold computation 1.575/0.283/0.727 ms and all 1,000 cache hits 0.700/0.257/0.341 ms.
 These small timings verify the local cache path only: there is no wall-clock pass threshold,
 browser rendering measurement, BFO glyph inspection or NetSuite throughput claim.
 
@@ -96,6 +123,16 @@ Current branch local evidence (2026-09-11): **328/328 engine tests passed** with
 only: no SDF validation, NetSuite deployment, native crypto/file/search execution, role matrix or
 BFO/PDF inspection was performed by this run.
 
+Current working-tree evidence (2026-09-12): **335/335 engine tests**, **733/733 designer tests**,
+**6/6 build-provenance tests**, engine syntax, production and NetSuite builds, the 6-template /
+6-sample validator, dependency audit and secret scans pass. V8 coverage is **82.96% statements / 77.46%
+branches / 85.23% functions / 84.19% lines**, above the enforced 70/60/70/70 core-code thresholds.
+The Chromium suite passes **91/91**, including fixed-Chromium startup, 10,000-row form,
+500-element resize and 100-switch live DOM/listener benchmarks.
+The NetSuite bundle is 651.86 kB / 188.30 kB gzip; its single-file packaging is intentional, but
+server capacity and deployed-account interaction budgets remain unmeasured. This evidence covers local code only and does not
+replace SDF validation, live BFO/data-image rendering, role/privacy checks or candidate hash readback.
+
 The current engine candidate also fixes two live-observed gaps. Synthetic customer-payment rows now
 carry paid amounts that sum exactly to the receipt payment while keeping document totals distinct.
 My Files returns authenticated jobs even when another successfully loaded row is unsigned or corrupt,
@@ -103,9 +140,9 @@ counts that row only in a generic safety warning, and logs its identity internal
 readiness probe runs before search/load so missing secret or native crypto access still fails globally;
 direct status/download access to an invalid row remains rejected.
 
-Current designer evidence: **634/634 unit tests passed**, both production and NetSuite builds
+Current designer evidence: **733/733 unit/component tests passed**, both production and NetSuite builds
 completed, Storybook 10.6.0 built successfully and `npm audit` reports zero vulnerabilities after
-upgrading Vitest/UI to 5.0.0. The local Chromium suite passed **87/87** tests. Connected NetSuite
+upgrading Vitest/UI to 5.0.0. The local Chromium suite passed **91/91** tests. Connected NetSuite
 evidence is recorded separately and must not be inferred from these local toolchain checks.
 
 Connected SB2 evidence (2026-09-11, synthetic/redacted data only): server SDF validation passed

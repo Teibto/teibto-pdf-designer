@@ -722,6 +722,110 @@ test('initial submit exception or missing task ID preserves input and reports un
   }
 });
 
+test('synchronous print accepts LIST_LIMIT ids and rejects the next id without truncating', () => {
+  const ids = Array.from({ length: 300 }, (_, i) => String(i + 1));
+  const oneCopy = [{
+    id: '7',
+    values: {
+      custrecord_pld_tpl_xml: TPL_XML,
+      custrecord_pld_tpl_data: JSON.stringify({ copies: [{ th: 'ต้นฉบับ', en: 'Original' }] }),
+    },
+  }];
+  const accepted = buildBatch({ templates: oneCopy });
+  const ok = printRequest(ids);
+  accepted.suitelet.onRequest(ok.context);
+  assert.equal(ok.response.state.files.length, 1);
+  assert.equal(accepted.render.calls.renderedAsString, 300);
+
+  const rejected = buildBatch({ templates: oneCopy });
+  const tooMany = printRequest(ids.concat('301'));
+  rejected.suitelet.onRequest(tooMany.context);
+  assert.equal(tooMany.response.state.files.length, 0);
+  assert.match(tooMany.response.state.body, /300 ใบ/);
+  assert.match(tooMany.response.state.body, /301 ใบ/);
+  assert.equal(rejected.render.calls.created, 0, 'caller input is rejected before template or render work');
+});
+
+test('synchronous batch stops incrementally before its resolved pdfset exceeds 8 MiB', () => {
+  const wrapperBytes = Buffer.byteLength(
+    '<?xml version="1.0"?>\n' +
+    '<!DOCTYPE pdfset PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n' +
+    '<pdfset>\n\n</pdfset>',
+    'utf8',
+  );
+  const open = '<pdf><body>';
+  const close = '</body></pdf>';
+  const bodyAtLimit = 'a'.repeat(8 * 1024 * 1024 - wrapperBytes - Buffer.byteLength(open + close));
+  const atLimitDoc = open + bodyAtLimit + close;
+  const oversizedDoc = open + bodyAtLimit + 'a' + close;
+  const oneCopy = [{
+    id: '7',
+    values: {
+      custrecord_pld_tpl_xml: TPL_XML,
+      custrecord_pld_tpl_data: JSON.stringify({ copies: [{ th: 'ต้นฉบับ', en: 'Original' }] }),
+    },
+  }];
+  const boundary = buildBatch({ templates: oneCopy, asString: atLimitDoc });
+  const boundaryRequest = printRequest(['10']);
+  boundary.suitelet.onRequest(boundaryRequest.context);
+  assert.equal(boundary.render.calls.xmlToPdf.length, 1, 'an exact 8 MiB pdfset remains accepted');
+  assert.equal(boundaryRequest.response.state.files.length, 1);
+
+  const { suitelet, render } = buildBatch({ templates: oneCopy, asString: oversizedDoc });
+  const { context, response } = printRequest(['11', '12', '13']);
+
+  suitelet.onRequest(context);
+
+  assert.equal(render.calls.renderedAsString, 1, 'later ids are not rendered after the bound is crossed');
+  assert.equal(render.calls.xmlToPdf.length, 0, 'oversized XML never reaches combinePdfDocs');
+  assert.equal(response.state.files.length, 0);
+  assert.match(response.state.body, /8 MiB UTF-8/);
+  assert.match(response.state.body, /สร้างสำเร็จ 0 ใบ/);
+  assert.match(response.state.body, /ยังไม่ได้พิมพ์ 3 ใบ/);
+  assert.match(response.state.body, /value="11,12,13"/, 'the unretained record and later ids stay pending');
+});
+
+test('synchronous batch counts Thai, non-BMP and multi-document framing as exact UTF-8', () => {
+  const wrapperBytes = Buffer.byteLength(
+    '<?xml version="1.0"?>\n' +
+    '<!DOCTYPE pdfset PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n' +
+    '<pdfset>\n\n</pdfset>',
+    'utf8',
+  );
+  const first = '<pdf><body>ภาษาไทย 😀</body></pdf>';
+  const secondOpen = '<pdf><body>';
+  const secondClose = '</body></pdf>';
+  const fixedBytes = wrapperBytes + Buffer.byteLength(first + secondOpen + secondClose, 'utf8') + 1;
+  const exactSecond = secondOpen + 'a'.repeat(8 * 1024 * 1024 - fixedBytes) + secondClose;
+  const oneCopy = [{
+    id: '7',
+    values: {
+      custrecord_pld_tpl_xml: TPL_XML,
+      custrecord_pld_tpl_data: JSON.stringify({ copies: [{ th: 'ต้นฉบับ', en: 'Original' }] }),
+    },
+  }];
+
+  const accepted = buildBatch({
+    templates: oneCopy,
+    asString: (i) => i === 0 ? first : exactSecond,
+  });
+  const acceptedRequest = printRequest(['21', '22']);
+  accepted.suitelet.onRequest(acceptedRequest.context);
+  assert.equal(accepted.render.calls.xmlToPdf.length, 1, 'exact multi-document UTF-8 budget is accepted');
+  assert.equal(Buffer.byteLength(accepted.render.calls.xmlToPdf[0].xmlString, 'utf8'), 8 * 1024 * 1024);
+
+  const rejected = buildBatch({
+    templates: oneCopy,
+    asString: (i) => i === 0 ? first : exactSecond.replace('</body>', 'ก</body>'),
+  });
+  const rejectedRequest = printRequest(['21', '22', '23']);
+  rejected.suitelet.onRequest(rejectedRequest.context);
+  assert.equal(rejected.render.calls.renderedAsString, 2);
+  assert.equal(rejected.render.calls.xmlToPdf.length, 0);
+  assert.match(rejectedRequest.response.state.body, /ยังไม่ได้พิมพ์ 2 ใบ/);
+  assert.match(rejectedRequest.response.state.body, /value="22,23"/);
+});
+
 test('submit exception after worker advancement or publication does not downgrade authenticated state', () => {
   for (const advanced of [
     { status: 'RUNNING', phase: 'RENDERING', task: 'accepted-task' },

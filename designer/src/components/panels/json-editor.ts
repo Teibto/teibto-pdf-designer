@@ -6,11 +6,12 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
-import { loadJsonData } from '../../state/actions';
+import { clearJsonData, loadJsonData } from '../../state/actions';
 import { getNsContext, autoLoadRecordIfAvailable } from '../../services/netsuite-adapter.service';
 import { showToast } from '../shared/toast-notification';
 import './data-form';
@@ -61,6 +62,10 @@ export class PldJsonEditor extends LitElement {
   @state() private isExpanded = false;
   @state() private viewMode: 'form' | 'json' = 'form';
   @state() private formData: Record<string, unknown> | null = null;
+  private _rawDraftDirty = false;
+  private _committingLocalData = false;
+  private _recordLoadRequest = 0;
+  private _observedJsonData: Readonly<Record<string, unknown>> | null = null;
 
   static styles = css`
     :host {
@@ -84,36 +89,36 @@ export class PldJsonEditor extends LitElement {
     }
 
     .title {
-      font-size: 10px;
+      font-size: var(--t-sm);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1.2px;
-      color: var(--color-text-muted, #5c5e72);
+      color: var(--c-text-muted);
     }
 
     .badge {
-      font-size: 9px;
+      font-size: var(--t-sm);
       padding: 1px 6px;
       border-radius: 3px;
       font-family: var(--font-mono, monospace);
     }
 
     .badge.valid {
-      background: rgba(34, 211, 167, 0.12);
-      color: var(--color-accent2, #22d3a7);
-      border: 1px solid rgba(34, 211, 167, 0.2);
+      background: var(--c-success-soft);
+      color: var(--c-success);
+      border: 1px solid var(--c-success);
     }
 
     .badge.invalid {
-      background: rgba(239, 68, 68, 0.12);
-      color: var(--color-danger, #ef4444);
-      border: 1px solid rgba(239, 68, 68, 0.2);
+      background: var(--c-danger-soft);
+      color: var(--c-danger);
+      border: 1px solid var(--c-danger);
     }
 
     .badge.keys {
-      background: rgba(79, 110, 247, 0.1);
-      color: var(--color-accent, #4f6ef7);
-      border: 1px solid rgba(79, 110, 247, 0.2);
+      background: var(--c-brand-soft);
+      color: var(--c-brand);
+      border: 1px solid var(--c-brand);
     }
 
     .actions {
@@ -123,19 +128,26 @@ export class PldJsonEditor extends LitElement {
 
     .small-btn {
       padding: 3px 8px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
       border-radius: 4px;
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
-      font-size: 9px;
+      background: var(--c-surface-2);
+      color: var(--c-text-subtle);
+      font-size: var(--t-sm);
       cursor: pointer;
       font-family: inherit;
       transition: all 0.15s;
     }
 
     .small-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
+    }
+
+    .data-hint {
+      margin: 0 0 8px;
+      color: var(--c-text-subtle);
+      font-size: var(--t-sm);
+      line-height: 1.5;
     }
 
     /* ─── View Toggle ─── */
@@ -144,9 +156,9 @@ export class PldJsonEditor extends LitElement {
       gap: 2px;
       margin-bottom: 8px;
       padding: 2px;
-      background: var(--color-bg-deep, #0a0b10);
+      background: var(--c-bg);
       border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a);
+      border: 1px solid var(--c-border);
     }
 
     .view-btn {
@@ -154,8 +166,8 @@ export class PldJsonEditor extends LitElement {
       padding: 5px 8px;
       border: none;
       background: transparent;
-      color: var(--color-text-dim, #8a8ca0);
-      font-size: 10px;
+      color: var(--c-text-subtle);
+      font-size: var(--t-sm);
       font-weight: 500;
       cursor: pointer;
       border-radius: 4px;
@@ -164,25 +176,26 @@ export class PldJsonEditor extends LitElement {
     }
 
     .view-btn.active {
-      background: var(--color-accent, #4f6ef7);
-      color: #fff;
+      background: var(--c-brand);
+      color: var(--c-brand-on);
     }
 
     .view-btn:hover:not(.active) {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
+      background: var(--c-surface-3);
+      color: var(--c-text);
     }
 
     /* ─── JSON textarea ─── */
     textarea {
+      box-sizing: border-box;
       width: 100%;
       min-height: 120px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 6px;
-      color: var(--color-accent2, #22d3a7);
+      color: var(--c-success);
       font-family: var(--font-mono, monospace);
-      font-size: 10.5px;
+      font-size: var(--t-sm);
       line-height: 1.6;
       padding: 10px;
       resize: vertical;
@@ -191,24 +204,27 @@ export class PldJsonEditor extends LitElement {
     }
 
     textarea:focus {
-      border-color: var(--color-accent, #4f6ef7);
+      border-color: var(--c-brand);
     }
 
     textarea.invalid {
-      border-color: var(--color-danger, #ef4444);
+      border-color: var(--c-danger);
     }
 
     .expand-toggle {
+      border: 0;
+      background: transparent;
+      font-family: inherit;
       text-align: center;
       padding: 4px;
       cursor: pointer;
-      font-size: 10px;
-      color: var(--color-text-muted, #5c5e72);
+      font-size: var(--t-sm);
+      color: var(--c-text-muted);
       transition: color 0.15s;
     }
 
     .expand-toggle:hover {
-      color: var(--color-accent, #4f6ef7);
+      color: var(--c-brand);
     }
 
     /* ─── Form scroll area ─── */
@@ -217,7 +233,12 @@ export class PldJsonEditor extends LitElement {
       overflow-y: auto;
       min-height: 0;
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+    button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   private _stateHandler: ((e: Event) => void) | null = null;
 
@@ -226,31 +247,52 @@ export class PldJsonEditor extends LitElement {
 
     // Read current state immediately
     const s = this.store.state;
+    this._observedJsonData = s.jsonData;
     if (s.jsonData) {
-      this.jsonText = JSON.stringify(s.jsonData, null, 2);
+      this.jsonText = this.viewMode === 'json' ? JSON.stringify(s.jsonData, null, 2) : '';
       this.formData = s.jsonData;
       this.keyCount = s.jsonKeys.length;
       this.isValid = true;
+      this._rawDraftDirty = false;
+    } else {
+      this.jsonText = '';
+      this.formData = null;
+      this.keyCount = 0;
+      this.isValid = true;
+      this._rawDraftDirty = false;
     }
 
     // Listen for future changes
     this._stateHandler = (e: Event) => {
       const st = (e as StateChangedEvent).state;
-      this.formData = st.jsonData;
+      const dataChanged = st.jsonData !== this._observedJsonData;
+      this._observedJsonData = st.jsonData;
       this.keyCount = st.jsonKeys.length;
-      // Sync jsonText when store data changes externally (template load, etc.)
+      if (this._committingLocalData) {
+        this.formData = st.jsonData;
+        return;
+      }
+      if (!dataChanged) return;
+      this._invalidateRecordLoad();
+      // Preserve an in-progress raw draft. Only a genuine external data change
+      // may rewrite JSON text, and only when the raw editor is not dirty.
+      if (this.viewMode === 'json' && this._rawDraftDirty) return;
+      this.formData = st.jsonData;
       if (st.jsonData) {
-        this.jsonText = JSON.stringify(st.jsonData, null, 2);
+        this.jsonText = this.viewMode === 'json' ? JSON.stringify(st.jsonData, null, 2) : '';
         this.isValid = true;
+        this._rawDraftDirty = false;
       } else {
         this.jsonText = '';
         this.keyCount = 0;
+        this._rawDraftDirty = false;
       }
     };
     this.store.addEventListener('state-changed', this._stateHandler);
   }
 
   disconnectedCallback() {
+    ++this._recordLoadRequest;
     super.disconnectedCallback();
     if (this._stateHandler) {
       this.store.removeEventListener('state-changed', this._stateHandler);
@@ -268,22 +310,27 @@ export class PldJsonEditor extends LitElement {
             : nothing}
           ${this.jsonText && this.viewMode === 'json'
             ? html`<span class="badge ${this.isValid ? 'valid' : 'invalid'}">
-                ${this.isValid ? '✓ Valid' : '✕ Invalid'}
+                ${icon(this.isValid ? 'check' : 'error')} ${this.isValid ? 'Valid' : 'Invalid'}
               </span>`
             : nothing}
         </div>
         <div class="actions">
           ${getNsContext()?.recordId
             ? html`<button class="small-btn" @click=${this._loadFromRecord}
-                title="Reload data from the NetSuite record">⟳ โหลดจาก Record</button>`
+                title="Reload data from the NetSuite record">${icon('refresh')} โหลดจาก Record</button>`
             : nothing}
-          <button class="small-btn" @click=${this._loadSample} title="Load sample data">★ ตัวอย่าง</button>
+          <button class="small-btn" @click=${this._loadSample} title="Load sample data">${icon('file')} ตัวอย่าง</button>
           ${this.viewMode === 'json'
             ? html`<button class="small-btn" @click=${this._format} title="Format JSON">{ }</button>`
             : nothing}
-          <button class="small-btn" @click=${this._clear} title="Clear">✕</button>
+          <button class="small-btn" @click=${this._clear} title="Clear">${icon('close')}</button>
         </div>
       </div>
+
+      <p class="data-hint" id="data-scope-hint">
+        แก้ข้อมูลเพื่อจำลองการผูกฟิลด์บนพื้นที่ออกแบบเท่านั้น
+        PDF Preview ใน NetSuite ใช้ข้อมูลจากเอกสารจริง หรือข้อมูลตัวอย่างของระบบ
+      </p>
 
       <!-- View Toggle -->
       <div class="view-toggle">
@@ -314,7 +361,8 @@ export class PldJsonEditor extends LitElement {
 
   private _renderJsonView() {
     return html`
-      <textarea
+      <label for="json-source">ข้อมูล JSON (JSON data)</label>
+      <textarea id="json-source" aria-describedby="data-scope-hint"
         class="${this.isValid ? '' : 'invalid'}"
         style="min-height: ${this.isExpanded ? '300px' : '120px'};"
         placeholder='Paste JSON data here...
@@ -326,9 +374,10 @@ export class PldJsonEditor extends LitElement {
         @input=${this._onInput}
       ></textarea>
 
-      <div class="expand-toggle" @click=${() => (this.isExpanded = !this.isExpanded)}>
-        ${this.isExpanded ? '▲ Collapse' : '▼ Expand'}
-      </div>
+      <button type="button" class="expand-toggle" aria-controls="json-source" aria-expanded=${this.isExpanded}
+        @click=${() => (this.isExpanded = !this.isExpanded)}>
+        ${icon(this.isExpanded ? 'up' : 'down')} ${this.isExpanded ? 'Collapse' : 'Expand'}
+      </button>
     `;
   }
 
@@ -339,11 +388,19 @@ export class PldJsonEditor extends LitElement {
   private _switchView(mode: 'form' | 'json') {
     if (this.viewMode === mode) return;
 
+    if (mode === 'json') {
+      this.jsonText = this.formData ? JSON.stringify(this.formData, null, 2) : '';
+      this.isValid = true;
+      this._rawDraftDirty = false;
+    }
+
     // When switching to form, sync formData from current jsonText
     if (mode === 'form' && this.jsonText.trim()) {
       try {
-        this.formData = JSON.parse(this.jsonText);
+        const data = JSON.parse(this.jsonText) as Record<string, unknown>;
+        this._commitLocalData(data);
         this.isValid = true;
+        this._rawDraftDirty = false;
       } catch {
         // Stay on JSON view if invalid
         showToast('Fix JSON errors before switching to Form view', 'warning');
@@ -360,11 +417,8 @@ export class PldJsonEditor extends LitElement {
 
   private _onFormChanged(e: CustomEvent) {
     const data = e.detail as Record<string, unknown>;
-    this.formData = data;
-    this.jsonText = JSON.stringify(data, null, 2);
+    this._commitLocalData(data);
     this.isValid = true;
-    loadJsonData(this.store, data);
-    this.keyCount = this.store.state.jsonKeys.length;
   }
 
   // ═══════════════════════════════════════
@@ -373,20 +427,23 @@ export class PldJsonEditor extends LitElement {
 
   private _onInput(e: Event) {
     const text = (e.target as HTMLTextAreaElement).value;
+    this._invalidateRecordLoad();
     this.jsonText = text;
+    this._rawDraftDirty = true;
 
     if (!text.trim()) {
       this.isValid = true;
       this.keyCount = 0;
+      this._commitLocalClear();
+      this._rawDraftDirty = false;
       return;
     }
 
     try {
       const data = JSON.parse(text);
       this.isValid = true;
-      this.formData = data;
-      loadJsonData(this.store, data);
-      this.keyCount = this.store.state.jsonKeys.length;
+      this._commitLocalData(data);
+      this._rawDraftDirty = false;
     } catch {
       this.isValid = false;
     }
@@ -395,16 +452,17 @@ export class PldJsonEditor extends LitElement {
   /** Re-fetch curated record data (#82) — Sample/template loads overwrite
    *  jsonData, hiding the record's fields.* from the field picker (#78). */
   private async _loadFromRecord() {
+    const request = ++this._recordLoadRequest;
     try {
       const data = await autoLoadRecordIfAvailable();
-      if (!data) return;
+      if (request !== this._recordLoadRequest || !this.isConnected || !data) return;
       this.jsonText = JSON.stringify(data, null, 2);
-      this.formData = data;
-      loadJsonData(this.store, data);
+      this._rawDraftDirty = false;
+      this._commitLocalData(data);
       this.isValid = true;
-      this.keyCount = this.store.state.jsonKeys.length;
       showToast('Record data loaded!', 'success');
     } catch (err) {
+      if (request !== this._recordLoadRequest || !this.isConnected) return;
       showToast(`Load record failed: ${(err as Error).message}`, 'error');
     }
   }
@@ -412,10 +470,9 @@ export class PldJsonEditor extends LitElement {
   private _loadSample() {
     const data = structuredClone(SAMPLE_JSON);
     this.jsonText = JSON.stringify(data, null, 2);
-    this.formData = data;
-    loadJsonData(this.store, data);
+    this._rawDraftDirty = false;
+    this._commitLocalData(data);
     this.isValid = true;
-    this.keyCount = this.store.state.jsonKeys.length;
     showToast('Sample data loaded!', 'success');
   }
 
@@ -424,7 +481,9 @@ export class PldJsonEditor extends LitElement {
     try {
       const data = JSON.parse(this.jsonText);
       this.jsonText = JSON.stringify(data, null, 2);
+      this._commitLocalData(data);
       this.isValid = true;
+      this._rawDraftDirty = false;
     } catch {
       showToast('Cannot format — invalid JSON', 'warning');
     }
@@ -435,10 +494,36 @@ export class PldJsonEditor extends LitElement {
     this.formData = null;
     this.isValid = true;
     this.keyCount = 0;
-    this.store.dispatch((d) => {
-      d.jsonData = null;
-      d.jsonKeys = [];
-    });
+    this._rawDraftDirty = false;
+    this._commitLocalClear();
+  }
+
+  private _commitLocalData(data: Record<string, unknown>): void {
+    this._invalidateRecordLoad();
+    this.formData = data;
+    this._committingLocalData = true;
+    try {
+      loadJsonData(this.store, data);
+    } finally {
+      this._committingLocalData = false;
+    }
+    this.keyCount = this.store.state.jsonKeys.length;
+  }
+
+  private _commitLocalClear(): void {
+    this._invalidateRecordLoad();
+    this.formData = null;
+    this._committingLocalData = true;
+    try {
+      clearJsonData(this.store);
+    } finally {
+      this._committingLocalData = false;
+    }
+    this.keyCount = 0;
+  }
+
+  private _invalidateRecordLoad(): void {
+    ++this._recordLoadRequest;
   }
 }
 

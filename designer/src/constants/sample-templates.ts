@@ -196,9 +196,10 @@ function createInvoiceTemplate(): DocumentTemplate {
     page: createDefaultPage(),
     pagination: {
       mode: 'height',
-      // 14 rows + header band + summary block = exactly one A4 page
-      // (render-tuned on SB2, #84; 18 pushed the summary to page 2)
-      rowsPerPage: 14,
+      // Conservative padding leaves room for the nine-row totals and signatures
+      // with multiline item descriptions. Native BFO QA: six fits per copy;
+      // eight or more pushes the totals onto another page (2026-09-12).
+      rowsPerPage: 6,
       baseRowHeight: 22,
       lineHeightPx: 12,
       showContinuationHeader: true,
@@ -210,7 +211,8 @@ function createInvoiceTemplate(): DocumentTemplate {
       keepTogetherField: '',
       headerMode: 'all',
       columnSpanField: '',
-      // Anchor the summary block: pad the item table to 18 rows (#84)
+      // Pad short tables using the configured rowsPerPage; height mode still
+      // lets the renderer paginate longer or wrapped item content naturally.
       fillLastPage: true,
     },
     elements,

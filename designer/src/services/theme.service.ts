@@ -3,7 +3,7 @@
  *
  * ตั้ง data-theme บน <html> → token ใน tokens/colors.css (`:root[data-theme="light"]`)
  * cascade เข้า shadow DOM ของทุก component ผ่าน CSS custom property inheritance.
- * จำค่าที่เลือกใน localStorage · default = dark (ของเดิม)
+ * จำค่าที่เลือกใน localStorage · default = light ตาม Oracle Redwood
  *
  * @author Wichit Wongta
  * @since 2026-07-20
@@ -14,9 +14,9 @@ const STORAGE_KEY = 'pld-theme';
 
 export function getTheme(): Theme {
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'light' ? 'light' : 'dark';
+    return localStorage.getItem(STORAGE_KEY) === 'dark' ? 'dark' : 'light';
   } catch {
-    return 'dark';
+    return 'light';
   }
 }
 

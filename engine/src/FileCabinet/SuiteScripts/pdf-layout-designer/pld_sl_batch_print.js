@@ -45,6 +45,9 @@ define([
   /** จำนวนรายการสูงสุดที่ดึงมาแสดงในหน้าจอ (ไม่ใช่จำนวนที่พิมพ์ได้) */
   var LIST_LIMIT = 300;
 
+  /** BFO input ceiling shared with the durable batch pipeline. */
+  var MAX_RENDERED_XML_BYTES = 8 * 1024 * 1024;
+
   /**
    * ประเภทเอกสารที่ยอดรวมมีความหมาย — คอลัมน์ `total` ของ transaction search
    * ใส่เฉพาะประเภทเหล่านี้ ประเภทที่ไม่มียอดเงินตามกฎหมาย (ใบส่งสินค้า) ไม่ขอ
@@ -152,6 +155,10 @@ define([
 
     if (!recType) throw new Error('ไม่ได้ระบุประเภทเอกสาร');
     if (ids.length === 0) throw new Error('ยังไม่ได้เลือกเอกสารที่จะพิมพ์');
+    if (ids.length > LIST_LIMIT) {
+      throw new Error('พิมพ์สดได้ครั้งละไม่เกิน ' + LIST_LIMIT + ' ใบ (เลือกไว้ ' +
+        ids.length + ' ใบ) — แบ่งพิมพ์เป็นหลายชุดหรือส่งเข้าคิว');
+    }
 
     tel.rectype = recType;
     tel.tplid = tplId;
@@ -173,6 +180,9 @@ define([
     }
 
     tel.stage = 'combine';
+    if (result.xmlBytes > MAX_RENDERED_XML_BYTES || pdfsetUtf8Bytes(result.docs) > MAX_RENDERED_XML_BYTES) {
+      throw new Error('XML ของชุดเกิน 8 MiB UTF-8 — ลดจำนวนเอกสารหรือสำเนาแล้วส่งใหม่');
+    }
     var pdfFile = pldRender.combinePdfDocs(result.docs);
     pdfFile.name = 'batch_' + recType + '_' + result.printed.length + '.pdf';
 
@@ -206,6 +216,7 @@ define([
     var printed = [];
     var failed = [];
     var worstCost = 0;
+    var xmlBytes = pdfsetUtf8Bytes([]);
 
     for (var i = 0; i < ids.length; i++) {
       var remaining = script.getRemainingUsage();
@@ -223,7 +234,22 @@ define([
       try {
         var out = pldRender.renderDocumentXml(tplXml, recType, ids[i], copies, tel);
         assertParsable(out.docs);
+        var nextBytes = xmlBytes;
+        var nextCount = docs.length;
+        for (var b = 0; b < out.docs.length; b++) {
+          if (nextCount > 0) nextBytes += 1; // docs.join('\n') framing
+          nextBytes += utf8Bytes(out.docs[b]);
+          nextCount++;
+        }
+        if (nextBytes > MAX_RENDERED_XML_BYTES) {
+          return {
+            docs: docs, printed: printed, failed: failed,
+            pending: ids.slice(i), worstCost: worstCost,
+            stopReason: 'size', xmlBytes: xmlBytes
+          };
+        }
         for (var d = 0; d < out.docs.length; d++) docs.push(out.docs[d]);
+        xmlBytes = nextBytes;
         printed.push({ id: ids[i], tranId: out.tranId || ids[i] });
       } catch (e) {
         // ใบเดียวพังต้องไม่ทำให้ทั้งชุดล่ม — เก็บไว้รายงาน พร้อม errorId ของใบนั้นเอง
@@ -245,7 +271,7 @@ define([
 
     return {
       docs: docs, printed: printed, failed: failed,
-      pending: [], worstCost: worstCost, stopReason: ''
+      pending: [], worstCost: worstCost, stopReason: '', xmlBytes: xmlBytes
     };
   }
 
@@ -685,6 +711,19 @@ define([
     }
   }
 
+  /** Exact byte count of the XML string pldRender.combinePdfDocs will hand to BFO. */
+  function pdfsetUtf8Bytes(docs) {
+    var wrapper = '<?xml version="1.0"?>\n' +
+      '<!DOCTYPE pdfset PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n' +
+      '<pdfset>\n\n</pdfset>';
+    var bytes = utf8Bytes(wrapper);
+    for (var i = 0; i < docs.length; i++) {
+      bytes += utf8Bytes(docs[i]);
+      if (i > 0) bytes += 1;
+    }
+    return bytes;
+  }
+
   /** ยอดเงินในตารางเลือกเอกสาร — search คืนค่าดิบ (`53.261`) จึงจัดรูปให้อ่านออก */
   function money(value) {
     var n = Number(String(value == null ? '' : value).replace(/,/g, ''));
@@ -867,10 +906,13 @@ define([
       ' ใบ · ยังไม่ได้พิมพ์ ' + result.pending.length + ' ใบ</p>');
 
     if (result.pending.length > 0) {
-      parts.push('<p class="ref">' + (result.stopReason === 'time'
+      var stopMessage = result.stopReason === 'time'
         ? 'หยุดเพราะใช้เวลานานเกินกำหนดของหนึ่งคำสั่งพิมพ์'
-        : 'หยุดเพราะโควตาสคริปต์ของ NetSuite (usage units) กำลังจะหมด — วัดได้ว่าเอกสารชุดนี้ใช้ประมาณ ' +
-          result.worstCost + ' units ต่อใบ') +
+        : result.stopReason === 'size'
+          ? 'หยุดก่อนไฟล์รวมเกินขีดจำกัด XML 8 MiB UTF-8 — ลดจำนวนเอกสารหรือสำเนาในชุดถัดไป'
+          : 'หยุดเพราะโควตาสคริปต์ของ NetSuite (usage units) กำลังจะหมด — วัดได้ว่าเอกสารชุดนี้ใช้ประมาณ ' +
+            result.worstCost + ' units ต่อใบ';
+      parts.push('<p class="ref">' + stopMessage +
         '<br />กดปุ่มด้านล่างเพื่อพิมพ์ส่วนที่เหลือเป็นชุดถัดไป</p>');
     }
 

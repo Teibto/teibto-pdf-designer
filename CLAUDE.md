@@ -1,5 +1,7 @@
 # CLAUDE.md — teibto-pdf-designer
 
+@AGENTS.md
+
 ## Repo นี้คืออะไร
 
 NetSuite PDF Template Product ของ Teibto (internal, classification: **Internal**) — 3 ชั้น:
@@ -22,7 +24,7 @@ Rules ที่เจอบ่อยใน repo นี้:
 ## หลักสถาปัตยกรรมที่ห้ามละเมิด
 
 - **BFO เป็น render engine เดียว** — ห้ามเพิ่ม render path ใหม่ที่ให้ผลต่างจาก `N/render` (บทเรียน: เคยมี 3 engines — jsPDF, client BFO generator, Suitelet fallback generator — ผลไม่ตรงกัน)
-- **Template XML คือ source of truth** — designer เป็นเครื่อง scaffold; แก้ template หลัง export ให้แก้ที่ XML ใน `templates/master/` ผ่าน PR ไม่แก้ใน UI ของ account ลูกค้า
+- **Template XML คือ source of truth** — visual designer สร้าง XML ผ่าน generator เดียว; โหมด XML ที่ผู้ใช้ร้องขอใน #207 แก้ BFO/FreeMarker โดยตรงและใช้ Preview/Save เดิม. ห้ามแปลง XML เป็น visual state แบบสูญเสียข้อมูล. การปรับ canonical pack ต้องนำ XML กลับเข้า `templates/master/` ผ่าน PR ไม่ปล่อยให้ source ใน account ต่างจาก repository โดยไม่มีการตามเก็บ
 - **BFO generator มีที่เดียว** คือ `designer/src/services/bfo-export.service.ts` — ห้ามเพิ่ม generator ซ้ำใน Suitelet
 - FreeMarker: ห้าม ternary `${a ? b : c}` (ไม่ใช่ syntax FreeMarker — ใช้ `?then()` หรือ `<#if>`), binding ทุกตัวต้อง null-safe `${record.field!""}`
 - CSS ที่ BFO ไม่รองรับ (เช่น `object-fit`, `text-overflow: ellipsis`, CSS `@page` margin boxes + `counter()`) — header/footer ซ้ำทุกหน้าใช้ `<macrolist>` + `<pagenumber/>`/`<totalpages/>`
@@ -31,8 +33,11 @@ Rules ที่เจอบ่อยใน repo นี้:
 ## Workflow แนะนำ (token-saving)
 
 - อ่าน `docs/architecture/OVERVIEW.md` ก่อนเริ่มงานใหม่ — มี map ของ services/components ทั้งหมด
+- อ่าน `docs/AGENT-WORKFLOW.md` เมื่อต้องแบ่งงาน/ส่งต่องานหรือทำงานผ่านหลาย context — ใช้
+  contract เดียวกันและไม่สำรวจซ้ำเมื่อ explorer ส่ง map ที่เพียงพอแล้ว
 - `designer/src/` มี 60+ ไฟล์ — เปิดเฉพาะไฟล์ที่เกี่ยว อย่าโหลดทั้งโฟลเดอร์; จุดศูนย์กลาง: `state/store.ts` (Lit Context + Immer), `state/actions.ts`, `services/bfo-export.service.ts`
-- งาน NetSuite deploy/QA ใช้ skill: `netsuite-qa-browser`, `netsuite-suiteql`, `netsuite-suitelet`
+- งาน NetSuite validate/deploy/render/save-parity ใช้ skill `pdf-template-delivery`; อ่าน reference
+  เฉพาะ mode ที่กำลังทำ และให้ primary agent ถือ live action ทั้งหมด
 
 ## ห้ามทำใน repo นี้
 

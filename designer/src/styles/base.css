@@ -17,19 +17,19 @@ html, body {
 }
 
 body {
-  font-family: var(--font-sans);
-  background: var(--color-bg-deep);
-  color: var(--color-text);
-  font-size: var(--text-base);
-  line-height: var(--leading-normal);
+  font-family: var(--f-sans);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-size: var(--t-base);
+  line-height: var(--lh-normal);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 /* ─── Selection ─── */
 ::selection {
-  background: var(--color-accent);
-  color: #fff;
+  background: var(--c-brand);
+  color: var(--c-brand-on);
 }
 
 /* ─── Scrollbar ─── */
@@ -41,16 +41,16 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
+  background: var(--c-border-control);
+  border-radius: var(--r-pill);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
+  background: var(--c-text-muted);
 }
 
 /* ─── Focus Ring ─── */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--c-text);
   outline-offset: 2px;
 }
 
@@ -68,6 +68,14 @@ body {
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ─── Utility: Resizing cursor ─── */

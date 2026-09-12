@@ -46,7 +46,7 @@ test('ตัวอย่างมีทุก key ที่ binding contract ป
 
 test('ทุกแถวของตัวอย่างมีทุก key ของ ITEM_BINDING_KEYS (ว่างได้ แต่ต้องมี)', () => {
   const lib = loadInvoiceData();
-  const rows = lib.buildSampleData('invoice').items;
+  const rows = lib.buildSampleData('invoice').item;
 
   assert.ok(rows.length >= 2, 'ต้องมีหลายแถวให้เห็นว่าตารางขึ้นบรรทัดอย่างไร');
   for (const row of rows) {
@@ -74,7 +74,7 @@ test('ยอดในตัวอย่างสอดคล้องกัน�
   assert.equal(sample.totalText, '160,500.00');
   assert.match(sample.totals.bahtText, /บาทถ้วน$/);
   // แถวสินค้ารวมกันได้เท่ากับยอดก่อนหักส่วนลด
-  const sum = sample.items.reduce((acc, r) => acc + Number(r.amount || 0), 0);
+  const sum = sample.item.reduce((acc, r) => acc + Number(r.amount || 0), 0);
   assert.equal(sum, 152500);
 });
 
@@ -104,8 +104,8 @@ test('ใบเสร็จรับเงินได้แถวเป็น�
   const sample = loadInvoiceData().buildSampleData('customerpayment');
 
   assert.ok(sample.items.length > 0);
-  assert.ok(sample.items[0].refnum, 'แถวของใบเสร็จคือเลขที่เอกสารที่ตัดชำระ');
-  assert.equal(sample.items[0].item, '', 'ช่องสินค้าต้องว่าง แต่ต้องมี key อยู่');
+  assert.equal(sample.items[0].name, sample.apply[0].refnum, 'แถวของใบเสร็จคือเลขที่เอกสารที่ตัดชำระ');
+  assert.equal(sample.items[0].code, '', 'ช่องรหัสสินค้าต้องว่าง');
   assert.ok(sample.paymentText, 'ยอดที่รับมาต้องมีค่า');
   sample.apply.forEach((row) => {
     assert.notEqual(row.amount, '', 'ทุกเอกสารที่ตัดชำระต้องมียอดรับชำระ');
@@ -125,6 +125,64 @@ test('rectype ที่ engine ไม่รู้จัก ยังได้เ
   const sample = loadInvoiceData().buildSampleData('somethingelse');
   assert.ok(sample.document.titleTH);
   assert.ok(sample.items.length > 0);
+});
+
+test('designer Invoice sample populates curated columns with live display formatting', () => {
+  const sample = loadInvoiceData().buildSampleData('invoice');
+  assert.deepEqual(JSON.parse(JSON.stringify(sample.items[1])), {
+    no: 2, code: 'ITEM-B220', name: 'ITEM-B220',
+    memo: sample.items[1].memo,
+    description: 'ITEM-B220\n' + sample.items[1].memo,
+    quantity: '5', unit: 'กล่อง', unit_price: '2,500.00', discount: '', amount: '12,500.00',
+  });
+  assert.ok(sample.items[1].memo.length > 0);
+  assert.equal(sample.item[1].rate, 2500);
+  assert.equal(sample.item[1].amount, 12500);
+  assert.equal(sample.item[1].total, null);
+  sample.items[1].amount = 'edited';
+  assert.equal(sample.item[1].amountText, '12,500.00', 'curated edits must not mutate the raw contract');
+});
+
+test('every document sample keeps curated and raw rows aligned with payment and delivery semantics', () => {
+  const lib = loadInvoiceData();
+  for (const type of lib.supportedTypes) {
+    const sample = lib.buildSampleData(type);
+    assert.equal(sample.apply, sample.item, type + ': live apply aliases the raw printed rows');
+    assert.notEqual(sample.items, sample.item);
+    assert.equal(sample.items.length, sample.item.length);
+    sample.item.forEach((raw, index) => {
+      const curated = sample.items[index];
+      for (const key of lib.itemBindingKeys) assert.ok(Object.hasOwn(raw, key), type + ': ' + key);
+      assert.equal(curated.no, index + 1);
+      assert.equal(curated.unit, raw.units);
+      assert.equal(curated.quantity, raw.quantityText);
+      assert.equal(curated.unit_price, raw.rateText);
+      assert.equal(curated.amount, raw.amountText);
+      if (type === 'itemfulfillment') {
+        assert.equal(raw.rate, null);
+        assert.equal(raw.amount, null);
+        assert.equal(curated.unit_price, '');
+        assert.equal(curated.amount, '');
+        assert.ok(raw.quantity > 0);
+        assert.ok(curated.unit);
+      } else if (type === 'customerpayment') {
+        assert.equal(curated.description, raw.refnum);
+        assert.equal(raw.item, raw.refnum);
+        assert.equal(raw.quantity, null);
+        assert.equal(raw.rate, null);
+        assert.equal(curated.quantity, '');
+        assert.equal(curated.unit_price, '');
+        assert.equal(typeof raw.amount, 'number');
+        assert.equal(typeof raw.total, 'number');
+      } else {
+        assert.ok(curated.unit);
+        assert.ok(curated.unit_price);
+        assert.equal(typeof raw.rate, 'number');
+        assert.equal(typeof raw.amount, 'number');
+        assert.equal(raw.refnum, '');
+      }
+    });
+  }
 });
 
 // ═══════════════════════════════════════════════════
@@ -164,6 +222,9 @@ test('?action=sample-data คืนทั้งข้อมูลตัวอย
   assert.equal(body.rectype, 'invoice');
   assert.equal(body.curated, true);
   assert.ok(body.data.document.number);
+  assert.equal(body.data.items[1].unit, 'กล่อง');
+  assert.equal(body.data.items[1].unit_price, '2,500.00');
+  assert.equal(body.data.item[1].rate, 2500);
   assert.ok(body.contract.record.includes('totalText'), 'contract ต้องมากับข้อมูล — SPA จะได้ไม่ถือลิสต์เอง');
   assert.ok(body.contract.line.includes('amountText'));
   assert.deepEqual(body.contract.copy, ['th', 'en', 'label']);
@@ -223,4 +284,15 @@ test('พรีวิวที่ไม่มีทั้ง record และ sa
   const body = JSON.parse(response.state.body);
   assert.equal(body.error, true);
   assert.match(body.message, /sample:true/);
+});
+
+test('reference sample carries synthetic company bindings without looking up a transaction', () => {
+  const data = loadInvoiceData().buildSampleData('invoice');
+  assert.equal(data.referenceCompany.name, data.company.name);
+  assert.equal(data.referenceCompany.address, data.company.address);
+  assert.equal(data.referenceCompany.logo, data.company.logo);
+  assert.equal(data.referenceCompany.branchCode, data.company.branchCode);
+  assert.notEqual(data.referenceCompany, data.company);
+  assert.equal(data.document.currencyCode, 'THB');
+  assert.ok(data.totals.amountInWords);
 });

@@ -24,6 +24,7 @@ import { AppStore } from '../../src/state/store';
 import { addElementToNewBand } from '../../src/state/actions';
 import { set } from 'idb-keyval';
 import { saveDraft, getDraft, saveTemplate, saveTemplateToNetSuite } from '../../src/services/template.service';
+import { exportBfoXml } from '../../src/services/bfo-export.service';
 
 const savedBodies: Record<string, unknown>[] = [];
 const originalWindow = (globalThis as { window?: unknown }).window;
@@ -61,6 +62,35 @@ describe('saveTemplateToNetSuite (#137)', () => {
     store.dispatch((d) => { d.template.name = 'My Template'; });
     return store;
   }
+
+  it('rejects a standalone new save before sending any request and releases the save lock', async () => {
+    mockNs({ userId: 1, recordType: null });
+    const store = storeWithContent();
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow('เลือกประเภทเอกสาร');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(store.state.template.id).toBeNull();
+    await expect(saveTemplateToNetSuite(store, { rectype: 'invoice', isDefault: false })).resolves.toEqual({ id: '42' });
+    expect(savedBodies[0]).toMatchObject({ rectype: 'invoice', isDefault: false });
+  });
+
+  it('requires selection for loaded blank metadata even when the launch context has a type', async () => {
+    const store = storeWithContent();
+    store.dispatch(d => { d.template.id = '44'; d.template.nsMetadata = { rectype: '', isDefault: false }; });
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow('เลือกประเภทเอกสาร');
+    expect(fetch).not.toHaveBeenCalled();
+    await saveTemplateToNetSuite(store, { rectype: 'purchaseorder', isDefault: false });
+    expect(savedBodies[0]).toMatchObject({ id: '44', rectype: 'purchaseorder', isDefault: false });
+  });
+
+  it.each([undefined, { rectype: 'purchaseorder', isDefault: false }])('preserves server fields for an existing ID with metadata %j', async metadata => {
+    mockNs({ userId: 1, recordType: null });
+    const store = storeWithContent();
+    store.dispatch(d => { d.template.id = '42'; d.template.nsMetadata = metadata; });
+    await saveTemplateToNetSuite(store);
+    expect(savedBodies[0]).not.toHaveProperty('rectype');
+    expect(savedBodies[0]).not.toHaveProperty('isDefault');
+    expect(store.state.template.nsMetadata).toEqual(metadata);
+  });
 
   it('does not mark a newer local edit clean when IndexedDB finishes', async () => {
     let complete!: () => void;
@@ -167,6 +197,40 @@ describe('saveTemplateToNetSuite (#137)', () => {
     const data = JSON.parse(body.data);
     expect(data.bands).toBeTruthy();
     expect(data.elements).toHaveLength(1);
+  });
+
+  it('POSTs canonical XML unchanged and omits designer data for an XML-only record', async () => {
+    const store = storeWithContent();
+    const canonical = `${exportBfoXml(store.state)}\n<!-- preserve trailing source -->\n`;
+    store.dispatch((draft) => {
+      draft.editorMode = 'xml';
+      draft.rawXml = canonical;
+      draft.elements = [];
+      draft.bands = [];
+      draft.template.id = '207';
+      draft.template.nsMetadata = { rectype: 'invoice', isDefault: false };
+      draft.template.isDirty = true;
+    });
+
+    await saveTemplateToNetSuite(store);
+
+    expect(savedBodies[0].xml).toBe(canonical);
+    expect(savedBodies[0]).not.toHaveProperty('data');
+    expect(savedBodies[0]).not.toHaveProperty('rectype');
+    expect(store.state.template).toMatchObject({ id: '42', isDirty: false });
+  });
+
+  it('rejects empty canonical XML before sending a save request', async () => {
+    const store = storeWithContent();
+    store.dispatch((draft) => {
+      draft.editorMode = 'xml';
+      draft.rawXml = '  \n';
+      draft.template.id = '207';
+    });
+
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow(/XML.*empty|XML.*ว่าง/i);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(store.state.template.isDirty).toBe(true);
   });
 
   it('retains the durable saved ID and propagates server warnings', async () => {

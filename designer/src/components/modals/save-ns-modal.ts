@@ -11,6 +11,7 @@
  * @author Wichit Wongta
  * @since 2026-07-24
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css, nothing, type PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
@@ -29,9 +30,9 @@ export class PldSaveNsModal extends LitElement {
   @property({ type: Boolean }) open = false;
 
   @state() private recordType = DEFAULT_RECORD_TYPE;
-  // Default on: a template designed from a record is almost always the one Print
-  // should use (#70). The Print button loads the rectype default (no tplid).
-  @state() private setAsDefault = true;
+  // New designs must opt in before replacing the record type's Print default.
+  // Existing NetSuite metadata preserves the saved choice when editing.
+  @state() private setAsDefault = false;
   @state() private saving = false;
   @state() private saveError = "";
 
@@ -40,30 +41,30 @@ export class PldSaveNsModal extends LitElement {
       this.saveError = '';
       const metadata = this.store?.state.template.nsMetadata;
       this.recordType = metadata?.rectype || getNsContext()?.recordType || DEFAULT_RECORD_TYPE;
-      this.setAsDefault = metadata?.isDefault ?? !this.store?.state.template.id;
+      this.setAsDefault = metadata?.isDefault ?? false;
     }
   }
 
   static styles = css`
     .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-    label { font-size: 13px; font-weight: 600; color: var(--color-text, #e8e9f0); }
+    label { font-size: 13px; font-weight: 600; color: var(--c-text); }
     select {
       padding: 8px 10px;
-      background: var(--color-bg-deep, #0a0b10);
-      border: 1px solid var(--color-border, #2a2c3a);
+      background: var(--c-bg);
+      border: 1px solid var(--c-border);
       border-radius: 6px;
-      color: var(--color-text, #e8e9f0);
+      color: var(--c-text);
       font-family: inherit;
       font-size: 13px;
     }
     .check-item { display: flex; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
-    .hint { font-size: 12px; color: var(--color-text-dim, #8a8ca0); line-height: 1.5; }
+    .hint { font-size: 12px; color: var(--c-text-subtle); line-height: 1.5; }
     .no-default-hint {
       font-size: 12px;
       line-height: 1.5;
-      color: var(--color-warning, #f5a623);
-      background: rgba(245, 166, 35, 0.1);
-      border: 1px solid var(--color-warning, #f5a623);
+      color: var(--c-warning);
+      background: var(--c-warning-soft);
+      border: 1px solid var(--c-warning);
       border-radius: 6px;
       padding: 8px 10px;
       margin-top: 8px;
@@ -71,35 +72,41 @@ export class PldSaveNsModal extends LitElement {
     .denied-hint {
       font-size: 12px;
       line-height: 1.6;
-      color: var(--color-warning, #f5a623);
-      background: rgba(245, 166, 35, 0.1);
-      border: 1px solid var(--color-warning, #f5a623);
+      color: var(--c-warning);
+      background: var(--c-warning-soft);
+      border: 1px solid var(--c-warning);
       border-radius: 6px;
       padding: 10px 12px;
       margin-bottom: 16px;
     }
     .footer-btns { display: flex; gap: 8px; justify-content: flex-end; }
     .btn {
-      padding: 8px 16px; border-radius: 6px; border: 1px solid var(--color-border, #2a2c3a);
-      background: var(--color-bg-hover, #222430); color: var(--color-text, #e8e9f0);
+      padding: 8px 16px; border-radius: 6px; border: 1px solid var(--c-border);
+      background: var(--c-surface-3); color: var(--c-text);
       cursor: pointer; font-size: 13px; font-family: inherit;
     }
-    .btn-primary { background: var(--color-accent, #4f6ef7); border-color: var(--color-accent, #4f6ef7); color: #fff; }
+    .btn-primary { background: var(--c-brand); border-color: var(--c-brand); color: var(--c-brand-on); }
     .btn:disabled { opacity: .5; cursor: default; }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+    button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   render() {
-    if (!this.open) return nothing;
+    // Keep the controlled modal mounted so its close lifecycle restores focus
+    // before the native dialog is removed from the top layer.
     return html`
-      <pld-modal .open=${this.open} modalTitle="💾 บันทึกเข้า NetSuite" size="md" @close=${this._close}>
+      <pld-modal .open=${this.open} modalTitle="บันทึกเข้า NetSuite" size="md" @close=${this._close}>
         <div slot="body">
           ${this.saveError ? html`<p class="denied-hint" role="alert">${this.saveError}</p>` : nothing}
           ${canEditNsTemplates() ? nothing : html`
-            <div class="denied-hint">🔒 ${READ_ONLY_REASON}</div>
+            <div class="denied-hint">${icon('lock')} ${READ_ONLY_REASON}</div>
           `}
           <div class="field">
-            <label>ประเภทเอกสาร (NetSuite Record Type)</label>
-            <select aria-label="ประเภทเอกสาร" ?disabled=${this.saving} @change=${(e: Event) => { this.recordType = (e.target as HTMLSelectElement).value; }}>
+            <label for="save-ns-modal-field-1">ประเภทเอกสาร (NetSuite Record Type)</label>
+            <select id="save-ns-modal-field-1" aria-label="ประเภทเอกสาร" ?disabled=${this.saving} @change=${(e: Event) => { this.recordType = (e.target as HTMLSelectElement).value; }}>
               ${recordTypeOptions(this.recordType).map((rt) => html`
                 <option value=${rt.value} ?selected=${rt.value === this.recordType}>${rt.label}</option>
               `)}

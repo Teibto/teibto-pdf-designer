@@ -26,11 +26,12 @@
 | เช็ค | คำสั่ง | baseline |
 |---|---|---|
 | Type | `npx tsc --noEmit` | 0 error |
-| Unit + component | `npx vitest run` | 593 passed |
-| E2E | `npx playwright test` | 87 passed (branch ปัจจุบัน 2026-09-11) |
+| Unit + component + coverage | `npm run test:coverage` | 733 passed; 83.06/77.46/85.23/84.31% statements/branches/functions/lines (branch ปัจจุบัน 2026-09-12) |
+| E2E | `npx playwright test` | 91 passed รวม fixed-Chromium startup, 10,000-row form, 500-element resize และ 100-switch DOM/listener regressions (branch ปัจจุบัน 2026-09-12) |
+| Production performance | `npm run test:performance` | 2 passed: serial production-preview cold 20 + warm 30 runs, resource/size/long-task/TBT/lazy-barcode budgets |
 | Lint | `npm run lint` | 0 error (warning `any` เดิม ~46 ไม่นับ) |
 | Secret (จาก repo root) | `bash scripts/secret-scan.sh` | no leaks |
-| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 328 passed (branch ปัจจุบัน 2026-09-11) |
+| Engine unit (จาก repo root) | `node --test "engine/tests/**/*.test.js"` | 335 passed (branch ปัจจุบัน 2026-09-12) |
 | Template pack (จาก repo root) | `bash scripts/validate-templates.sh` | ✅ ผ่านทุกไฟล์ |
 
 CI `quality-gate` รัน lint + vitest + e2e + template validator + engine unit test + secret-scan — ตั้งแต่ #155 **ครอบ `engine/` ด้วย** (`node --check` ทุกไฟล์ + `node --test`) ไม่ต้องเช็ค syntax มือแล้ว แต่ change ที่แตะ BFO output ยังต้อง QA สดบน SB2 เหมือนเดิม

@@ -27,8 +27,9 @@ define([
   'N/runtime',
   'N/format',
   './pld_lib_company_config',
-  './pld_lib_invoice_data'
-], function (render, record, search, runtime, format, companyConfig, invoiceData) {
+  './pld_lib_invoice_data',
+  './pld_lib_invoice_reference'
+], function (render, record, search, runtime, format, companyConfig, invoiceData, invoiceReference) {
 
   // ─── Template custom record ───
   var TPL = {
@@ -278,7 +279,8 @@ define([
     }
     if (tel) tel.stage = 'render';
 
-    var snapshot = curatedType ? freezeSnapshot(invoiceData.buildTransactionData(recType, recId)) : null;
+    var snapshot = referenceData(tplXml, curatedType ? invoiceData.buildTransactionData(recType, recId) : null, recType, recId);
+    if (snapshot) freezeSnapshot(snapshot);
     var tranId = '';
     var docs = copies.map(function (c) {
       var curated = snapshot ? dataForCopy(snapshot, recType, c) : null;
@@ -324,7 +326,8 @@ define([
    * rather than produce a set that silently drops a copy (R4).
    */
   function extractPdfDoc(resolved) {
-    var start = resolved.indexOf('<pdf>');
+    var root = /<pdf(?:\s[^<>]*?)?>/.exec(resolved);
+    var start = root ? root.index : -1;
     var end = resolved.lastIndexOf('</pdf>');
     if (start < 0 || end < 0) {
       throw new Error('renderAsString produced no <pdf> document — cannot build the copy set');
@@ -355,6 +358,7 @@ define([
       var singleData = invoiceData.isSupportedType(recType)
         ? invoiceData.buildTransactionData(recType, recId, only.th, only.en)
         : null;
+      singleData = referenceData(tplXml, singleData, recType, recId);
       var out = renderXmlWithRecord(tplXml, recType, recId, singleData, tel, only);
       return { pdfFile: out.pdfFile, rec: out.rec, tranId: '' };
     }
@@ -380,18 +384,30 @@ define([
    *
    * @returns {{pdfFile: Object}}
    */
-  function renderSampleDocument(tplXml, recType, copies, tel) {
+  function referenceData(tplXml, data, recType, recId) {
+    var comments = tplXml.match(/<#--[\s\S]*?-->/g) || [];
+    if (!comments.some(function (comment) { return /^\s*pld:reference-layout\s*$/m.test(comment); })) return data;
+    if (recType !== 'invoice' || !data) throw new Error('Reference invoice layout requires a curated invoice');
+    return invoiceReference.enrich(data, recId);
+  }
+
+  function renderSampleDocument(tplXml, recType, copies, tel, suppliedData) {
     assertCopyCount(copies);
     if (tel) tel.stage = 'render';
 
+    var snapshot = suppliedData ? freezeSnapshot(JSON.parse(JSON.stringify(suppliedData))) : null;
+    function sampleForCopy(c) {
+      return snapshot ? dataForCopy(snapshot, recType, c) : invoiceData.buildSampleData(recType, c.th, c.en);
+    }
+
     if (copies.length === 1) {
       var only = copies[0];
-      var data = invoiceData.buildSampleData(recType, only.th, only.en);
+      var data = sampleForCopy(only);
       return { pdfFile: makeRenderer(tplXml, data, null, tel, only).renderAsPdf() };
     }
 
     var docs = copies.map(function (c) {
-      var perCopy = invoiceData.buildSampleData(recType, c.th, c.en);
+      var perCopy = sampleForCopy(c);
       return extractPdfDoc(makeRenderer(tplXml, perCopy, null, tel, c).renderAsString());
     });
     if (tel) tel.stage = 'copyset';

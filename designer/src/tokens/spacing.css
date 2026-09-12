@@ -1,46 +1,70 @@
-/* ═══════════════════════════════════════
-   SPACING & SHADOW TOKENS
-   ═══════════════════════════════════════ */
-
+/* Oracle Redwood spacing, radius, elevation and control metrics.
+ * @author Wichit Wongta
+ * @since 2026-09-11
+ */
 :root {
-  /* ─── Spacing Scale ─── */
-  --space-0:  0;
-  --space-1:  4px;
-  --space-2:  6px;
-  --space-3:  8px;
-  --space-4:  10px;
-  --space-5:  12px;
-  --space-6:  14px;
-  --space-7:  16px;
-  --space-8:  20px;
-  --space-9:  24px;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --r-pill: 999px;
+  --sh-sm: 0 1px 4px 0 rgba(0, 0, 0, 0.12);
+  --sh-md: 0 4px 8px 0 rgba(0, 0, 0, 0.16);
+  --sh-lg: 0 8px 24px 0 rgba(0, 0, 0, 0.20);
+  --btn-h: 32px;
+  --btn-px: 14px;
+  --tap-min: 40px;
+  --focus-ring: 0 0 0 2px var(--c-text);
+  --focus-ring-inverse: 0 0 0 2px var(--c-sidebar-text);
+  --layout-sidebar: 280px;
+  --layout-inspector: 280px;
+  --layout-topbar: 56px;
+  --icon: 18px;
+  --icon-lg: 20px;
+  --space-0: 0;
+  --space-1: var(--s-1);
+  --space-2: 6px;
+  --space-3: var(--s-2);
+  --space-4: 10px;
+  --space-5: var(--s-3);
+  --space-6: 14px;
+  --space-7: var(--s-4);
+  --space-8: var(--s-5);
+  --space-9: var(--s-6);
   --space-10: 30px;
-  --space-12: 40px;
-
-  /* ─── Border Radius ─── */
-  --radius-xs: 2px;
-  --radius-sm: 6px;
-  --radius:    10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
-
-  /* ─── Shadows ─── */
-  --shadow-sm:  0 2px 8px rgba(0, 0, 0, 0.2);
-  --shadow-md:  0 4px 24px rgba(0, 0, 0, 0.3);
-  --shadow-lg:  0 20px 60px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 4px 12px rgba(79, 110, 247, 0.15);
-
-  /* ─── Transitions ─── */
+  --space-12: var(--s-10);
+  --radius-xs: var(--r-sm);
+  --radius-sm: var(--r-md);
+  --radius: var(--r-lg);
+  --radius-lg: var(--r-lg);
+  --radius-xl: 8px;
+  --radius-full: var(--r-pill);
+  --shadow-sm: var(--sh-sm);
+  --shadow-md: var(--sh-md);
+  --shadow-lg: var(--sh-lg);
+  --shadow-glow: var(--sh-sm);
   --transition-fast: 0.15s ease;
-  --transition-base: 0.2s ease;
-  --transition-slow: 0.3s ease;
-
-  /* ─── Z-Index Scale ─── */
-  --z-base:     1;
+  --transition-base: 0.18s ease;
+  --transition-slow: 0.24s ease;
+  --z-base: 1;
   --z-dropdown: 10;
-  --z-sticky:   20;
-  --z-overlay:  100;
-  --z-modal:    500;
-  --z-toast:    1000;
+  --z-sticky: 20;
+  --z-overlay: 100;
+  --z-modal: 500;
+  --z-toast: 1000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0s;
+    --transition-base: 0s;
+    --transition-slow: 0s;
+  }
 }

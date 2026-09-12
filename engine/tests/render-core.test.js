@@ -41,6 +41,7 @@ function buildCore({ templates = [], recordValues = {}, asString, curated = fals
     values: Object.assign({ tranid: 'IF-0001', subsidiary: '2' }, recordValues),
   });
   const curatedCalls = [];
+  const referenceCalls = [];
   const stubs = {
     'N/render': render.module,
     'N/record': rec.module,
@@ -48,6 +49,9 @@ function buildCore({ templates = [], recordValues = {}, asString, curated = fals
     'N/runtime': runtimeStub(),
     'N/format': formatStub,
     './pld_lib_company_config': companyConfigStub,
+    './pld_lib_invoice_reference': {
+      enrich: (data, id) => { referenceCalls.push(id); return { ...data, referenceCompany: { name: 'Synthetic branch' } }; },
+    },
     './pld_lib_invoice_data': {
       isSupportedType: () => curated,
       docTitles: { invoice: { th: 'ใบแจ้งหนี้', en: 'Invoice' } },
@@ -57,7 +61,7 @@ function buildCore({ templates = [], recordValues = {}, asString, curated = fals
       },
     },
   };
-  return { core: loadAmd('./pld_lib_render', stubs), render, search, rec, curatedCalls };
+  return { core: loadAmd('./pld_lib_render', stubs), render, search, rec, curatedCalls, referenceCalls };
 }
 
 // ─── document → render passes ────────────────────────────────────────────────
@@ -197,6 +201,33 @@ test('only the core builds render data sources — no second render path', () =>
   assert.deepEqual(owners, ['pld_lib_render.js']);
 });
 
+test('reference enrichment is opt-in and runs for single and multiple real invoice copies', () => {
+  const x = buildCore({ curated: true });
+  x.core.renderDocument(TPL_XML, 'invoice', 42, TWO_COPIES.slice(0, 1));
+  assert.deepEqual(x.referenceCalls, []);
+  x.core.renderDocument('<#--\npld:reference-layout\n-->' + TPL_XML, 'invoice', 42, TWO_COPIES.slice(0, 1));
+  x.core.renderDocumentXml('<#--\npld:reference-layout\n-->' + TPL_XML, 'invoice', 42, TWO_COPIES);
+  assert.deepEqual(x.referenceCalls, [42, 42]);
+});
+
+test('copy extraction preserves attributed PDF root required by the bilingual reference', () => {
+  const x = buildCore({ asString: '<pdf lang="th" xml:lang="th"><body>test</body></pdf>' });
+  const out = x.core.renderDocumentXml(TPL_XML, 'invoice', 42, TWO_COPIES);
+  assert.equal(out.docs.length, 2);
+  assert.ok(out.docs[0].startsWith('<pdf lang="th"'));
+});
+
+test('50-row supplied fixture renders every requested copy without mutating input', () => {
+  const x = buildCore();
+  const data = { document: { copyTH: 'untouched' }, items: Array.from({ length: 50 }, (_, i) => ({ no: i + 1 })) };
+  x.core.renderSampleDocument(TPL_XML, 'invoice', TWO_COPIES, null, data);
+  assert.equal(data.document.copyTH, 'untouched');
+  assert.deepEqual(x.referenceCalls, []);
+  assert.equal(x.render.calls.created, 2);
+  const bound = x.render.calls.dataSources.filter(ds => ds.alias === 'record');
+  assert.deepEqual(bound.map(ds => ds.data.items.length), [50, 50]);
+  assert.deepEqual(bound.map(ds => ds.data.document.copyTH), ['ต้นฉบับ', 'สำเนา']);
+});
 
 test('copy work limit rejects 21 copies before loading transactions or creating renderers', () => {
   const { core, render, curatedCalls } = buildCore({ curated: true });
@@ -230,4 +261,16 @@ test('duplicate active defaults fail visibly before rendering rather than choosi
   assert.throws(() => core.resolveTemplate('', 'invoice'), /default template มากกว่าหนึ่ง.*invoice.*ผู้ดูแล/);
   assert.equal(requestedRanges[0].end, 2, 'the server must request enough rows to detect ambiguity');
   assert.equal(render.calls.created, 0);
+});
+
+test('reference marker must be a metadata line inside one FreeMarker comment', () => {
+  const x = buildCore({ curated: true });
+  for (const xml of [
+    '<#-- normal comment -->\npld:reference-layout\n<#-- another comment -->' + TPL_XML,
+    '<#-- mention pld:reference-layout in prose -->' + TPL_XML,
+    '<!--\npld:reference-layout\n-->' + TPL_XML,
+  ]) x.core.renderDocumentXml(xml, 'invoice', 42, TWO_COPIES);
+  assert.deepEqual(x.referenceCalls, []);
+  const raw = buildCore();
+  assert.throws(() => raw.core.renderDocumentXml('<#--\npld:reference-layout\n-->' + TPL_XML, 'other', 42, TWO_COPIES), /requires a curated invoice/);
 });

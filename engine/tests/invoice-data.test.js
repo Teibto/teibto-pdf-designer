@@ -604,3 +604,12 @@ test('line queries exclude the COGS/asset rows an inventory item generates (#185
       'every transactionline read must exclude COGS/asset rows (#185): ' + q.slice(0, 120));
   }
 });
+
+test('reference invoice fields reflect native source, legal buyer and settlement deductions', () => {
+  const data = buildLib({ values: { custbody_thl_entlegalname: 'บริษัท ผู้ซื้อสังเคราะห์ จำกัด', custbody_thl_entbranchno: '00007' }, sums: [...SUMS, { sumtype: 'Cash Coupon', total: -100 }, { sumtype: 'Withholding Tax', total: -300 }] }).buildTransactionData('invoice', 42);
+  assert.equal(data.document.refSo, 'SO2026-0044');
+  assert.equal(data.document.docInfoRows[3].value, data.document.refSo);
+  assert.equal(data.customer.branchCode, '00007');
+  assert.equal(plain(data.customer.name), 'บริษัท ผู้ซื้อสังเคราะห์ จำกัด');
+  assert.equal(data.totals.customerPaid, '10,300.00');
+});

@@ -333,6 +333,25 @@ define([
   // LIVE PREVIEW — render unsaved designer XML against the real record (#12)
   // ═══════════════════════════════════════════════════
 
+  /** Same persisted-input bounds as the durable batch snapshot pipeline. */
+  var MAX_PREVIEW_XML_CHARS = 1000000;
+  var MAX_PREVIEW_PAYLOAD_BYTES = 8 * 1024 * 1024;
+
+  function utf8Bytes(text) {
+    var bytes = 0;
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      if (c < 128) bytes++;
+      else if (c < 2048) bytes += 2;
+      else if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length &&
+          text.charCodeAt(i + 1) >= 0xdc00 && text.charCodeAt(i + 1) <= 0xdfff) {
+        bytes += 4;
+        i++;
+      } else bytes += 3;
+    }
+    return bytes;
+  }
+
   /**
    * Preview the CURRENT (unsaved) designer XML with the same record + data
    * sources Print uses — guarantees "preview == print". POST body:
@@ -347,7 +366,22 @@ define([
     }
 
     tel.stage = 'parse-body';
-    var body = JSON.parse(context.request.body || '{}');
+    var rawBody = context.request.body || '{}';
+    if (typeof rawBody !== 'string') throw new Error('preview-live request body must be JSON text');
+    if (utf8Bytes(rawBody) > MAX_PREVIEW_PAYLOAD_BYTES) {
+      throw new Error('preview-live request body exceeds the 8 MiB UTF-8 payload limit');
+    }
+    var body = JSON.parse(rawBody);
+    if (typeof body.xml !== 'string') {
+      throw new Error('preview-live requires xml (export BFO from the designer)');
+    }
+    if (body.xml.length > MAX_PREVIEW_XML_CHARS) {
+      throw new Error('preview-live XML exceeds the 1000000 character limit');
+    }
+    var renderPayload = JSON.stringify({ xml: body.xml, data: body.data, copies: body.copies });
+    if (utf8Bytes(renderPayload) > MAX_PREVIEW_PAYLOAD_BYTES) {
+      throw new Error('preview-live XML/data/copies exceed the 8 MiB UTF-8 payload limit');
+    }
     if (!body.xml)     throw new Error('preview-live requires xml (export BFO from the designer)');
     if (!body.rectype) throw new Error('preview-live requires rectype');
     if (!body.recid && !body.data && body.sample !== true) {
@@ -374,8 +408,7 @@ define([
       out = pldRender.renderSampleDocument(body.xml, body.rectype, pvCopies, tel);
     } else if (body.data) {
       // synthetic-data preview (#75): caller supplies the bound object itself
-      out = { pdfFile: pldRender.makeRenderer(body.xml, body.data, null, tel, pvCopies[0]).renderAsPdf() };
-      copiesCount = 1;
+      out = pldRender.renderSampleDocument(body.xml, body.rectype, pvCopies, tel, body.data);
     } else {
       out = pldRender.renderDocument(body.xml, body.rectype, body.recid, pvCopies, tel);
     }

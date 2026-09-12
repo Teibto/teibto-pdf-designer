@@ -8,7 +8,9 @@ rendering, metadata-only planning/finalization, a separate bounded merge reduce 
 PDF-byte downloads. Owner-triggered merge recovery verifies the prior task is terminal and claims
 the job atomically. These are local implementations, not native-account security or capacity proof.
 Owner-triggered render recovery before plan publication is implemented locally. Failed sequences after a sealed plan can create a linked child job locally.
-Age-based retention and native capacity QA remain unfinished.
+User retention decision (2026-09-12): keep output files until explicit user deletion; no age-based
+deletion is planned. Native capacity QA and the explicit-deletion permission/UX boundary remain
+unverified. See [integrated acceptance](PRODUCTION-ACCEPTANCE.md).
 Bounded orphan adoption is implemented locally for PART and CHUNK retries.
 Owner-triggered cleanup of published XML inputs is bounded and implemented locally.
 
@@ -115,9 +117,9 @@ tokens are not protection against malicious rollback.
 5. Finalization publishes an ordered result manifest with requested/succeeded/failed counts and
    missing sequence details. COMPLETE requires accounting for every requested document;
    PARTIAL must be prominent in the UI. Downloads address authorized job/chunk references.
-6. Retention removes only unreferenced private artifacts after committed results are safe and
-   the recovery window has elapsed. A failed deletion is tracked for retry; it does not turn a
-   successfully published PDF into a failed print.
+6. Explicit cleanup removes only authenticated eligible private artifacts after committed results
+   are safe and workers are proven terminal. No elapsed-time rule triggers deletion. A failed
+   deletion is tracked for retry; it does not turn a successfully published PDF into a failed print.
 
 Sequentially calling the existing full merge several times from summarize is insufficient:
 total summarize governance would still grow with the whole job. Separate deployments/phases

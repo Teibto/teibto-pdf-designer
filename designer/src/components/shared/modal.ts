@@ -14,6 +14,7 @@
  * @author Wichit Wongta
  * @since 2026-09-09
  */
+import { icon } from './icon';
 import { LitElement, html, css, nothing, type PropertyValues } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
@@ -33,7 +34,7 @@ export class PldModal extends LitElement {
       inset: 0;
       background: transparent;
       border: 0;
-      padding: 16px;
+      padding: var(--s-4);
       margin: 0;
       width: 100%;
       height: 100%;
@@ -43,12 +44,11 @@ export class PldModal extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      animation: backdropIn 0.2s ease;
+      animation: backdropIn var(--transition-base);
     }
 
     .backdrop::backdrop {
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(4px);
+      background: var(--c-scrim);
     }
 
     .backdrop:not([open]) { display: none; }
@@ -59,14 +59,15 @@ export class PldModal extends LitElement {
     }
 
     .card {
-      background: var(--color-bg-panel, #12131a);
-      border: 1px solid var(--color-border, #2a2c3a);
-      border-radius: var(--radius-lg, 14px);
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      background: var(--c-surface);
+      color: var(--c-text);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--sh-lg);
       display: flex;
       flex-direction: column;
       max-height: 90vh;
-      animation: cardIn 0.25s ease;
+      animation: cardIn var(--transition-base);
       overflow: hidden;
       max-width: 100%;
     }
@@ -87,15 +88,16 @@ export class PldModal extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--color-border, #2a2c3a);
+      min-height: 56px;
+      padding: 0 var(--s-5);
+      border-bottom: 1px solid var(--c-border);
       flex-shrink: 0;
     }
 
     .header h2 {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--color-text, #e8e9f0);
+      font-size: var(--t-lg);
+      font-weight: var(--w-bold);
+      color: var(--c-text);
       margin: 0;
       display: flex;
       align-items: center;
@@ -103,45 +105,51 @@ export class PldModal extends LitElement {
     }
 
     .close-btn {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-      border: 1px solid var(--color-border, #2a2c3a);
-      background: var(--color-bg-card, #1a1b25);
-      color: var(--color-text-dim, #8a8ca0);
-      font-size: 14px;
+      width: var(--tap-min);
+      height: var(--tap-min);
+      border-radius: var(--r-md);
+      border: 0;
+      background: transparent;
+      color: var(--c-text-subtle);
+      font-size: var(--t-md);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s;
+      transition: background var(--transition-fast), color var(--transition-fast);
     }
 
     .close-btn:hover {
-      background: var(--color-bg-hover, #222430);
-      color: var(--color-text, #e8e9f0);
-      border-color: var(--color-danger, #ef4444);
+      background: var(--c-surface-3);
+      color: var(--c-danger);
     }
 
     /* ─── Body ─── */
     .body {
       flex: 1;
       overflow-y: auto;
-      padding: 20px;
+      padding: var(--s-5);
       min-height: 0;
     }
 
     /* ─── Footer ─── */
     .footer {
-      padding: 14px 20px;
-      border-top: 1px solid var(--color-border, #2a2c3a);
+      padding: var(--s-3) var(--s-5);
+      border-top: 1px solid var(--c-border);
+      background: var(--c-surface-2);
       flex-shrink: 0;
     }
 
     .footer ::slotted(*) {
       display: flex;
-      gap: 8px;
+      gap: var(--s-2);
       justify-content: flex-end;
+    }
+
+    .close-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .backdrop, .card { animation: none; }
     }
   `;
 
@@ -155,7 +163,7 @@ export class PldModal extends LitElement {
           <!-- Header -->
           <div class="header">
             <h2 id="modal-heading">${this.modalTitle || this.title || 'กล่องโต้ตอบ'}</h2>
-            <button class="close-btn" type="button" aria-label="ปิด / Close" @click=${this._close}>✕</button>
+            <button class="close-btn" type="button" aria-label="ปิด / Close" @click=${this._close}>${icon('close')}</button>
           </div>
 
           <!-- Body -->

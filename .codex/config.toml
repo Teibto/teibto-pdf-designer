@@ -1,0 +1,6 @@
+# @author Wichit Wongta
+# @since 2026-08-21
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 3

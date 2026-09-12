@@ -88,7 +88,7 @@ export class PldShortcutsModal extends LitElement {
     .group-title {
       font-size: 12px;
       font-weight: 600;
-      color: var(--color-accent, #4f6ef7);
+      color: var(--c-brand);
       text-transform: uppercase;
       letter-spacing: 0.04em;
       margin: 0 0 8px;
@@ -100,35 +100,40 @@ export class PldShortcutsModal extends LitElement {
       gap: 12px;
       padding: 4px 0;
     }
-    .label { font-size: 13px; color: var(--color-text, #e8e9f0); }
+    .label { font-size: 13px; color: var(--c-text); }
     .keys { display: inline-flex; gap: 4px; flex-shrink: 0; }
     kbd {
       font-family: var(--font-mono, monospace);
-      font-size: 11px;
+      font-size: var(--t-sm);
       line-height: 1;
-      color: var(--color-text, #e8e9f0);
-      background: var(--color-bg-hover, #222430);
-      border: 1px solid var(--color-border, #2a2c3a);
+      color: var(--c-text);
+      background: var(--c-surface-3);
+      border: 1px solid var(--c-border);
       border-bottom-width: 2px;
       border-radius: 4px;
       padding: 4px 6px;
       min-width: 16px;
       text-align: center;
     }
-    .sep { color: var(--color-text-dim, #8a8ca0); font-size: 11px; align-self: center; }
+    .sep { color: var(--c-text-subtle); font-size: var(--t-sm); align-self: center; }
     .hint {
       margin-top: 16px;
-      font-size: 11px;
-      color: var(--color-text-dim, #8a8ca0);
+      font-size: var(--t-sm);
+      color: var(--c-text-subtle);
       text-align: center;
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+    button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   render() {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="⌨ คีย์ลัด (Keyboard Shortcuts)"
+        modalTitle="คีย์ลัด (Keyboard Shortcuts)"
         size="lg"
         @close=${this._close}
         @keydown=${this._onKeydown}

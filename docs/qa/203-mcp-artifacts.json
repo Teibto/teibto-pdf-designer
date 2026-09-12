@@ -1,0 +1,113 @@
+{
+  "date": "2026-09-13",
+  "account": "4089685_SB2",
+  "mode": "synthetic",
+  "rendering": "NetSuite N/render",
+  "invoiceParity": "CLI, MCP SDK client, and actual Codex AI tool call have identical rendered pixels on both pages",
+  "artifacts": [
+    {
+      "file": "delivery-note-cli-sb2.pdf",
+      "bytes": 104075,
+      "pages": 2,
+      "original": true,
+      "copy": true,
+      "sample": true,
+      "pixelSha256": [
+        "5c291875271139ddacdc5fbc7536dfd07444ecc5e822ff7ad7cfaa37fdee20ef",
+        "a4223069b598ee2ba55186d30ed84e46f7d69a777cf4a3621cd2d8cccf102854"
+      ],
+      "sha256": "fffbf63b8a031c6ceaf0b41b7e80179d160600407d884e68617390c508276d8f"
+    },
+    {
+      "file": "invoice-ai-sb2.pdf",
+      "bytes": 105868,
+      "pages": 2,
+      "original": true,
+      "copy": true,
+      "sample": true,
+      "pixelSha256": [
+        "700c408c95efe71e815c81b18f46e03c724adc142883d4c1b09d21ed5a908002",
+        "d6319fe31cf833524428a314b423403bac7a9b1716deb150ea84138675008a0a"
+      ],
+      "sha256": "9aad0b4abf802fda3826d18c668d4e32d07bb38fb8a3226f93ef44c20f7f0ce6"
+    },
+    {
+      "file": "invoice-cli-sb2.pdf",
+      "bytes": 105868,
+      "pages": 2,
+      "original": true,
+      "copy": true,
+      "sample": true,
+      "pixelSha256": [
+        "700c408c95efe71e815c81b18f46e03c724adc142883d4c1b09d21ed5a908002",
+        "d6319fe31cf833524428a314b423403bac7a9b1716deb150ea84138675008a0a"
+      ],
+      "sha256": "2710b803a32452b50f3ce8c104ed1705f17cca6857e54941773ac039925d1e6a"
+    },
+    {
+      "file": "invoice-mcp-1789236149577.pdf",
+      "bytes": 105868,
+      "pages": 2,
+      "original": true,
+      "copy": true,
+      "sample": true,
+      "pixelSha256": [
+        "700c408c95efe71e815c81b18f46e03c724adc142883d4c1b09d21ed5a908002",
+        "d6319fe31cf833524428a314b423403bac7a9b1716deb150ea84138675008a0a"
+      ],
+      "sha256": "5840802b7bad94cff0ee0d0131d394866fbbc922d098517018b804f856353beb"
+    },
+    {
+      "file": "purchase-order-cli-sb2.pdf",
+      "bytes": 105832,
+      "pages": 2,
+      "original": true,
+      "copy": true,
+      "sample": true,
+      "pixelSha256": [
+        "7ef3b75956c8aec44ee308bea945f23cadbeea611bb41f34556fe28ad5501aa9",
+        "e3fef82348254efc44065acd1b8721ca7dd530e2d64c708e40453d9d4961c306"
+      ],
+      "sha256": "844b3a0cafdb1fa791c4a11ecf13caf35bb06e47ec27f28941c722ebc6127b78"
+    },
+    {
+      "file": "quotation-cli-sb2.pdf",
+      "bytes": 105757,
+      "pages": 2,
+      "original": true,
+      "copy": true,
+      "sample": true,
+      "pixelSha256": [
+        "a68992342a33787e5fc0d0c81a39cc16c66edac545e28ad068f0bec878bd1759",
+        "5cd65b31a6cc7066f516446f37cba483a9fbc29de369549c5f85ec9a434f477d"
+      ],
+      "sha256": "92b4bb02b1c89610e21f42c553ff54fe26a4e84ef1492ca9c8010a3003d016fe"
+    },
+    {
+      "file": "receipt-cli-sb2.pdf",
+      "bytes": 104903,
+      "pages": 2,
+      "original": true,
+      "copy": true,
+      "sample": true,
+      "pixelSha256": [
+        "fc9b900a81d2c155a61a6473cb96c4b95334162c85a1f42e58ed995ff91eea51",
+        "5a1f22afcf664ad9f293280ec7b51eef8222f33e3a9678368e36d20d7047b781"
+      ],
+      "sha256": "6c3ccb8612eeaa1e9c520ae033a343210edc586a260016924f5f56d9cb1a5b4e"
+    },
+    {
+      "file": "tax-invoice-cli-sb2.pdf",
+      "bytes": 105975,
+      "pages": 2,
+      "original": true,
+      "copy": true,
+      "sample": true,
+      "pixelSha256": [
+        "2081249ab772c45e15dcc5a13f04c365e910900ff6a078928edb7d4788ae0153",
+        "1149b63c95d0f82dd7514164b845c38401f4a5637a53630104964bbde5812b16"
+      ],
+      "sha256": "dcdfdfdaf15ff8c4eff0447d4ff4cf3b6c1f1a1e4a27c3e654e5052960fa33c2"
+    }
+  ]
+}
