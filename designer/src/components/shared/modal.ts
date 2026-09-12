@@ -14,6 +14,7 @@
  * @author Wichit Wongta
  * @since 2026-09-09
  */
+import { icon } from './icon';
 import { LitElement, html, css, nothing, type PropertyValues } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
@@ -162,7 +163,7 @@ export class PldModal extends LitElement {
           <!-- Header -->
           <div class="header">
             <h2 id="modal-heading">${this.modalTitle || this.title || 'กล่องโต้ตอบ'}</h2>
-            <button class="close-btn" type="button" aria-label="ปิด / Close" @click=${this._close}>✕</button>
+            <button class="close-btn" type="button" aria-label="ปิด / Close" @click=${this._close}>${icon('close')}</button>
           </div>
 
           <!-- Body -->

@@ -17,6 +17,14 @@ export class PldTemplateBar extends LitElement {
 
   @state() private name = 'Untitled Template';
   @state() private isDirty = false;
+  @state() private templateId: string | null = null;
+
+  private readonly _onStateChanged = (event: Event) => {
+    const state = (event as StateChangedEvent).state;
+    this.name = state.template.name;
+    this.isDirty = state.template.isDirty;
+    this.templateId = state.template.id;
+  };
 
   static styles = css`
     :host {
@@ -80,15 +88,21 @@ export class PldTemplateBar extends LitElement {
       :host { padding-inline: var(--s-2); }
       .label { display: none; }
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+`;
 
   connectedCallback() {
     super.connectedCallback();
-    this.store.addEventListener('state-changed', (e: Event) => {
-      const s = (e as StateChangedEvent).state;
-      this.name = s.template.name;
-      this.isDirty = s.template.isDirty;
-    });
+    this.name = this.store.state.template.name;
+    this.isDirty = this.store.state.template.isDirty;
+    this.templateId = this.store.state.template.id;
+    this.store.addEventListener('state-changed', this._onStateChanged);
+  }
+
+  disconnectedCallback() {
+    this.store.removeEventListener('state-changed', this._onStateChanged);
+    super.disconnectedCallback();
   }
 
   render() {
@@ -101,8 +115,8 @@ export class PldTemplateBar extends LitElement {
         @change=${(e: Event) =>
           setTemplateName(this.store, (e.target as HTMLInputElement).value)}
       />
-      <span class="badge ${this.isDirty ? 'dirty' : ''}">
-        ${this.isDirty ? 'ยังไม่บันทึก · Unsaved' : 'บันทึกแล้ว · Saved'}
+      <span class="badge ${this.isDirty || !this.templateId ? 'dirty' : ''}" role="status">
+        ${this.isDirty ? 'ยังไม่บันทึก · Unsaved' : this.templateId ? 'บันทึกแล้ว · Saved' : 'ยังไม่เคยบันทึก · New'}
       </span>
     `;
   }

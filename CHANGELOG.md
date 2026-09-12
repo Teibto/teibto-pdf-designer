@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- Integrate portable Thai/Latin UI fonts, keyboard-accessible panels and modal controls, responsive drawer focus handling, persistent JSON import errors, and explicit new/unsaved template state. Rebuilding a band layout requires confirmation and remains undoable.
+- Preserve QR square geometry inside both portrait and landscape frames; reject unsupported barcode formats on import and export. Keep new template record-type/default choices explicit and detach imported JSON from saved-record identity.
+- Bound large data-form rendering, image/barcode caches and editing history; add regression, production startup, build provenance and agent-workspace gates. Connected restricted-role and queued-batch acceptance remains pending.
+
 - Adopt the Oracle Redwood workspace contract in the Lit designer: canonical semantic tokens and light default, 56px top bar, template context bar, navigation rail, canvas and property inspector, responsive drawers with scrim/Escape handling, accessible tab/toggle/dialog/toast states, reduced-motion support, and Storybook/E2E coverage.
 - Add native deployment selection with two on-demand render and two merge deployments, concurrency/buffer size 1 and Audit logging. Exact documented submission rejection preserves a signed WAITING state for explicit same-job retry; ambiguous outcomes remain fenced. Deferred merge handoff attempts a requester notification without claiming completion. Account capacity, extra deployments and native rejection behavior require sandbox verification.
 

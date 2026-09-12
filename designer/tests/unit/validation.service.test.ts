@@ -223,3 +223,22 @@ describe('sanitizeColor', () => {
   it('rejects invalid input', () => expect(sanitizeColor('url(evil)')).toBe('#000000'));
   it('rejects empty string', () => expect(sanitizeColor('')).toBe('#000000'));
 });
+
+
+describe('barcode format validation', () => {
+  const barcode = { id: 'barcode-1', type: 'barcode', role: 'content', w: 120, h: 40, value: '1234567890128' };
+
+  it.each(['code128', 'code39', 'ean13', 'qrcode'])('accepts %s for imported elements and property edits', barcodeType => {
+    expect(validateElement({ ...barcode, barcodeType }, 2).valid).toBe(true);
+    expect(validatePropertyUpdate('barcode', 'barcodeType', barcodeType).valid).toBe(true);
+  });
+
+  it.each([undefined, null, '', 'CODE128', 'pdf417', 'constructor', '__proto__', 128, false, ['code128'], { type: 'code128' }])('rejects invalid runtime barcode type %j', barcodeType => {
+    const element = validateElement({ ...barcode, barcodeType }, 2);
+    expect(element.valid).toBe(false);
+    expect(element.errors).toContainEqual(expect.objectContaining({ path: 'elements[2].barcodeType', code: 'INVALID_BARCODE_TYPE' }));
+    const update = validatePropertyUpdate('barcode', 'barcodeType', barcodeType);
+    expect(update.valid).toBe(false);
+    expect(update.errors).toContainEqual(expect.objectContaining({ path: 'barcodeType', code: 'INVALID_BARCODE_TYPE' }));
+  });
+});

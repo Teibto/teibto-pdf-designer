@@ -402,10 +402,18 @@ export function loadJsonData(
   store: AppStore,
   data: Record<string, unknown>,
 ): void {
-  store.dispatch((draft) => {
+  store.dispatch(tagAction((draft) => {
     draft.jsonData = data;
     draft.jsonKeys = extractJsonKeys(data);
-  });
+  }, { name: 'loadJsonData', undoable: false }));
+}
+
+/** Clear preview/binding data without creating an undo entry for document layout. */
+export function clearJsonData(store: AppStore): void {
+  store.dispatch(tagAction((draft) => {
+    draft.jsonData = null;
+    draft.jsonKeys = [];
+  }, { name: 'clearJsonData', undoable: false }));
 }
 
 /** Recursively extract all keys from JSON (dot-notation) */
@@ -841,18 +849,31 @@ export function dragColumnBoundary(
   rowIdx: number,
   leftIdx: number,
   leftPct: number,
-): void {
+  recordHistory = true,
+  historyBatchKey?: string,
+): boolean {
+  const currentRow = store.state.bands[bandIdx]?.rows[rowIdx];
+  const currentLeft = currentRow?.columns[leftIdx];
+  const currentRight = currentRow?.columns[leftIdx + 1];
+  if (!currentLeft || !currentRight) return false;
+  const pair = currentLeft.widthPct + currentRight.widthPct;
+  if (pair < 10) return false;
+  const newLeft = Math.round(Math.min(Math.max(leftPct, 5), pair - 5));
+  if (currentLeft.widthPct === newLeft && currentRight.widthPct === pair - newLeft) return false;
+
   store.dispatch(tagAction((draft) => {
     const row = draft.bands[bandIdx]?.rows[rowIdx];
     const left = row?.columns[leftIdx];
     const right = row?.columns[leftIdx + 1];
     if (!left || !right) return;
-    const pair = left.widthPct + right.widthPct;
-    if (pair < 10) return; // both already at minimum
-    const newLeft = Math.round(Math.min(Math.max(leftPct, 5), pair - 5));
     left.widthPct = newLeft;
     right.widthPct = pair - newLeft;
-  }, { name: 'dragColumnBoundary', undoable: true, batchKey: `banddrag-${bandIdx}-${rowIdx}-${leftIdx}` }));
+  }, {
+    name: 'dragColumnBoundary',
+    undoable: recordHistory,
+    batchKey: historyBatchKey ?? `banddrag-${bandIdx}-${rowIdx}-${leftIdx}`,
+  }));
+  return true;
 }
 
 // Band structural edits are undoable (#47 cutover): the history service now
@@ -1009,15 +1030,51 @@ export function addElementToCell(
 }
 
 /**
- * Re-home an element to the band of a given ROLE (#127). Used by the inspector's
- * role selector: after the band cutover (#47) an element's role IS its band, so
- * changing the role must physically MOVE the chip — otherwise el.role and the
- * band the chip sits in silently disagree. Detaches the id from its current band
- * cell, sets el.role, then appends it to the target role's band (created at its
- * canonical BAND_ORDER slot if absent). Honours the acceptance matrix (#49): a
- * role that rejects the element type is a no-op returning false so the caller can
- * warn. Returns true when already in that role (nothing to do) or the move applied.
+ * Move an element before/after another in the authoritative document structure.
+ * Returns false for rejected or unchanged moves. Preserves row geometry and
+ * makes the band references and element role one undoable edit.
  */
+export function reorderDocumentElement(
+  store: AppStore,
+  sourceId: string,
+  targetId: string,
+  position: 'above' | 'below',
+): boolean {
+  if (sourceId === targetId) return false;
+  const source = store.state.elements.find((el) => el.id === sourceId);
+  const target = store.state.elements.find((el) => el.id === targetId);
+  if (!source || !target || source.locked) return false;
+  const locations = (id: string) => store.state.bands.flatMap((band) =>
+    band.rows.flatMap((row) => row.columns.flatMap((col) =>
+      col.elementIds.flatMap((ref, index) => ref === id ? [{ band, col, index }] : []))));
+  const sources = locations(sourceId);
+  const targets = locations(targetId);
+  // Ambiguous or orphaned references must be repaired explicitly, not silently
+  // discarded by a Layers gesture. Structure is authoritative for PDF order.
+  if (sources.length !== 1 || targets.length !== 1) return false;
+  const from = sources[0];
+  const to = targets[0];
+  // Export renders a single band per role. Refuse malformed duplicate-role
+  // imports rather than offering a reorder that cannot match printed output.
+  if ([from.band.role, to.band.role].some((role) =>
+    store.state.bands.filter((band) => band.role === role).length !== 1)) return false;
+  if (from.band.role !== to.band.role && !bandAccepts(to.band.role, source.type)) return false;
+  if (from.col === to.col && from.index === to.index + (position === 'above' ? -1 : 1)) {
+    return false;
+  }
+  store.dispatch(tagAction((draft) => {
+    const origin = findBandCell(draft, sourceId)!;
+    const destination = findBandCell(draft, targetId)!;
+    origin.col.elementIds.splice(origin.index, 1);
+    const index = destination.col.elementIds.indexOf(targetId);
+    destination.col.elementIds.splice(index + (position === 'below' ? 1 : 0), 0, sourceId);
+    draft.elements.find((el) => el.id === sourceId)!.role = destination.origin.role;
+    draft.template.isDirty = true;
+  }, { name: 'reorderDocumentElement', undoable: true }));
+  return true;
+}
+
+/** Re-home an element to a role, keeping its band references synchronized. */
 export function moveElementToBandByRole(
   store: AppStore,
   elId: string,

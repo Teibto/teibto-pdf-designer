@@ -125,6 +125,64 @@ test('designer fetch actions keep the JSON contract but lose the stack', () => {
   assert.ok(payload.ref.indexOf(payload.errorId) !== -1, 'ref carries the id the user reports');
 });
 
+test('preview-live rejects an oversized raw UTF-8 body before parsing or rendering', () => {
+  const { suitelet, render, log } = buildSuitelet();
+  const { context, response } = contextStub({
+    parameters: { action: 'preview-live' },
+    method: 'POST',
+    // Deliberately malformed JSON: the size error must win over JSON.parse.
+    body: 'x'.repeat(8 * 1024 * 1024 + 1),
+  });
+
+  suitelet.onRequest(context);
+
+  const payload = JSON.parse(response.state.body);
+  assert.equal(payload.error, true);
+  assert.match(payload.message, /8 MiB UTF-8 payload limit/);
+  assert.equal(render.calls.created, 0, 'N\/render is never reached');
+  assert.equal(log.entries.find((e) => e.level === 'error').details.stage, 'parse-body');
+});
+
+test('preview-live measures the request budget in UTF-8 bytes, not JavaScript characters', () => {
+  const { suitelet, render } = buildSuitelet();
+  const raw = JSON.stringify({
+    xml: '<pdf><body>ok</body></pdf>',
+    rectype: 'itemfulfillment',
+    data: { note: 'ก'.repeat(2800000) },
+  });
+  assert.ok(raw.length < 8 * 1024 * 1024, 'fixture stays below the limit in UTF-16 code units');
+  assert.ok(Buffer.byteLength(raw, 'utf8') > 8 * 1024 * 1024, 'but crosses it in UTF-8 bytes');
+  const { context, response } = contextStub({
+    parameters: { action: 'preview-live' }, method: 'POST', body: raw,
+  });
+
+  suitelet.onRequest(context);
+
+  assert.match(JSON.parse(response.state.body).message, /8 MiB UTF-8 payload limit/);
+  assert.equal(render.calls.created, 0);
+});
+
+test('preview-live accepts 1000000 XML characters and rejects the next character before N/render', () => {
+  const atLimit = '<pdf>' + 'a'.repeat(1000000 - 11) + '</pdf>';
+  const accepted = buildSuitelet();
+  const acceptedContext = contextStub({
+    parameters: { action: 'preview-live' }, method: 'POST',
+    body: JSON.stringify({ xml: atLimit, rectype: 'itemfulfillment', data: { synthetic: true } }),
+  });
+  accepted.suitelet.onRequest(acceptedContext.context);
+  assert.equal(accepted.render.calls.renderedAsPdf, 1);
+
+  const rejected = buildSuitelet();
+  const rejectedContext = contextStub({
+    parameters: { action: 'preview-live' }, method: 'POST',
+    body: JSON.stringify({ xml: atLimit + 'x', rectype: 'itemfulfillment', data: { synthetic: true } }),
+  });
+  rejected.suitelet.onRequest(rejectedContext.context);
+  const payload = JSON.parse(rejectedContext.response.state.body);
+  assert.match(payload.message, /1000000 character limit/);
+  assert.equal(rejected.render.calls.created, 0, 'oversized XML is rejected before N\/render');
+});
+
 test('an unknown action falls back to the page, not to JSON', () => {
   const { suitelet } = buildSuitelet();
   const { context, response } = contextStub({

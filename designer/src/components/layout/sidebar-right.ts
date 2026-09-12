@@ -4,6 +4,7 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
@@ -73,13 +74,14 @@ export class PldSidebarRight extends LitElement {
 
     .field {
       flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       gap: var(--s-1);
     }
 
     .field label {
-      font-size: var(--t-xs);
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
     }
 
@@ -147,7 +149,7 @@ export class PldSidebarRight extends LitElement {
       border: 1px solid var(--c-border);
       border-radius: var(--r-pill);
       font: inherit;
-      font-size: var(--t-xs);
+      font-size: var(--t-sm);
       cursor: pointer;
       transition: background var(--transition-fast), border-color var(--transition-fast);
       display: flex;
@@ -214,7 +216,7 @@ export class PldSidebarRight extends LitElement {
       background: var(--c-brand-soft);
       border: 1px solid var(--c-brand);
       border-radius: var(--r-md);
-      font-size: var(--t-xs);
+      font-size: var(--t-sm);
       color: var(--c-brand);
       font-family: var(--font-mono);
     }
@@ -230,7 +232,9 @@ export class PldSidebarRight extends LitElement {
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; }
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+`;
 
   private _stateHandler: ((e: Event) => void) | null = null;
 
@@ -261,7 +265,7 @@ export class PldSidebarRight extends LitElement {
     if (!this.selected) {
       return html`
         <div class="empty">
-          <div class="empty-icon">◇</div>
+          <div class="empty-icon">${icon('square')}</div>
           <div>เลือก element<br />เพื่อแก้ไขคุณสมบัติ</div>
         </div>
       `;
@@ -275,8 +279,8 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">องค์ประกอบ (Element)</div>
         <div class="row">
           <div class="field">
-            <label>ชื่อ (Name)</label>
-            <input
+            <label for="sidebar-right-field-1">ชื่อ (Name)</label>
+            <input id="sidebar-right-field-1"
               type="text"
               .value=${el.name}
               @change=${(e: Event) => this._update('name', (e.target as HTMLInputElement).value)}
@@ -285,8 +289,8 @@ export class PldSidebarRight extends LitElement {
         </div>
         <div class="row">
           <div class="field">
-            <label>ชนิด (Type)</label>
-            <input type="text" .value=${el.type} disabled />
+            <label for="sidebar-right-field-2">ชนิด (Type)</label>
+            <input id="sidebar-right-field-2" type="text" .value=${el.type} disabled />
           </div>
         </div>
       </div>
@@ -298,13 +302,13 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">ขนาด (Size)</div>
         <div class="row">
           <div class="field">
-            <label>ความกว้าง (Width)</label>
-            <input type="number" .value=${String(Math.round(el.w))}
+            <label for="sidebar-right-field-3">ความกว้าง (Width)</label>
+            <input id="sidebar-right-field-3" type="number" .value=${String(Math.round(el.w))}
               @change=${(e: Event) => this._resize(Number((e.target as HTMLInputElement).value), el.h)} />
           </div>
           <div class="field">
-            <label>ความสูง (Height)</label>
-            <input type="number" .value=${String(Math.round(el.h))}
+            <label for="sidebar-right-field-4">ความสูง (Height)</label>
+            <input id="sidebar-right-field-4" type="number" .value=${String(Math.round(el.h))}
               @change=${(e: Event) => this._resize(el.w, Number((e.target as HTMLInputElement).value))} />
           </div>
         </div>
@@ -315,8 +319,8 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">ผูกข้อมูล (Data Binding)</div>
         <div class="row">
           <div class="field">
-            <label>ฟิลด์ข้อมูล (JSON Path)</label>
-            <input type="text" placeholder="e.g. company.name" list="pld-binding-paths"
+            <label for="sidebar-right-field-5">ฟิลด์ข้อมูล (JSON Path)</label>
+            <input id="sidebar-right-field-5" type="text" placeholder="e.g. company.name" list="pld-binding-paths"
               .value=${el.binding ?? ''}
               @change=${(e: Event) => this._update('binding', (e.target as HTMLInputElement).value)} />
             <datalist id="pld-binding-paths">
@@ -326,11 +330,11 @@ export class PldSidebarRight extends LitElement {
             </datalist>
           </div>
         </div>
-        ${el.binding ? html`<div class="binding-tag">📎 {{${el.binding}}}</div>` : nothing}
+        ${el.binding ? html`<div class="binding-tag">${icon('external')} {{${el.binding}}}</div>` : nothing}
         <div class="row">
           <div class="field">
-            <label title="แสดง element นี้เฉพาะเมื่อฟิลด์ที่ระบุมีค่า (#90)">แสดงเมื่อฟิลด์มีค่า</label>
-            <input type="text" placeholder="e.g. totals.wht" list="pld-binding-paths"
+            <label for="sidebar-right-field-6" title="แสดง element นี้เฉพาะเมื่อฟิลด์ที่ระบุมีค่า (#90)">แสดงเมื่อฟิลด์มีค่า</label>
+            <input id="sidebar-right-field-6" type="text" placeholder="e.g. totals.wht" list="pld-binding-paths"
               .value=${el.visibleIf ?? ''}
               @change=${(e: Event) => this._update('visibleIf', (e.target as HTMLInputElement).value)} />
           </div>
@@ -348,7 +352,7 @@ export class PldSidebarRight extends LitElement {
                 aria-pressed=${el.role === key}
                 @click=${() => this._setRole(key)}
               >
-                <span class="role-dot" style="background: ${role.color}"></span>
+                <span class="role-dot" style="background: var(--color-role-${key})"></span>
                 ${role.label}
               </button>
             `,
@@ -363,8 +367,8 @@ export class PldSidebarRight extends LitElement {
       <div class="group">
         <div class="group-title">การจัดการ</div>
         <div class="actions">
-          <button class="action-btn" @click=${this._duplicate}>⧉ ทำสำเนา</button>
-          <button class="action-btn danger" @click=${this._delete}>✕ ลบ</button>
+          <button class="action-btn" @click=${this._duplicate}>${icon('copy')} ทำสำเนา</button>
+          <button class="action-btn danger" @click=${this._delete}>${icon('close')} ลบ</button>
         </div>
       </div>
     `;
@@ -398,8 +402,8 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">รูปแบบข้อความ (Text Style)</div>
         <div class="row">
           <div class="field">
-            <label>เนื้อหา (Content)</label>
-            <textarea
+            <label for="sidebar-right-field-7">เนื้อหา (Content)</label>
+            <textarea id="sidebar-right-field-7"
               .value=${el.content}
               @change=${(e: Event) => this._update('content', (e.target as HTMLTextAreaElement).value)}
             ></textarea>
@@ -407,13 +411,13 @@ export class PldSidebarRight extends LitElement {
         </div>
         <div class="row">
           <div class="field">
-            <label>ขนาดตัวอักษร (Font Size)</label>
-            <input type="number" .value=${String(el.fontSize)} min="6" max="72"
+            <label for="sidebar-right-field-8">ขนาดตัวอักษร (Font Size)</label>
+            <input id="sidebar-right-field-8" type="number" .value=${String(el.fontSize)} min="6" max="72"
               @change=${(e: Event) => this._update('fontSize', Number((e.target as HTMLInputElement).value))} />
           </div>
           <div class="field">
-            <label>น้ำหนัก (Weight)</label>
-            <select .value=${el.fontWeight}
+            <label for="sidebar-right-field-9">น้ำหนัก (Weight)</label>
+            <select id="sidebar-right-field-9" .value=${el.fontWeight}
               @change=${(e: Event) => this._update('fontWeight', (e.target as HTMLSelectElement).value)}>
               <option value="normal">ปกติ</option>
               <option value="bold">หนา</option>
@@ -422,13 +426,13 @@ export class PldSidebarRight extends LitElement {
         </div>
         <div class="row">
           <div class="field">
-            <label>สี (Color)</label>
-            <input type="color" .value=${el.color}
+            <label for="sidebar-right-field-10">สี (Color)</label>
+            <input id="sidebar-right-field-10" type="color" .value=${el.color}
               @input=${(e: Event) => this._update('color', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>จัดแนว (Align)</label>
-            <select .value=${el.textAlign}
+            <label for="sidebar-right-field-11">จัดแนว (Align)</label>
+            <select id="sidebar-right-field-11" .value=${el.textAlign}
               @change=${(e: Event) => this._update('textAlign', (e.target as HTMLSelectElement).value)}>
               <option value="left">ซ้าย</option>
               <option value="center">กึ่งกลาง</option>
@@ -447,10 +451,10 @@ export class PldSidebarRight extends LitElement {
         <!-- Upload/Clear buttons -->
         <div class="row">
           <button class="action-btn primary" style="flex:1" @click=${() => openImagePicker(this.store, el.id)}>
-            ${el.imageData ? '⟳ เปลี่ยนรูป' : '⬆ อัปโหลดรูป'}
+            ${icon(el.imageData ? 'refresh' : 'upload')} ${el.imageData ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}
           </button>
           ${el.imageData
-            ? html`<button class="action-btn danger" @click=${() => clearElementImage(this.store, el.id)}>✕</button>`
+            ? html`<button class="action-btn danger" aria-label="ล้างรูปภาพ" title="ล้างรูปภาพ" @click=${() => clearElementImage(this.store, el.id)}>${icon('close')}</button>`
             : nothing
           }
         </div>
@@ -464,12 +468,12 @@ export class PldSidebarRight extends LitElement {
           : nothing
         }
         <!-- URL -->
-        <label class="field-label">ที่อยู่รูปภาพ (Image URL)</label>
-        <input class="field-input" type="text" .value=${el.src ?? ''} placeholder="https://..."
+        <label for="sidebar-right-field-12" class="field-label">ที่อยู่รูปภาพ (Image URL)</label>
+        <input id="sidebar-right-field-12" class="field-input" type="text" .value=${el.src ?? ''} placeholder="https://..."
           @change=${(e: Event) => this._update('src', (e.target as HTMLInputElement).value)} />
         <!-- Object Fit — BFO ignores object-fit (truth table); screen-only (#50) -->
-        <label class="field-label" title="มีผลเฉพาะบนจอออกแบบ — BFO/PDF ไม่รองรับ object-fit (ภาพใน PDF ยืดตามกรอบเสมอ)">โหมดจัดรูป (Fit Mode) — จอเท่านั้น</label>
-        <select class="field-select"
+        <label for="sidebar-right-field-13" class="field-label" title="มีผลเฉพาะบนจอออกแบบ — BFO/PDF ไม่รองรับ object-fit (ภาพใน PDF ยืดตามกรอบเสมอ)">โหมดจัดรูป (Fit Mode) — จอเท่านั้น</label>
+        <select id="sidebar-right-field-13" class="field-select"
           .value=${el.objectFit}
           @change=${(e: Event) => this._update('objectFit', (e.target as HTMLSelectElement).value)}>
           <option value="contain">พอดีกรอบ (Contain)</option>
@@ -486,20 +490,20 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">รูปแบบรูปทรง (Shape Style)</div>
         <div class="row">
           <div class="field">
-            <label>พื้นหลัง (Background)</label>
-            <input type="color" .value=${el.bgColor}
+            <label for="sidebar-right-field-14">พื้นหลัง (Background)</label>
+            <input id="sidebar-right-field-14" type="color" .value=${el.bgColor}
               @input=${(e: Event) => this._update('bgColor', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>ความโค้งมุม (Radius)</label>
-            <input type="number" .value=${String(el.borderRadius)} min="0" max="200"
+            <label for="sidebar-right-field-15">ความโค้งมุม (Radius)</label>
+            <input id="sidebar-right-field-15" type="number" .value=${String(el.borderRadius)} min="0" max="200"
               @change=${(e: Event) => this._update('borderRadius', Number((e.target as HTMLInputElement).value))} />
           </div>
         </div>
         <div class="row">
           <div class="field">
-            <label>ความทึบ (Opacity)</label>
-            <input type="number" .value=${String(el.opacity)} min="0" max="1" step="0.1"
+            <label for="sidebar-right-field-16">ความทึบ (Opacity)</label>
+            <input id="sidebar-right-field-16" type="number" .value=${String(el.opacity)} min="0" max="1" step="0.1"
               @change=${(e: Event) => this._update('opacity', Number((e.target as HTMLInputElement).value))} />
           </div>
         </div>
@@ -513,13 +517,13 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">รูปแบบเส้น (Line Style)</div>
         <div class="row">
           <div class="field">
-            <label>สี (Color)</label>
-            <input type="color" .value=${el.lineColor}
+            <label for="sidebar-right-field-17">สี (Color)</label>
+            <input id="sidebar-right-field-17" type="color" .value=${el.lineColor}
               @input=${(e: Event) => this._update('lineColor', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>ความหนา (Width)</label>
-            <input type="number" .value=${String(el.lineWidth)} min="0.5" max="10" step="0.5"
+            <label for="sidebar-right-field-18">ความหนา (Width)</label>
+            <input id="sidebar-right-field-18" type="number" .value=${String(el.lineWidth)} min="0.5" max="10" step="0.5"
               @change=${(e: Event) => this._update('lineWidth', Number((e.target as HTMLInputElement).value))} />
           </div>
         </div>
@@ -538,29 +542,29 @@ export class PldSidebarRight extends LitElement {
               @click=${() => this.dispatchEvent(new CustomEvent('pld-open-column-config', {
                 detail: { elementId: el.id }, bubbles: true, composed: true,
               }))}>
-              ⚙ ตั้งค่าคอลัมน์
+              ${icon('settings')} ตั้งค่าคอลัมน์
             </button>
           </div>
         </div>
         <div class="row">
           <button class="action-btn" style="flex:1" @click=${() => this._autoDetectColumns(el.id)}>
-            🔍 ตรวจจับคอลัมน์จากข้อมูล
+            ${icon('search')} ตรวจจับคอลัมน์จากข้อมูล
           </button>
         </div>
         <div class="row">
           <div class="field">
-            <label>สีพื้นหัวตาราง (Header Bg)</label>
-            <input type="color" .value=${el.headerBgColor}
+            <label for="sidebar-right-field-19">สีพื้นหัวตาราง (Header Bg)</label>
+            <input id="sidebar-right-field-19" type="color" .value=${el.headerBgColor}
               @input=${(e: Event) => this._update('headerBgColor', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>สีข้อความหัว (Header Text)</label>
-            <input type="color" .value=${el.headerTextColor}
+            <label for="sidebar-right-field-20">สีข้อความหัว (Header Text)</label>
+            <input id="sidebar-right-field-20" type="color" .value=${el.headerTextColor}
               @input=${(e: Event) => this._update('headerTextColor', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label>เส้นขอบ (Border)</label>
-            <input type="color" .value=${el.borderColor}
+            <label for="sidebar-right-field-21">เส้นขอบ (Border)</label>
+            <input id="sidebar-right-field-21" type="color" .value=${el.borderColor}
               @input=${(e: Event) => this._update('borderColor', (e.target as HTMLInputElement).value)} />
           </div>
         </div>
@@ -574,15 +578,15 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">บาร์โค้ด (Barcode)</div>
         <div class="row">
           <div class="field">
-            <label>ค่า (Value)</label>
-            <input type="text" .value=${el.value}
+            <label for="sidebar-right-field-22">ค่า (Value)</label>
+            <input id="sidebar-right-field-22" type="text" .value=${el.value}
               @change=${(e: Event) => this._update('value', (e.target as HTMLInputElement).value)} />
           </div>
         </div>
         <div class="row">
           <div class="field">
-            <label>ชนิด (Type)</label>
-            <select .value=${el.barcodeType}
+            <label for="sidebar-right-field-23">ชนิด (Type)</label>
+            <select id="sidebar-right-field-23" .value=${el.barcodeType}
               @change=${(e: Event) => this._update('barcodeType', (e.target as HTMLSelectElement).value)}>
               <option value="code128">Code 128</option>
               <option value="code39">Code 39</option>
@@ -601,8 +605,8 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">รายการ (List)</div>
         <div class="row">
           <div class="field">
-            <label>รายการ (Items) — บรรทัดละหนึ่งรายการ</label>
-            <textarea
+            <label for="sidebar-right-field-24">รายการ (Items) — บรรทัดละหนึ่งรายการ</label>
+            <textarea id="sidebar-right-field-24"
               .value=${el.items.join('\n')}
               @change=${(e: Event) => this._update('items',
                 (e.target as HTMLTextAreaElement).value.split('\n').filter(Boolean))}
@@ -611,8 +615,8 @@ export class PldSidebarRight extends LitElement {
         </div>
         <div class="row">
           <div class="field">
-            <label>รูปแบบ (Style)</label>
-            <select .value=${el.listStyle}
+            <label for="sidebar-right-field-25">รูปแบบ (Style)</label>
+            <select id="sidebar-right-field-25" .value=${el.listStyle}
               @change=${(e: Event) => this._update('listStyle', (e.target as HTMLSelectElement).value)}>
               <option value="bullet">• จุด</option>
               <option value="number">1. ตัวเลข</option>

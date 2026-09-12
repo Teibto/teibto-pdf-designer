@@ -6,15 +6,20 @@
  *   - Data: JSON editor with validation & sample data
  *   - Settings: grid, pagination, snap config
  *
+ * @since 2026-09-12
  * @author Wichit Wongta
  */
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
-import type { ElementType } from '../../models/element';
+import type { ElementType, ElementRoleType } from '../../models/element';
 import type { PageSizeName } from '../../models/page';
-import { setPageSize, setOrientation, setDragType } from '../../state/actions';
+import { setPageSize, setOrientation, setDragType, addElementToNewBand } from '../../state/actions';
+
+import { BAND_ORDER, bandAccepts } from '../../models/bands';
+import { icon, type IconName } from '../shared/icon';
+import { showToast } from '../shared/toast-notification';
 
 // ─── Import panel components ───
 import '../panels/layers-panel';
@@ -23,11 +28,11 @@ import '../panels/pagination-panel';
 
 type TabId = 'elements' | 'layers' | 'data' | 'settings';
 
-const TABS: { id: TabId; icon: string; label: string }[] = [
-  { id: 'elements', icon: '◈', label: 'องค์ประกอบ' },
-  { id: 'layers',   icon: '≡', label: 'เลเยอร์' },
-  { id: 'data',     icon: '{}', label: 'ข้อมูล' },
-  { id: 'settings', icon: '⚙', label: 'ตั้งค่า' },
+const TABS: { id: TabId; icon: IconName; label: string }[] = [
+  { id: 'elements', icon: 'shapes', label: 'องค์ประกอบ' },
+  { id: 'layers',   icon: 'layers', label: 'เลเยอร์' },
+  { id: 'data',     icon: 'database', label: 'ข้อมูล' },
+  { id: 'settings', icon: 'settings', label: 'ตั้งค่า' },
 ];
 
 @customElement('pld-sidebar-left')
@@ -35,9 +40,17 @@ export class PldSidebarLeft extends LitElement {
   @consume({ context: storeContext })
   private store!: AppStore;
 
+  private _paletteDragType: ElementType | null = null;
   @state() private activeTab: TabId = 'elements';
+  @state() private destination: ElementRoleType = 'content';
   @state() private pageSize: PageSizeName = 'A4';
   @state() private orientation: 'portrait' | 'landscape' = 'portrait';
+
+  private readonly _onStateChanged = (event: Event) => {
+    const state = (event as StateChangedEvent).state;
+    this.pageSize = state.page.size;
+    this.orientation = state.page.orientation;
+  };
 
   static styles = css`
     :host {
@@ -67,10 +80,10 @@ export class PldSidebarLeft extends LitElement {
       background: transparent;
       text-align: center;
       cursor: pointer;
-      font-size: 9px;
+      font-size: var(--t-xs);
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: normal;
       color: rgba(255, 255, 255, 0.72);
       transition: background var(--transition-fast), color var(--transition-fast);
       display: flex;
@@ -138,7 +151,7 @@ export class PldSidebarLeft extends LitElement {
       cursor: grab;
       transition: background var(--transition-fast), border-color var(--transition-fast);
       text-align: center;
-      font-size: 11.5px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
       display: flex;
       flex-direction: column;
@@ -147,7 +160,8 @@ export class PldSidebarLeft extends LitElement {
       user-select: none;
     }
 
-    .element-item:hover {
+    .element-item:disabled { opacity: 0.45; cursor: not-allowed; }
+    .element-item:hover:not(:disabled) {
       border-color: var(--c-brand);
       background: var(--c-brand-soft);
       color: var(--c-text);
@@ -201,6 +215,8 @@ export class PldSidebarLeft extends LitElement {
       background: var(--c-brand-soft);
     }
 
+    select { width: 100%; min-height: var(--btn-h); font: inherit; color: var(--c-text); background: var(--c-surface); border: 1px solid var(--c-border-control); border-radius: var(--r-md); margin-block: var(--s-2); }
+    .palette-help { font-size: var(--t-sm); margin: 0 0 var(--s-3); }
     .orient-row {
       display: flex;
       gap: 8px;
@@ -242,11 +258,15 @@ export class PldSidebarLeft extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.store.addEventListener('state-changed', (e: Event) => {
-      const s = (e as StateChangedEvent).state;
-      this.pageSize = s.page.size;
-      this.orientation = s.page.orientation;
-    });
+    this.pageSize = this.store.state.page.size;
+    this.orientation = this.store.state.page.orientation;
+    this.store.addEventListener('state-changed', this._onStateChanged);
+  }
+
+  disconnectedCallback() {
+    this._onPaletteDragEnd();
+    this.store.removeEventListener('state-changed', this._onStateChanged);
+    super.disconnectedCallback();
   }
 
   render() {
@@ -256,18 +276,19 @@ export class PldSidebarLeft extends LitElement {
         ${TABS.map((t) => html`
           <button type="button"
             class="tab ${this.activeTab === t.id ? 'active' : ''}"
-            role="tab"
+            role="tab" id="tab-${t.id}" aria-controls="palette-panel" tabindex=${this.activeTab === t.id ? 0 : -1}
+            @keydown=${(event: KeyboardEvent) => this._onTabKeydown(event, t.id)}
             aria-selected=${this.activeTab === t.id}
             @click=${() => (this.activeTab = t.id)}
           >
-            <span class="tab-icon" aria-hidden="true">${t.icon}</span>
+            <span class="tab-icon" aria-hidden="true">${icon(t.icon)}</span>
             ${t.label}
           </button>
         `)}
       </div>
 
       <!-- Tab Content -->
-      <div class="tab-content" role="tabpanel">
+      <div class="tab-content" id="palette-panel" role="tabpanel" aria-labelledby="tab-${this.activeTab}" tabindex="0">
         ${this._renderTabContent()}
       </div>
     `;
@@ -290,25 +311,32 @@ export class PldSidebarLeft extends LitElement {
   private _renderElementsTab() {
     return html`
       <div class="section">
-        <div class="section-title"><span>◈</span> ลากวางองค์ประกอบ</div>
+        <div class="section-title">${icon('shapes')} เพิ่มองค์ประกอบ</div>
+        <label for="insert-destination">เพิ่มแถวใหม่ในส่วน (Destination)</label>
+        <select id="insert-destination" .value=${this.destination}
+          @change=${(event: Event) => { this.destination = (event.target as HTMLSelectElement).value as ElementRoleType; }}>
+          ${BAND_ORDER.filter(role => role !== 'watermark').map(role => html`<option value=${role}>${role}</option>`)}
+        </select>
+        <p class="palette-help">คลิกหรือกด Enter / Space เพื่อเพิ่มแถวใหม่ หรือ drag ไปยังช่องที่ต้องการ</p>
         <div class="element-grid">
-          ${this._elItem('header', 'H', 'Header')}
-          ${this._elItem('text', 'T', 'Text')}
-          ${this._elItem('image', '◻', 'Image')}
-          ${this._elItem('table', '⊞', 'Table')}
-          ${this._elItem('shape', '■', 'Shape')}
-          ${this._elItem('line', '─', 'Line')}
-          ${this._elItem('barcode', '|||', 'Barcode')}
-          ${this._elItem('list', '≡', 'List')}
+          ${this._elItem('header', 'heading', 'Header')}
+          ${this._elItem('text', 'text', 'Text')}
+          ${this._elItem('image', 'image', 'Image')}
+          ${this._elItem('table', 'table', 'Table')}
+          ${this._elItem('shape', 'square', 'Shape')}
+          ${this._elItem('line', 'minus', 'Line')}
+          ${this._elItem('barcode', 'barcode', 'Barcode')}
+          ${this._elItem('list', 'list', 'List')}
         </div>
       </div>
 
       <div class="section">
-        <div class="section-title"><span>▦</span> ตั้งค่าหน้ากระดาษ</div>
+        <div class="section-title">${icon('file')} ตั้งค่าหน้ากระดาษ</div>
         <div class="page-sizes">
           ${(['A4', 'Letter', 'A3', 'A5', 'Custom'] as PageSizeName[]).map(
             (size) => html`
               <button
+                aria-pressed=${this.pageSize === size}
                 class="page-size-btn ${this.pageSize === size ? 'active' : ''}"
                 @click=${() => setPageSize(this.store, size)}
               >${size}</button>
@@ -317,13 +345,15 @@ export class PldSidebarLeft extends LitElement {
         </div>
         <div class="orient-row">
           <button
+            aria-pressed=${this.orientation === 'portrait'}
             class="page-size-btn ${this.orientation === 'portrait' ? 'active' : ''}"
             @click=${() => setOrientation(this.store, 'portrait')}
-          >↕ แนวตั้ง</button>
+          >${icon('arrow-up-down')} แนวตั้ง</button>
           <button
+            aria-pressed=${this.orientation === 'landscape'}
             class="page-size-btn ${this.orientation === 'landscape' ? 'active' : ''}"
             @click=${() => setOrientation(this.store, 'landscape')}
-          >↔ แนวนอน</button>
+          >${icon('arrow-left-right')} แนวนอน</button>
         </div>
       </div>
     `;
@@ -365,18 +395,52 @@ export class PldSidebarLeft extends LitElement {
   // HELPERS
   // ═══════════════════════════════════════
 
-  private _elItem(type: ElementType, icon: string, label: string) {
+  private _elItem(type: ElementType, iconName: IconName, label: string) {
     return html`
-      <div class="element-item" draggable="true" tabindex="0" role="button"
-        aria-label="ลาก ${label} ไปยังพื้นที่ออกแบบ"
-        @dragstart=${(e: DragEvent) => this._onDragStart(e, type)}>
-        <div class="el-icon ${type}">${icon}</div>
+      <button type="button" class="element-item" draggable="true"
+        title=${bandAccepts(this.destination, type) ? `เพิ่มใน ${this.destination}` : `ส่วน ${this.destination} ไม่รองรับ ${label} — เลือกส่วนอื่นหรือลากไปยังช่องที่รองรับ`}
+        aria-label="เพิ่ม ${label} ใน ${this.destination}"
+        @click=${() => this._insert(type, label)}
+        @dragstart=${(e: DragEvent) => this._onDragStart(e, type)}
+        @dragend=${this._onPaletteDragEnd}>
+        <div class="el-icon ${type}">${icon(iconName)}</div>
         <span>${label}</span>
-      </div>
+      </button>
     `;
   }
 
+  private _onTabKeydown(event: KeyboardEvent, current: TabId) {
+    const index = TABS.findIndex(tab => tab.id === current);
+    let next: number;
+    switch (event.key) {
+      case 'ArrowRight': next = (index + 1) % TABS.length; break;
+      case 'ArrowLeft': next = (index + TABS.length - 1) % TABS.length; break;
+      case 'Home': next = 0; break;
+      case 'End': next = TABS.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    this.activeTab = TABS[next].id;
+    this.updateComplete.then(() => this.renderRoot.querySelector<HTMLElement>(`#tab-${this.activeTab}`)?.focus());
+  }
+
+  private _insert(type: ElementType, label: string) {
+    const id = addElementToNewBand(this.store, type, this.destination);
+    if (id) showToast(`เพิ่ม ${label} ใน ${this.destination} แล้ว`, 'success');
+    else showToast(`ส่วน ${this.destination} ไม่รองรับ ${label} — กรุณาเลือกส่วนอื่น`, 'warning');
+  }
+
+  private readonly _onPaletteDragEnd = () => {
+    // A completed drop may already have consumed the flag. Only clear the drag
+    // this palette owns; cleanup remains transient and must not add an undo step.
+    if (this._paletteDragType && this.store.state.dragType === this._paletteDragType) {
+      setDragType(this.store, null);
+    }
+    this._paletteDragType = null;
+  };
+
   private _onDragStart(e: DragEvent, type: ElementType) {
+    this._paletteDragType = type;
     e.dataTransfer?.setData('element-type', type);
     // Transient UI flag — must NOT be undoable (#129).
     setDragType(this.store, type);

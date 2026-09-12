@@ -8,6 +8,8 @@ import {
   computePagination,
   clearPaginationCache,
   finalizePagination,
+  getPageData,
+  type PaginationResult,
 } from '../../src/services/pagination.service';
 import type { AppState } from '../../src/state/app-state';
 import { createDefaultPage } from '../../src/models/page';
@@ -315,6 +317,68 @@ describe('Pagination Service', () => {
   });
 
   describe('finalizePagination()', () => {
+    it('traverses once for 1,000 same-result finalizations and recomputes by identity/header mode', () => {
+      const header = {
+        id: 'header-cache', type: 'text' as const, name: 'Header', role: 'header' as const,
+        x: 0, y: 0, w: 100, h: 20, zIndex: 0, locked: false, visible: true,
+        content: 'Header', fontSize: 10, fontWeight: 'normal' as const,
+        color: '#000', textAlign: 'left' as const,
+      };
+      const pages = [1, 2].map((pageNumber) => ({
+        pageNumber,
+        elements: [{ element: header, visible: pageNumber === 1 }],
+        tableRowStart: 0,
+        tableRowEnd: 0,
+        isContinuation: pageNumber > 1,
+        isSummaryPage: false,
+        columnSpanRows: [],
+      }));
+      let traversals = 0;
+      const raw = { totalPages: 2, totalRows: 0 } as PaginationResult;
+      Object.defineProperty(raw, 'pagesData', {
+        get: () => {
+          traversals++;
+          return pages;
+        },
+      });
+      const firstLast = createMockState({
+        pagination: { ...createDefaultPagination(), headerMode: 'firstLast' },
+      });
+
+      const first = finalizePagination(raw, firstLast);
+      const traversalsAfterFirst = traversals;
+      for (let i = 1; i < 1_000; i++) {
+        expect(finalizePagination(raw, firstLast)).toBe(first);
+      }
+      expect(traversals).toBe(traversalsAfterFirst);
+
+      const firstOnly = createMockState({
+        pagination: { ...createDefaultPagination(), headerMode: 'firstOnly' },
+      });
+      const changedMode = finalizePagination(raw, firstOnly);
+      expect(changedMode).not.toBe(first);
+      expect(traversals).toBeGreaterThan(traversalsAfterFirst);
+
+      const changedResult = {
+        totalPages: 1,
+        totalRows: 0,
+        pagesData: [pages[0]],
+      } satisfies PaginationResult;
+      expect(finalizePagination(changedResult, firstOnly)).not.toBe(changedMode);
+    });
+
+    it('looks up contiguous page numbers directly with a defensive fallback', () => {
+      const state = createMockState();
+      const canonical = finalizePagination(computePagination(state), state);
+      expect(getPageData(canonical, 1)).toBe(canonical.pagesData[0]);
+
+      const nonContiguous = {
+        ...canonical,
+        pagesData: [{ ...canonical.pagesData[0], pageNumber: 7 }],
+      };
+      expect(getPageData(nonContiguous, 7)).toBe(nonContiguous.pagesData[0]);
+    });
+
     it('makes summary-role elements visible only on last page', () => {
       const items = Array.from({ length: 20 }, (_, i) => ({ name: `Item ${i}` }));
       const summaryElement = {

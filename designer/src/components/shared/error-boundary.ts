@@ -5,6 +5,7 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from './icon';
 import { LitElement, html, css, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 
@@ -74,7 +75,7 @@ export class ErrorBoundary extends LitElement {
     if (this._hasError) {
       return html`
         <div class="error-fallback">
-          <span>⚠ ${this.label}: ${this._errorMessage}</span>
+          <span>${icon('alert')} ${this.label}: ${this._errorMessage}</span>
           <button @click=${this._retry}>Retry</button>
         </div>
       `;

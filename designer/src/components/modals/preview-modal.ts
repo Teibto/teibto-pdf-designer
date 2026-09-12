@@ -5,6 +5,7 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
@@ -13,9 +14,9 @@ import type { AppState } from '../../state/app-state';
 import type { CanvasElement, TextElement, TableElement, ShapeElement, LineElement, ListElement, BarcodeElement, ImageElement } from '../../models/element';
 import { ELEMENT_ROLES } from '../../constants/roles';
 import { resolveTemplateString, resolveBinding } from '../../services/binding.service';
-import { computePagination, finalizePagination } from '../../services/pagination.service';
+import { computePagination, finalizePagination, getPageData } from '../../services/pagination.service';
 import { formatCellValue } from '../../utils/format';
-import { getCachedBarcodeSvg } from '../../services/barcode.service';
+import { clearBarcodeCache, getCachedBarcodeSvg } from '../../services/barcode.service';
 import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { isNetSuiteEnv, getNsContext, renderLivePreview } from '../../services/netsuite-adapter.service';
 import { DEFAULT_RECORD_TYPE } from '../../constants/record-types';
@@ -94,7 +95,7 @@ export class PldPreviewModal extends LitElement {
     }
 
     .zoom-label {
-      font-size: 11px;
+      font-size: var(--t-sm);
       font-family: var(--font-mono, monospace);
       color: var(--c-text-subtle);
       min-width: 40px;
@@ -106,7 +107,7 @@ export class PldPreviewModal extends LitElement {
       background: var(--c-brand);
       border: none;
       border-radius: 6px;
-      color: #fff;
+      color: var(--c-brand-on);
       font-size: 12.5px;
       font-weight: 600;
       cursor: pointer;
@@ -159,13 +160,13 @@ export class PldPreviewModal extends LitElement {
     }
 
     .server-status.error {
-      color: #f87171;
+      color: var(--c-danger);
       text-align: center;
       padding: 0 24px;
     }
 
     .server-hint {
-      font-size: 11px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
     }
 
@@ -192,6 +193,8 @@ export class PldPreviewModal extends LitElement {
       box-sizing: border-box;
     }
 
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
     /* ─── Band-flow layout (#107): bands stack like BFO print ─── */
     .flow-row {
       display: flex;
@@ -328,7 +331,10 @@ export class PldPreviewModal extends LitElement {
       z-index: 9999;
       pointer-events: none;
     }
-  `;
+      button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   /**
    * พรีวิวผ่าน BFO จริงทำได้ทุกครั้งที่อยู่ใน NetSuite (#191) — ไม่มี record ก็ยัง
@@ -353,6 +359,7 @@ export class PldPreviewModal extends LitElement {
         if (this._serverMode) this._loadServerPreview();
       } else {
         this._clearServerPreview();
+        clearBarcodeCache();
       }
     }
   }
@@ -360,6 +367,7 @@ export class PldPreviewModal extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._clearServerPreview();
+    clearBarcodeCache();
   }
 
   /**
@@ -424,7 +432,7 @@ export class PldPreviewModal extends LitElement {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="▶ PDF Preview"
+        modalTitle="PDF Preview"
         size="xl"
         @close=${this._close}
       >
@@ -445,7 +453,7 @@ export class PldPreviewModal extends LitElement {
             : 'พรีวิวแบบปัจจุบัน รวมการแก้ไขที่ยังไม่บันทึก — บันทึกก่อนสั่ง Print จากเอกสาร'}
         </span>
         <button class="export-btn" ?disabled=${this.serverLoading || !this.serverPdfUrl}
-          @click=${this._printServer}>📄 ดาวน์โหลด PDF ที่แสดง</button>
+          @click=${this._printServer}>${icon('file')} ดาวน์โหลด PDF ที่แสดง</button>
       </div>
 
       ${this.serverLoading
@@ -453,7 +461,7 @@ export class PldPreviewModal extends LitElement {
         : this.serverError
           ? html`<div class="server-status error">
               <span>เรนเดอร์ล้มเหลว: ${this.serverError}</span>
-              <button class="nav-btn" style="width:auto;padding:0 12px;" @click=${this._loadServerPreview}>↻ ลองใหม่</button>
+              <button class="nav-btn" style="width:auto;padding:0 12px;" @click=${this._loadServerPreview}>${icon('refresh')} ลองใหม่</button>
             </div>`
           : this.serverPdfUrl
             ? html`<iframe class="server-frame" src=${this.serverPdfUrl} title="PDF Preview"></iframe>`
@@ -470,11 +478,11 @@ export class PldPreviewModal extends LitElement {
       <!-- Toolbar -->
       <div class="preview-toolbar">
         <div class="preview-nav">
-          <button class="nav-btn" ?disabled=${this.previewPage <= 1}
-            @click=${() => this.previewPage--}>‹</button>
+          <button class="nav-btn" aria-label="หน้าก่อนหน้า" ?disabled=${this.previewPage <= 1}
+            @click=${() => this.previewPage--}>${icon('left')}</button>
           <span class="page-info">${this.previewPage} / ${this.totalPages}</span>
-          <button class="nav-btn" ?disabled=${this.previewPage >= this.totalPages}
-            @click=${() => this.previewPage++}>›</button>
+          <button class="nav-btn" aria-label="หน้าถัดไป" ?disabled=${this.previewPage >= this.totalPages}
+            @click=${() => this.previewPage++}>${icon('right')}</button>
         </div>
 
         <div class="zoom-controls">
@@ -499,7 +507,7 @@ export class PldPreviewModal extends LitElement {
   private _renderPageElements(state: Readonly<AppState>, pageNum: number) {
     const totalPages = this.totalPages;
     const paginationResult = finalizePagination(computePagination(state), state);
-    const pageData = paginationResult.pagesData.find((p) => p.pageNumber === pageNum);
+    const pageData = getPageData(paginationResult, pageNum);
 
     // Per-element visibility from the pagination engine (headerMode, roles)
     const visibleIds = new Set<string>();
@@ -534,7 +542,7 @@ export class PldPreviewModal extends LitElement {
           const els = band.rows.flatMap((r) => r.columns.flatMap((c) => resolve(c.elementIds)));
           if (els.length === 0) return nothing;
           return html`<div class="watermark-overlay">
-            ${els.map((el) => this._renderElement(el, state.jsonData, pageNum))}
+            ${els.map((el) => this._renderElement(el, state.jsonData, pageNum, pageData))}
           </div>`;
         }
 
@@ -546,7 +554,7 @@ export class PldPreviewModal extends LitElement {
               ${row.columns.map((col) => html`
                 <div class="flow-col" style="width: ${col.widthPct}%;">
                   ${resolve(col.elementIds).map((el) => html`
-                    <div class="flow-el">${this._renderElement(el, state.jsonData, pageNum)}</div>
+                    <div class="flow-el">${this._renderElement(el, state.jsonData, pageNum, pageData)}</div>
                   `)}
                 </div>
               `)}
@@ -611,7 +619,12 @@ export class PldPreviewModal extends LitElement {
     return { before, after };
   }
 
-  private _renderElement(el: CanvasElement, jsonData: Record<string, unknown> | null, pageNum: number) {
+  private _renderElement(
+    el: CanvasElement,
+    jsonData: Record<string, unknown> | null,
+    pageNum: number,
+    pageData?: import('../../services/pagination.service').PageData,
+  ) {
     // Conditional visibility (#90) — mirror the export-side FreeMarker guard
     if (el.visibleIf && jsonData) {
       const v = resolveBinding(jsonData, el.visibleIf);
@@ -641,7 +654,7 @@ export class PldPreviewModal extends LitElement {
       }
       case 'table': {
         const te = el as TableElement;
-        return this._renderTablePreview(te, jsonData, pageNum);
+        return this._renderTablePreview(te, jsonData, pageNum, pageData);
       }
       case 'barcode': {
         const be = el as BarcodeElement;
@@ -681,7 +694,12 @@ export class PldPreviewModal extends LitElement {
     }
   }
 
-  private _renderTablePreview(el: TableElement, jsonData: Record<string, unknown> | null, pageNum: number) {
+  private _renderTablePreview(
+    el: TableElement,
+    jsonData: Record<string, unknown> | null,
+    pageNum: number,
+    pageData?: import('../../services/pagination.service').PageData,
+  ) {
     const cols = el.columns.filter((c) => !c.hidden);
     if (cols.length === 0) return html`<div style="color: #999; font-size: 10px; padding: 8px;">ยังไม่ได้ตั้งค่าคอลัมน์</div>`;
 
@@ -690,10 +708,6 @@ export class PldPreviewModal extends LitElement {
       const data = resolveBinding(jsonData, el.binding);
       if (Array.isArray(data)) rows = data as Record<string, unknown>[];
     }
-
-    // Use pagination result for accurate row slicing
-    const paginationResult = finalizePagination(computePagination(this.store.state), this.store.state);
-    const pageData = paginationResult.pagesData.find((p) => p.pageNumber === pageNum);
 
     let rowOffset = 0;
     if (pageData) {

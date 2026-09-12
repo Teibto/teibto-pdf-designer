@@ -5,6 +5,7 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
@@ -70,20 +71,20 @@ export class PldBfoExportModal extends LitElement {
       color: var(--c-danger);
     }
     .lint-box.warn {
-      background: rgba(245, 166, 35, 0.1);
-      border: 1px solid var(--color-warning, #f5a623);
-      color: var(--color-warning, #f5a623);
+      background: var(--c-warning-soft);
+      border: 1px solid var(--c-warning);
+      color: var(--c-warning);
     }
     .lint-box.ok {
-      background: rgba(34, 197, 94, 0.08);
-      border: 1px solid rgba(34, 197, 94, 0.5);
+      background: var(--c-success-soft);
+      border: 1px solid var(--c-success);
       color: var(--c-text-subtle);
     }
     .lint-box h4 { margin: 0 0 6px; font-size: 12px; }
     .lint-box ul { margin: 0; padding-left: 18px; }
     .lint-box li { margin-bottom: 4px; }
     .lint-box .fix { color: var(--c-text-subtle); }
-    .lint-box code { font-size: 11px; }
+    .lint-box code { font-size: var(--t-sm); }
 
     /* ฟอนต์ไทยไม่ได้ตั้งใน config (#156) — เตือนก่อนที่ผู้ใช้จะไปเจอ PDF ที่ไทยหาย */
     .font-warn {
@@ -102,7 +103,7 @@ export class PldBfoExportModal extends LitElement {
     }
 
     .section-label {
-      font-size: 10px;
+      font-size: var(--t-sm);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -125,7 +126,7 @@ export class PldBfoExportModal extends LitElement {
     }
 
     .config-field label {
-      font-size: 10px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
     }
 
@@ -154,7 +155,7 @@ export class PldBfoExportModal extends LitElement {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 11.5px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
       cursor: pointer;
     }
@@ -196,7 +197,7 @@ export class PldBfoExportModal extends LitElement {
       border-radius: 5px;
       background: var(--c-surface-2);
       color: var(--c-text-subtle);
-      font-size: 10px;
+      font-size: var(--t-sm);
       cursor: pointer;
       font-family: inherit;
       transition: all 0.15s;
@@ -216,7 +217,7 @@ export class PldBfoExportModal extends LitElement {
       border-radius: 8px;
       color: var(--c-success);
       font-family: var(--font-mono, monospace);
-      font-size: 11px;
+      font-size: var(--t-sm);
       line-height: 1.6;
       padding: 14px;
       resize: vertical;
@@ -236,7 +237,7 @@ export class PldBfoExportModal extends LitElement {
     }
 
     .info-panel p {
-      font-size: 11px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
       margin: 4px 0;
       line-height: 1.6;
@@ -244,7 +245,7 @@ export class PldBfoExportModal extends LitElement {
 
     .info-panel code {
       font-family: var(--font-mono, monospace);
-      font-size: 10px;
+      font-size: var(--t-sm);
       color: var(--c-brand);
       background: var(--c-bg);
       padding: 1px 4px;
@@ -276,11 +277,16 @@ export class PldBfoExportModal extends LitElement {
     .btn-bfo {
       background: var(--c-brand);
       border: none;
-      color: #fff;
+      color: var(--c-brand-on);
     }
 
-    .btn-bfo:hover { opacity: 0.9; }
-  `;
+    .btn.btn-bfo:hover { background: var(--c-brand-strong); color: var(--c-brand-on); }
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+    button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   updated(changed: Map<string, unknown>) {
     if (changed.has('open') && this.open) {
@@ -312,7 +318,7 @@ export class PldBfoExportModal extends LitElement {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="🔶 NetSuite BFO XML Export"
+        modalTitle="NetSuite BFO XML Export"
         size="xl"
         @close=${this._close}
       >
@@ -322,8 +328,8 @@ export class PldBfoExportModal extends LitElement {
             <div class="section-label">Export Settings</div>
             <div class="config-row">
               <div class="config-field">
-                <label>NetSuite Record Type</label>
-                <select
+                <label for="bfo-export-record-type">NetSuite Record Type</label>
+                <select id="bfo-export-record-type"
                   @change=${(e: Event) => {
                     this.recordType = (e.target as HTMLSelectElement).value;
                     this._generatePreview();
@@ -371,9 +377,9 @@ export class PldBfoExportModal extends LitElement {
             <div class="xml-toolbar">
               <h3>⟨/⟩ Generated XML</h3>
               <div class="xml-actions">
-                <button class="small-btn" @click=${this._copyToClipboard}>📋 Copy</button>
-                <button class="small-btn" @click=${this._downloadFile}>⬇ Download .xml</button>
-                <button class="small-btn" @click=${this._generatePreview}>↻ Regenerate</button>
+                <button class="small-btn" @click=${this._copyToClipboard}>${icon('copy')} Copy</button>
+                <button class="small-btn" @click=${this._downloadFile}>${icon('download')} Download .xml</button>
+                <button class="small-btn" @click=${this._generatePreview}>${icon('refresh')} Regenerate</button>
               </div>
             </div>
             <pre class="xml-code">${this.xmlPreview}</pre>
@@ -381,7 +387,7 @@ export class PldBfoExportModal extends LitElement {
 
           <!-- Info -->
           <div class="info-panel">
-            <p>💡 <strong>NetSuite BFO Tips:</strong></p>
+            <p>${icon('info')} <strong>NetSuite BFO Tips:</strong></p>
             <p>• Variable syntax: <code>\${${this.recordType}.fieldName}</code></p>
             <p>• List iteration: <code>&lt;#list ${this.recordType}.items as item&gt;</code></p>
             <p>• Template ถูกเก็บใน Custom Record แยก ไม่ใช้ Advanced PDF Templates</p>
@@ -392,8 +398,8 @@ export class PldBfoExportModal extends LitElement {
         <div slot="footer">
           <div class="footer-btns">
             <button class="btn" @click=${this._close}>Close</button>
-            <button class="btn" @click=${this._copyToClipboard}>📋 Copy XML</button>
-            <button class="btn btn-bfo" @click=${this._downloadFile}>🔶 Download</button>
+            <button class="btn" @click=${this._copyToClipboard}>${icon('copy')} Copy XML</button>
+            <button class="btn btn-bfo" @click=${this._downloadFile}>${icon('download')} Download</button>
           </div>
         </div>
       </pld-modal>

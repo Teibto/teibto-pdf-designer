@@ -60,6 +60,13 @@ jobs:
       - name: Validate templates
         run: bash scripts/validate-templates.sh
 
+      # Project-scoped Codex/Claude profiles are an architecture boundary too:
+      # both runtimes must discover the same agents and delivery skill.
+      - name: Validate AI workspace
+        run: |
+          python -m unittest scripts/test_validate_ai_workspace.py
+          python scripts/validate-ai-workspace.py
+
       # 4b) Engine (SuiteScript) — เดิม CI ไม่ครอบ engine/ เลย (#155)
       #     node --check จับ syntax · node --test รัน unit test ที่ mount AMD module จริง
       #     ผ่าน stub ของ N/* (engine/tests/helpers/) — ไม่ต้องมี NetSuite session
@@ -82,7 +89,7 @@ jobs:
           npm ci
           npm audit --audit-level=high
           npm run lint
-          npm test -- --run
+          npm run test:coverage
 
       # Dev-server tests do not prove either deployment bundle can be produced.
       - name: Designer — production builds
@@ -95,13 +102,15 @@ jobs:
       # 5) Playwright e2e (#146) — save/render flows had no automated regression coverage in CI
       # playwright.config.ts มี webServer block ที่ auto-start `npm run dev` เอง — ไม่ต้อง start server เอง
       # chromium เท่านั้น (ไม่ครบทุก browser) เพื่อความเร็ว — blocking เหมือน lint/test ข้างบน ห้าม || true
-      # หมายเหตุ: history.spec.ts (#129 undo) และ inspector.spec.ts (#127 role desync) ตรึงเป็น
-      # `test.fail()` โดยตั้งใจ — เขียว (passed) ตราบใดที่บั๊กยังไม่ถูกแก้ ห้าม unpin ใน workflow นี้
+      # history.spec.ts (#129 undo) และ inspector.spec.ts (#127 role desync) เป็น regressions ปกติแล้ว;
+      # ไม่มี `test.fail()` ค้างอยู่ใน suite ปัจจุบัน
       # server-side render ผ่าน N/render จริง + save-to-NetSuite parity ยัง automate ใน CI ไม่ได้
       # (ต้องมี live NetSuite session) — คงเป็น manual QA บน SB2 ต่อไป ดู designer/tests/e2e/FINDINGS.md
+      # production-performance config ใช้ dist ที่ build ไว้ด้านบน, server ใหม่, worker เดียว และ retry 0
       - name: Node — e2e (Playwright, designer/)
         if: hashFiles('designer/package.json') != ''
         working-directory: designer
         run: |
           npx playwright install --with-deps chromium
           npm run test:e2e
+          npx playwright test --config playwright.performance.config.ts

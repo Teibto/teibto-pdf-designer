@@ -148,6 +148,14 @@ async function persistTemplate(store: AppStore): Promise<DocumentTemplate> {
  * dialog (#138) overrides it and may flag the template as the record type's print
  * default via opts.
  */
+export function needsNetSuiteRecordType(store: AppStore): boolean {
+  const { template } = store.state;
+  // Loaded metadata is authoritative even when an older template stored blank.
+  // A legacy ID with no metadata can still update without replacing server fields.
+  if (template.id) return template.nsMetadata !== undefined && !template.nsMetadata.rectype.trim();
+  return !(template.nsMetadata?.rectype.trim() || getNsContext()?.recordType?.trim());
+}
+
 export async function saveTemplateToNetSuite(
   store: AppStore,
   opts: { rectype?: string; isDefault?: boolean } = {},
@@ -162,6 +170,11 @@ async function persistTemplateToNetSuite(
   const state = store.state;
   const session = store.documentSession;
   const ctx = getNsContext();
+  const explicitType = opts.rectype?.trim();
+  if ((opts.rectype !== undefined && !explicitType) || (opts.rectype === undefined && needsNetSuiteRecordType(store))) {
+    throw new Error('กรุณาเลือกประเภทเอกสารในกล่องบันทึกเข้า NetSuite ก่อนบันทึก');
+  }
+  const newRecordType = state.template.nsMetadata?.rectype.trim() || ctx?.recordType?.trim();
 
   const options: BfoExportOptions = {
     useBands: true,           // band layout is authoritative (#47 cutover)
@@ -206,13 +219,13 @@ async function persistTemplateToNetSuite(
     name: state.template.name || 'Untitled Template',
     data: designerJson,
     xml,
-    rectype: opts.rectype ?? (state.template.id ? undefined : ctx?.recordType ?? undefined),
+    rectype: explicitType ?? (state.template.id ? undefined : newRecordType),
     isDefault: opts.isDefault,
   });
 
   await acknowledgeSave(store, state, session, result.id);
   if (store.documentSession === session && store.state.template.id === result.id) {
-    const rectype = opts.rectype ?? state.template.nsMetadata?.rectype ?? (!state.template.id ? ctx?.recordType : undefined);
+    const rectype = explicitType ?? state.template.nsMetadata?.rectype ?? (!state.template.id ? newRecordType : undefined);
     const isDefault = opts.isDefault ?? state.template.nsMetadata?.isDefault;
     if (rectype && isDefault !== undefined) store.dispatch((d) => {
       d.template.nsMetadata = { rectype, isDefault };
@@ -420,9 +433,12 @@ export function importTemplateJson(
     d.pagination = { ...createDefaultPagination(), ...(template.pagination || {}) };
     d.jsonData = template.jsonData || null;
     d.jsonKeys = template.jsonData ? extractJsonKeys(template.jsonData) : [];
-    d.template.id = template.id;
+    // Imported IDs describe an external artifact, not a persisted save target in
+    // this account/browser. First Save must create a new, explicitly configured template.
+    d.template.id = null;
+    delete d.template.nsMetadata;
     d.template.name = template.name;
-    d.template.isDirty = false;
+    d.template.isDirty = true;
     d.selectedId = null;
     d.multiSelect = [];
     d.currentPage = 1;

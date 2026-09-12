@@ -2,44 +2,33 @@
  * <pld-layers-panel>
  * Full-featured layers panel inspired by Figma.
  * Features: drag-to-reorder, inline rename, lock/visibility toggles,
- * type icons, role badges, multi-select highlight, and z-index management.
+ * type icons, role badges, multi-select highlight, and document-order management.
  *
  * @author Wichit Wongta
  */
+import { icon, type IconName } from '../shared/icon';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
-import type { CanvasElement, ElementType, ElementRoleType } from '../../models/element';
+import { BAND_ORDER, type Band } from '../../models/bands';
+import { showToast } from '../shared/toast-notification';
+import type { CanvasElement, ElementType } from '../../models/element';
 import {
   selectElement,
   toggleMultiSelect,
   toggleLock,
   toggleVisibility,
   updateElement,
+  reorderDocumentElement,
 } from '../../state/actions';
 
 /** Icon map per element type */
-const TYPE_ICONS: Record<ElementType, string> = {
-  header:  'H',
-  text:    'T',
-  image:   '◻',
-  table:   '⊞',
-  shape:   '■',
-  line:    '─',
-  barcode: '|||',
-  list:    '≡',
+const TYPE_ICONS: Record<ElementType, IconName> = {
+  header: 'heading', text: 'text', image: 'image', table: 'table',
+  shape: 'square', line: 'minus', barcode: 'barcode', list: 'list',
 };
 
-/** Role badge colors */
-const ROLE_COLORS: Record<ElementRoleType, string> = {
-  header:    '#36677d',
-  content:   '#436b1d',
-  table:     '#8f520a',
-  summary:   '#8b5cf6',
-  footer:    '#64748b',
-  watermark: '#94a3b8',
-};
 
 @customElement('pld-layers-panel')
 export class PldLayersPanel extends LitElement {
@@ -47,10 +36,12 @@ export class PldLayersPanel extends LitElement {
   private store!: AppStore;
 
   @state() private elements: CanvasElement[] = [];
+  @state() private bands: Band[] = [];
   @state() private selectedId: string | null = null;
   @state() private multiSelect: string[] = [];
   @state() private editingId: string | null = null;
   @state() private dragOverId: string | null = null;
+  @state() private announcement = '';
   @state() private dragPosition: 'above' | 'below' | null = null;
 
   @query('.edit-input') private editInput!: HTMLInputElement;
@@ -76,7 +67,7 @@ export class PldLayersPanel extends LitElement {
     }
 
     .panel-title {
-      font-size: 10px;
+      font-size: var(--t-sm);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1.2px;
@@ -90,7 +81,7 @@ export class PldLayersPanel extends LitElement {
       background: var(--color-bg-deep);
       padding: 1px 6px;
       border-radius: 8px;
-      font-size: 9px;
+      font-size: var(--t-sm);
       color: var(--color-text-dim);
     }
 
@@ -137,11 +128,11 @@ export class PldLayersPanel extends LitElement {
     }
 
     .layer-item.locked {
-      opacity: 0.55;
+      font-style: italic;
     }
 
     .layer-item.hidden-el {
-      opacity: 0.35;
+      text-decoration: line-through;
     }
 
     /* Drag indicators */
@@ -175,7 +166,7 @@ export class PldLayersPanel extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 10px;
+      font-size: var(--t-sm);
       font-weight: 700;
       flex-shrink: 0;
       transition: background 0.15s;
@@ -185,7 +176,7 @@ export class PldLayersPanel extends LitElement {
     .type-icon.image { background: var(--c-success-soft); color: var(--c-success); }
     .type-icon.table { background: var(--c-warning-soft); color: var(--c-warning); }
     .type-icon.shape { background: var(--c-danger-soft); color: var(--c-danger); }
-    .type-icon.line    { background: rgba(138, 140, 160, 0.18);  color: var(--color-text-dim); }
+    .type-icon.line    { background: var(--c-surface-3);  color: var(--color-text-dim); }
     .type-icon.barcode { background: var(--c-warning-soft); color: var(--c-warning); }
     .type-icon.list { background: var(--c-success-soft); color: var(--c-success); }
 
@@ -198,8 +189,11 @@ export class PldLayersPanel extends LitElement {
       gap: 1px;
     }
 
+    .layer-select { display: block; width: 100%; border: none; padding: 4px 0; background: transparent; text-align: left; font: inherit; cursor: pointer; min-height: var(--btn-h); }
+    .layer-help { margin: 8px 14px; font-size: var(--t-sm); color: var(--c-text-subtle); }
+    .sr-only { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
     .layer-name {
-      font-size: 11.5px;
+      font-size: var(--t-sm);
       color: var(--color-text-dim);
       white-space: nowrap;
       overflow: hidden;
@@ -226,7 +220,7 @@ export class PldLayersPanel extends LitElement {
     }
 
     .layer-role {
-      font-size: 9px;
+      font-size: var(--t-sm);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--color-text-muted);
@@ -234,18 +228,18 @@ export class PldLayersPanel extends LitElement {
 
     .layer-binding {
       font-family: var(--font-mono);
-      font-size: 8.5px;
+      font-size: var(--t-sm);
       color: var(--color-accent);
       opacity: 0.7;
       margin-left: auto;
     }
 
     .group-badge {
-      font-size: 8px;
+      font-size: var(--t-sm);
       padding: 0 4px;
       border-radius: 3px;
-      background: rgba(139, 92, 246, 0.18);
-      color: #a78bfa;
+      background: var(--c-info-soft);
+      color: var(--c-info);
       letter-spacing: 0.3px;
       font-weight: 600;
       white-space: nowrap;
@@ -256,7 +250,7 @@ export class PldLayersPanel extends LitElement {
       display: flex;
       align-items: center;
       gap: 2px;
-      opacity: 0;
+      opacity: 1;
       transition: opacity 0.15s;
       flex-shrink: 0;
     }
@@ -267,8 +261,8 @@ export class PldLayersPanel extends LitElement {
     }
 
     .action-btn {
-      width: 22px;
-      height: 22px;
+      width: var(--btn-h);
+      height: var(--btn-h);
       border: none;
       background: none;
       color: var(--color-text-muted);
@@ -294,7 +288,7 @@ export class PldLayersPanel extends LitElement {
 
     /* ─── Inline Edit ─── */
     .edit-input {
-      font-size: 11.5px;
+      font-size: var(--t-sm);
       background: var(--color-bg-deep);
       border: 1px solid var(--color-accent);
       border-radius: 3px;
@@ -303,6 +297,7 @@ export class PldLayersPanel extends LitElement {
       outline: none;
       font-family: inherit;
       width: 100%;
+      box-sizing: border-box;
     }
 
     /* ─── Empty State ─── */
@@ -312,10 +307,15 @@ export class PldLayersPanel extends LitElement {
       justify-content: center;
       padding: 20px;
       color: var(--color-text-muted);
-      font-size: 11px;
+      font-size: var(--t-sm);
       text-align: center;
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+    button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   connectedCallback() {
     super.connectedCallback();
@@ -323,6 +323,7 @@ export class PldLayersPanel extends LitElement {
     // Read current state immediately (panel may connect after elements already exist)
     const s = this.store.state;
     this.elements = s.elements;
+    this.bands = s.bands;
     this.selectedId = s.selectedId;
     this.multiSelect = s.multiSelect;
 
@@ -330,6 +331,7 @@ export class PldLayersPanel extends LitElement {
     this._stateHandler = (e: Event) => {
       const st = (e as StateChangedEvent).state;
       this.elements = st.elements;
+      this.bands = st.bands;
       this.selectedId = st.selectedId;
       this.multiSelect = st.multiSelect;
     };
@@ -345,18 +347,19 @@ export class PldLayersPanel extends LitElement {
   }
 
   render() {
-    // Sort by zIndex descending (top layer first)
-    const sorted = [...this.elements].sort((a, b) => b.zIndex - a.zIndex);
+    const sorted = this._orderedElements();
 
     return html`
       <div class="panel-header">
         <div class="panel-title">
-          <span>◫</span> Layers
+          <span>${icon('layers')}</span> Layers
           <span class="count-badge">${this.elements.length}</span>
         </div>
       </div>
 
-      <div class="layer-list" @dragover=${this._onListDragOver} @drop=${this._onListDrop}>
+      <p id="layer-help" class="layer-help">Enter: เลือก · F2: เปลี่ยนชื่อ · Alt+↑/↓: จัดลำดับเอกสาร</p>
+      <span class="sr-only" role="status">${this.announcement}</span>
+      <div class="layer-list" role="list" aria-label="Layers" @dragover=${this._onListDragOver} @drop=${this._onListDrop}>
         ${sorted.length === 0
           ? html`<div class="empty-state">ลาก element ลงพื้นที่ออกแบบ<br>เพื่อสร้างเลเยอร์</div>`
           : sorted.map((el) => this._renderLayer(el))
@@ -385,6 +388,8 @@ export class PldLayersPanel extends LitElement {
     return html`
       <div
         class=${classes}
+        role="listitem"
+        data-layer-id=${el.id}
         draggable="true"
         @click=${(e: MouseEvent) => this._onClick(e, el.id)}
         @dblclick=${() => this._startEdit(el.id)}
@@ -395,26 +400,28 @@ export class PldLayersPanel extends LitElement {
         @drop=${(e: DragEvent) => this._onDrop(e, el.id)}
       >
         <!-- Type Icon -->
-        <div class="type-icon ${el.type}">${TYPE_ICONS[el.type]}</div>
+        <div class="type-icon ${el.type}">${icon(TYPE_ICONS[el.type])}</div>
 
         <!-- Layer Info -->
         <div class="layer-info">
           ${isEditing
             ? html`
                 <input
-                  class="edit-input"
+                  class="edit-input" aria-label="ชื่อเลเยอร์"
                   .value=${el.name}
                   @blur=${(e: FocusEvent) => this._finishEdit(el.id, e)}
                   @keydown=${(e: KeyboardEvent) => this._editKeyDown(e, el.id)}
                 />
               `
-            : html`<span class="layer-name">${el.name}</span>`
+            : html`<button class="layer-select layer-name" type="button" aria-pressed=${isSelected || isMulti}
+                aria-describedby="layer-help" data-select-id=${el.id}
+                @keydown=${(e: KeyboardEvent) => this._onLayerKeyDown(e, el.id)}>${el.name}</button>`
           }
           <div class="layer-meta">
-            <span class="role-dot" style="background:${ROLE_COLORS[el.role]}"></span>
+            <span class="role-dot" style="background:var(--color-role-${el.role})"></span>
             <span class="layer-role">${el.role}</span>
             ${el.groupId
-              ? html`<span class="group-badge">⊞ G</span>`
+              ? html`<span class="group-badge" title="Grouped">G</span>`
               : nothing
             }
             ${el.binding
@@ -428,17 +435,19 @@ export class PldLayersPanel extends LitElement {
         <div class="layer-actions">
           <button
             class="action-btn ${el.visible ? '' : 'active'}"
+            aria-label="${el.visible ? 'Hide' : 'Show'} ${el.name}" aria-pressed=${!el.visible}
             title="${el.visible ? 'Hide' : 'Show'}"
             @click=${(e: MouseEvent) => { e.stopPropagation(); toggleVisibility(this.store, el.id); }}
           >
-            ${el.visible ? '👁' : '👁‍🗨'}
+            ${icon(el.visible ? 'eye' : 'eye-off')}
           </button>
           <button
             class="action-btn ${el.locked ? 'active' : ''}"
+            aria-label="${el.locked ? 'Unlock' : 'Lock'} ${el.name}" aria-pressed=${el.locked}
             title="${el.locked ? 'Unlock' : 'Lock'}"
             @click=${(e: MouseEvent) => { e.stopPropagation(); toggleLock(this.store, el.id); }}
           >
-            ${el.locked ? '🔒' : '🔓'}
+            ${icon(el.locked ? 'lock' : 'unlock')}
           </button>
         </div>
       </div>
@@ -456,6 +465,53 @@ export class PldLayersPanel extends LitElement {
     } else {
       selectElement(this.store, id);
     }
+  }
+
+  private _onLayerKeyDown(e: KeyboardEvent, id: string) {
+    if (e.key === 'F2') {
+      e.preventDefault(); e.stopPropagation(); this._startEdit(id);
+    } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault(); e.stopPropagation();
+      const sorted = this._orderedElements();
+      const index = sorted.findIndex((el) => el.id === id);
+      const target = sorted[index + (e.key === 'ArrowUp' ? -1 : 1)];
+      if (target) this._reorder(id, target.id, e.key === 'ArrowUp' ? 'above' : 'below');
+    }
+  }
+
+  /** The list follows actual BFO band/row/cell traversal, never legacy zIndex. */
+  private _orderedElements(): CanvasElement[] {
+    const byId = new Map(this.elements.map(el => [el.id, el]));
+    const ordered: CanvasElement[] = [];
+    for (const role of BAND_ORDER) {
+      for (const band of this.bands.filter(band => band.role === role)) {
+        for (const row of band.rows) for (const col of row.columns) {
+          for (const id of col.elementIds) {
+            const element = byId.get(id);
+            if (element) { ordered.push(element); byId.delete(id); }
+          }
+        }
+      }
+    }
+    // Keep orphaned imported elements discoverable; the canonical move refuses
+    // ambiguous/unlinked references so a gesture cannot silently discard data.
+    return [...ordered, ...byId.values()];
+  }
+
+  private _reorder(sourceId: string, targetId: string, position: 'above' | 'below') {
+    if (!reorderDocumentElement(this.store, sourceId, targetId, position)) {
+      this.announcement = 'ไม่ได้ย้ายเลเยอร์: ตำแหน่งเดิม ถูกล็อก หรือโครงสร้างปลายทางไม่รองรับ';
+      showToast(this.announcement, 'warning');
+      return;
+    }
+    const ordered = this._orderedElements();
+    const at = ordered.findIndex(el => el.id === sourceId);
+    this.announcement = `${ordered[at]?.name}: ลำดับเอกสาร ${at + 1} / ${ordered.length}`;
+    void this.updateComplete.then(() => {
+      this.shadowRoot?.querySelectorAll<HTMLButtonElement>('[data-select-id]').forEach((button) => {
+        if (button.dataset.selectId === sourceId) button.focus();
+      });
+    });
   }
 
   // ═══════════════════════════════════════
@@ -481,6 +537,7 @@ export class PldLayersPanel extends LitElement {
   }
 
   private _editKeyDown(e: KeyboardEvent, _id: string) {
+    e.stopPropagation();
     if (e.key === 'Enter') {
       (e.target as HTMLInputElement).blur();
     }
@@ -533,35 +590,7 @@ export class PldLayersPanel extends LitElement {
     const sourceId = this._dragSourceId;
     if (!sourceId || sourceId === targetId) return;
 
-    // Reorder by swapping zIndex values
-    const targetEl = this.elements.find((el) => el.id === targetId);
-    const sourceEl = this.elements.find((el) => el.id === sourceId);
-    if (!targetEl || !sourceEl) return;
-
-    // In the list, items are sorted by zIndex descending.
-    // "above" means higher zIndex (closer to front)
-    // "below" means lower zIndex (closer to back)
-    if (this.dragPosition === 'above') {
-      // Place source just above target (higher z)
-      this.store.dispatch((draft) => {
-        const src = draft.elements.find((el: CanvasElement) => el.id === sourceId);
-        const tgt = draft.elements.find((el: CanvasElement) => el.id === targetId);
-        if (src && tgt) {
-          src.zIndex = tgt.zIndex + 1;
-          draft.template.isDirty = true;
-        }
-      });
-    } else {
-      // Place source just below target (lower z)
-      this.store.dispatch((draft) => {
-        const src = draft.elements.find((el: CanvasElement) => el.id === sourceId);
-        const tgt = draft.elements.find((el: CanvasElement) => el.id === targetId);
-        if (src && tgt) {
-          src.zIndex = tgt.zIndex - 1;
-          draft.template.isDirty = true;
-        }
-      });
-    }
+    this._reorder(sourceId, targetId, this.dragPosition ?? 'below');
 
     this._onDragEnd();
   }

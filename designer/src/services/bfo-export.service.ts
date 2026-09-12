@@ -46,6 +46,156 @@ export interface BfoExportOptions {
   useBands?: boolean;
 }
 
+const EMBEDDED_IMAGE_ERROR = 'รูปภาพฝังไม่รองรับหรือข้อมูลเสียหาย กรุณาอัปโหลดไฟล์ PNG/JPEG ใหม่ '
+  + '(Invalid or unsupported embedded image. Please upload a base64 PNG/JPEG file.)';
+const MAX_EMBEDDED_DATA_URL_LENGTH = 2_000_000;
+const MAX_EMBEDDED_IMAGE_DIMENSION = 4096;
+const MAX_EMBEDDED_IMAGE_PIXELS = 16_777_216;
+
+function invalidEmbeddedImage(): never {
+  throw new Error(EMBEDDED_IMAGE_ERROR);
+}
+
+function readUint32(bytes: Uint8Array, offset: number): number {
+  return ((bytes[offset] << 24) | (bytes[offset + 1] << 16)
+    | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
+}
+
+function crc32(bytes: Uint8Array, start: number, end: number): number {
+  let crc = 0xffffffff;
+  for (let index = start; index < end; index++) {
+    crc ^= bytes[index];
+    for (let bit = 0; bit < 8; bit++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+interface EmbeddedImageLimits {
+  maxDimension?: number;
+  maxPixels?: number;
+}
+
+function assertSafeDimensions(
+  width: number,
+  height: number,
+  limits: EmbeddedImageLimits,
+): void {
+  const maxDimension = limits.maxDimension ?? MAX_EMBEDDED_IMAGE_DIMENSION;
+  const maxPixels = limits.maxPixels ?? MAX_EMBEDDED_IMAGE_PIXELS;
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)
+    || width < 1 || height < 1
+    || width > maxDimension || height > maxDimension
+    || width * height > maxPixels) {
+    invalidEmbeddedImage();
+  }
+}
+
+function assertPng(bytes: Uint8Array, limits: EmbeddedImageLimits): void {
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (bytes.length < 45 || signature.some((value, index) => bytes[index] !== value)) {
+    invalidEmbeddedImage();
+  }
+
+  let offset = 8;
+  let chunkIndex = 0;
+  let hasImageData = false;
+  while (offset + 12 <= bytes.length) {
+    const length = readUint32(bytes, offset);
+    const typeStart = offset + 4;
+    const dataStart = typeStart + 4;
+    const dataEnd = dataStart + length;
+    const crcOffset = dataEnd;
+    if (dataEnd > bytes.length - 4) invalidEmbeddedImage();
+    const type = String.fromCharCode(...bytes.slice(typeStart, dataStart));
+    if (!/^[A-Za-z]{4}$/.test(type)
+      || crc32(bytes, typeStart, dataEnd) !== readUint32(bytes, crcOffset)) {
+      invalidEmbeddedImage();
+    }
+
+    if (chunkIndex === 0) {
+      if (type !== 'IHDR' || length !== 13) invalidEmbeddedImage();
+      assertSafeDimensions(readUint32(bytes, dataStart), readUint32(bytes, dataStart + 4), limits);
+    } else if (type === 'IHDR') {
+      invalidEmbeddedImage();
+    }
+    if (type === 'IDAT') hasImageData = true;
+    offset = crcOffset + 4;
+    chunkIndex++;
+    if (type === 'IEND') {
+      if (length !== 0 || !hasImageData || offset !== bytes.length) invalidEmbeddedImage();
+      return;
+    }
+  }
+  invalidEmbeddedImage();
+}
+
+function assertJpeg(bytes: Uint8Array, limits: EmbeddedImageLimits): void {
+  if (bytes.length < 16 || bytes[0] !== 0xff || bytes[1] !== 0xd8
+    || bytes[bytes.length - 2] !== 0xff || bytes[bytes.length - 1] !== 0xd9) {
+    invalidEmbeddedImage();
+  }
+
+  const startOfFrame = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+  let offset = 2;
+  let hasDimensions = false;
+  let hasScan = false;
+  while (offset < bytes.length - 2) {
+    if (bytes[offset++] !== 0xff) invalidEmbeddedImage();
+    while (bytes[offset] === 0xff) offset++;
+    const marker = bytes[offset++];
+    if (marker === 0xd9) break;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (offset + 2 > bytes.length - 2) invalidEmbeddedImage();
+    const length = (bytes[offset] << 8) | bytes[offset + 1];
+    if (length < 2 || offset + length > bytes.length - 2) invalidEmbeddedImage();
+    if (startOfFrame.has(marker)) {
+      if (length < 7) invalidEmbeddedImage();
+      assertSafeDimensions(
+        (bytes[offset + 5] << 8) | bytes[offset + 6],
+        (bytes[offset + 3] << 8) | bytes[offset + 4],
+        limits,
+      );
+      hasDimensions = true;
+    }
+    if (marker === 0xda) {
+      hasScan = true;
+      break; // Entropy-coded data is bounded by the validated URL and EOI.
+    }
+    offset += length;
+  }
+  if (!hasDimensions || !hasScan) invalidEmbeddedImage();
+}
+
+/**
+ * BFO-safe embedded image policy. Data URLs are untrusted template content, so
+ * validate both their declared MIME type and file signature before placing them
+ * in the XML. In particular, this keeps active SVG content and BFO-unsupported
+ * GIF/WebP payloads out of saved templates.
+ */
+export function assertSupportedEmbeddedImageData(
+  dataUrl: string,
+  limits: EmbeddedImageLimits = {},
+): void {
+  if (dataUrl.length > MAX_EMBEDDED_DATA_URL_LENGTH) invalidEmbeddedImage();
+  const match = /^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(dataUrl);
+  if (!match || match[2].length % 4 !== 0) {
+    invalidEmbeddedImage();
+  }
+
+  const mime = match[1].toLowerCase();
+  let bytes: Uint8Array;
+  try {
+    const decoded = atob(match[2]);
+    bytes = Uint8Array.from(decoded, (char) => char.charCodeAt(0));
+  } catch {
+    invalidEmbeddedImage();
+  }
+  if (mime === 'png') assertPng(bytes, limits);
+  else assertJpeg(bytes, limits);
+}
+
 /**
  * Export the current state as BFO XML string.
  */
@@ -532,9 +682,15 @@ function textToHtml(el: TextElement, recordType: string, useFreeMarker: boolean,
 function imageToHtml(el: ImageElement, recordType: string, useFreeMarker: boolean): string {
   // FreeMarker expression goes into the attribute raw — escapeXml would mangle the
   // !'' null-safe default into &apos; and break the expression when N/render runs (#4).
-  const src = el.binding && useFreeMarker
-    ? convertBindingToFreeMarker(el.binding, recordType)
-    : escapeXml(el.src || '');
+  let src: string;
+  if (el.binding && useFreeMarker) {
+    src = convertBindingToFreeMarker(el.binding, recordType);
+  } else if (el.imageData) {
+    assertSupportedEmbeddedImageData(el.imageData);
+    src = escapeXml(el.imageData);
+  } else {
+    src = escapeXml(el.src || '');
+  }
 
   // `object-fit` ไม่ถูกส่งลง XML: พิสูจน์บน SB2 2026-07-26 (#195) ว่า BFO ให้ภาพ
   // เหมือนกันทุกประการไม่ว่าจะ contain / cover / ไม่ใส่เลย · ปล่อยลงไปมีแต่จะทำให้
@@ -884,14 +1040,29 @@ function barcodeToHtml(el: BarcodeElement, recordType: string, useFreeMarker: bo
     ean13: 'ean13',
     qrcode: 'qrcode',
   };
-  const bfoType = barcodeTypeMap[el.barcodeType] || 'code128';
+  if (typeof el.barcodeType !== 'string' || !Object.hasOwn(barcodeTypeMap, el.barcodeType)) {
+    throw new Error('Unsupported barcode type. Choose Code 128, Code 39, EAN-13 or QR Code before exporting.');
+  }
+  const bfoType = barcodeTypeMap[el.barcodeType];
+  // BFO stretches a QR symbol to both supplied dimensions. Fit it inside the
+  // user frame without changing its square modules when switching from a
+  // linear barcode or resizing a previously saved rectangular frame.
+  const isQr = bfoType === 'qrcode';
+  const qrSide = Math.min(el.w, el.h);
+  const width = isQr ? qrSide : el.w;
+  const height = isQr ? qrSide : el.h;
 
-  const barcodeTag = [
+  const symbol = [
     `<!-- Barcode: ${escapeXml(el.name)} -->`,
     `<barcode codetype="${bfoType}" value="${value}"`,
-    `  style="width: ${el.w}pt; height: ${el.h}pt;"`,
+    `  style="width: ${width}pt; height: ${height}pt;"`,
     `  showtext="true" />`,
   ].join('\n');
+  const barcodeTag = isQr ? [
+    `<table cellpadding="0" cellspacing="0" style="width: ${el.w}pt; height: ${el.h}pt; border: 0;">`,
+    `  <tr><td align="center" valign="middle" style="padding: 0;">${symbol}</td></tr>`,
+    `</table>`,
+  ].join('\n') : symbol;
 
   if (!bound) return barcodeTag;
 

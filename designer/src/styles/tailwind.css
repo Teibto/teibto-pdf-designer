@@ -6,28 +6,28 @@
 @import './base.css';
 
 /* ─── Tailwind Theme Extensions ─── */
-@theme {
+@theme inline {
   /* Surface colors */
-  --color-surface-deep:    #f5f4f2;
-  --color-surface-panel:   #ffffff;
-  --color-surface-card:    #fbf9f8;
-  --color-surface-hover:   #f1efed;
-  --color-surface-element: #f1efed;
+  --color-surface-deep:    var(--c-bg);
+  --color-surface-panel:   var(--c-surface);
+  --color-surface-card:    var(--c-surface-2);
+  --color-surface-hover:   var(--c-surface-3);
+  --color-surface-element: var(--c-surface-3);
 
   /* Accent colors */
-  --color-accent:       #36677d;
-  --color-accent-green: #436b1d;
-  --color-accent-orange:#8f520a;
-  --color-accent-pink:  #b3311f;
+  --color-accent:       var(--c-brand);
+  --color-accent-green: var(--c-success);
+  --color-accent-orange:var(--c-warning);
+  --color-accent-pink:  var(--c-danger);
 
   /* Text colors */
-  --color-txt:       #161513;
-  --color-txt-dim:   #4f4b47;
-  --color-txt-muted: #5f5b57;
+  --color-txt:       var(--c-text);
+  --color-txt-dim:   var(--c-text-subtle);
+  --color-txt-muted: var(--c-text-muted);
 
   /* Font families */
-  --font-sans:  'Oracle Sans', 'Noto Sans Thai', 'Leelawadee UI', system-ui, sans-serif;
-  --font-mono:  'JetBrains Mono', monospace;
-  --font-serif: 'Playfair Display', serif;
-  --font-thai:  'Sarabun', sans-serif;
+  --font-sans: var(--f-sans);
+  --font-mono: var(--f-mono);
+  --font-serif: var(--f-sans);
+  --font-thai: var(--f-sans);
 }

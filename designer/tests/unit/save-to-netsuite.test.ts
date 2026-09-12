@@ -62,6 +62,35 @@ describe('saveTemplateToNetSuite (#137)', () => {
     return store;
   }
 
+  it('rejects a standalone new save before sending any request and releases the save lock', async () => {
+    mockNs({ userId: 1, recordType: null });
+    const store = storeWithContent();
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow('เลือกประเภทเอกสาร');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(store.state.template.id).toBeNull();
+    await expect(saveTemplateToNetSuite(store, { rectype: 'invoice', isDefault: false })).resolves.toEqual({ id: '42' });
+    expect(savedBodies[0]).toMatchObject({ rectype: 'invoice', isDefault: false });
+  });
+
+  it('requires selection for loaded blank metadata even when the launch context has a type', async () => {
+    const store = storeWithContent();
+    store.dispatch(d => { d.template.id = '44'; d.template.nsMetadata = { rectype: '', isDefault: false }; });
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow('เลือกประเภทเอกสาร');
+    expect(fetch).not.toHaveBeenCalled();
+    await saveTemplateToNetSuite(store, { rectype: 'purchaseorder', isDefault: false });
+    expect(savedBodies[0]).toMatchObject({ id: '44', rectype: 'purchaseorder', isDefault: false });
+  });
+
+  it.each([undefined, { rectype: 'purchaseorder', isDefault: false }])('preserves server fields for an existing ID with metadata %j', async metadata => {
+    mockNs({ userId: 1, recordType: null });
+    const store = storeWithContent();
+    store.dispatch(d => { d.template.id = '42'; d.template.nsMetadata = metadata; });
+    await saveTemplateToNetSuite(store);
+    expect(savedBodies[0]).not.toHaveProperty('rectype');
+    expect(savedBodies[0]).not.toHaveProperty('isDefault');
+    expect(store.state.template.nsMetadata).toEqual(metadata);
+  });
+
   it('does not mark a newer local edit clean when IndexedDB finishes', async () => {
     let complete!: () => void;
     vi.mocked(set).mockImplementationOnce(() => new Promise<void>((resolve) => { complete = resolve; }));

@@ -1,5 +1,7 @@
 # CLAUDE.md — teibto-pdf-designer
 
+@AGENTS.md
+
 ## Repo นี้คืออะไร
 
 NetSuite PDF Template Product ของ Teibto (internal, classification: **Internal**) — 3 ชั้น:

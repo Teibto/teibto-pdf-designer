@@ -6,13 +6,16 @@
  * @author Wichit Wongta
  * @since 2026-09-11
  */
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, unsafeCSS } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
+import { icon } from '../shared/icon';
 import { switchView } from '../../state/actions';
 import { getTheme, toggleTheme, type Theme } from '../../services/theme.service';
 import { isNetSuiteEnv, canEditNsTemplates, READ_ONLY_REASON } from '../../services/netsuite-adapter.service';
+
+export const DRAWER_MAX_WIDTH = 1023;
 
 @customElement('pld-header')
 export class PldHeader extends LitElement {
@@ -22,6 +25,14 @@ export class PldHeader extends LitElement {
   @state() private activeView: 'design' | 'flow' = 'design';
   @state() private theme: Theme = getTheme();
 
+  private readonly _onStateChanged = (event: Event) => {
+    this.activeView = (event as StateChangedEvent).state.view;
+  };
+
+  /**
+   * บทบาทนี้แก้เทมเพลตบน NetSuite ไม่ได้ (#189) — ปิดปุ่มที่จะถูกปฏิเสธอยู่ดี
+   * แทนที่จะให้ผู้ใช้ออกแบบเสร็จแล้วค่อยเจอ error ตอนกดบันทึก
+   */
   private get readOnly(): boolean {
     return isNetSuiteEnv() && !canEditNsTemplates();
   }
@@ -38,7 +49,9 @@ export class PldHeader extends LitElement {
       border-bottom: 1px solid var(--c-border);
       box-shadow: var(--sh-sm);
       flex-shrink: 0;
-      z-index: var(--z-overlay);
+      /* The header owns its menu stacking context. Place that context above
+         drawers, while keeping it below the modal layer/top-layer dialogs. */
+      z-index: calc(var(--z-overlay) + var(--z-dropdown));
       font-family: var(--f-sans);
     }
 
@@ -116,7 +129,7 @@ export class PldHeader extends LitElement {
     }
 
     .tab:hover { color: var(--c-text); background: var(--c-surface-2); }
-    .tab[aria-selected="true"] { color: var(--c-brand); border-bottom-color: var(--c-brand); }
+    .tab[aria-pressed="true"] { color: var(--c-brand); border-bottom-color: var(--c-brand); }
 
     .actions {
       margin-left: auto;
@@ -210,7 +223,7 @@ export class PldHeader extends LitElement {
       .actions > .theme { width: var(--btn-h); padding: 0; }
     }
 
-    @media (max-width: 860px) {
+    @media (max-width: ${unsafeCSS(DRAWER_MAX_WIDTH)}px) {
       :host { padding: 0 var(--s-2); gap: var(--s-1); }
       .mobile-only { display: inline-grid; }
       .brand-copy { display: none; }
@@ -236,43 +249,46 @@ export class PldHeader extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.store.addEventListener('state-changed', (e: Event) => {
-      this.activeView = (e as StateChangedEvent).state.view;
-    });
+    this.activeView = this.store.state.view;
+    this.store.addEventListener('state-changed', this._onStateChanged);
+  }
+
+  disconnectedCallback() {
+    this.store.removeEventListener('state-changed', this._onStateChanged);
+    super.disconnectedCallback();
   }
 
   render() {
     return html`
-      <button class="iconbtn mobile-only" type="button" title="เครื่องมือ (Tools)"
-        aria-label="เปิดเครื่องมือ (Open tools)" @click=${() => this._emit('pld-toggle-left-panel')}>☰</button>
+      <slot name="tools-toggle"></slot>
 
       <div class="brand" aria-label="PDF Layout Designer">
         <div class="mark" aria-hidden="true">PD</div>
         <span class="brand-copy"><strong>PDF Layout Designer</strong><small>Oracle Redwood workspace</small></span>
       </div>
 
-      <div class="view-tabs" role="tablist" aria-label="มุมมอง (Views)">
-        <button class="tab" role="tab" aria-selected=${this.activeView === 'design'}
+      <div class="view-tabs" role="group" aria-label="มุมมอง (Views)">
+        <button class="tab" aria-pressed=${this.activeView === 'design'}
           @click=${() => switchView(this.store, 'design')}>ออกแบบ <small>Design</small></button>
-        <button class="tab" role="tab" aria-selected=${this.activeView === 'flow'}
+        <button class="tab" aria-pressed=${this.activeView === 'flow'}
           @click=${() => switchView(this.store, 'flow')}>ผังข้อมูล <small>Flow</small></button>
       </div>
 
       <div class="actions">
         ${this.readOnly ? html`<span class="readonly read-only-badge" title=${READ_ONLY_REASON}>อ่านอย่างเดียว · Read only</span>` : nothing}
         <button class="btn theme" type="button" @click=${this._onToggleTheme} title="สลับธีม (Toggle theme)">
-          <span aria-hidden="true">${this.theme === 'dark' ? '☀' : '◐'}</span>
+          <span aria-hidden="true">${icon(this.theme === 'dark' ? 'sun' : 'moon')}</span>
           <span class="label">${this.theme === 'dark' ? 'Light' : 'Dark'}</span>
         </button>
         <button class="btn templates" type="button" @click=${this._onTemplates}>เทมเพลต</button>
         <button class="btn save" type="button" @click=${this._onSave} ?disabled=${this.readOnly}
           title=${this.readOnly ? READ_ONLY_REASON : 'บันทึกเทมเพลต'}>บันทึก</button>
         <button class="btn primary" type="button" aria-label="พรีวิว (Preview)" @click=${this._onPreview}>
-          <span class="preview-full">พรีวิว · Preview</span><span class="preview-short" aria-hidden="true">▷</span>
+          <span class="preview-full">พรีวิว · Preview</span><span class="preview-short" aria-hidden="true">${icon('play')}</span>
         </button>
 
-        <details>
-          <summary class="iconbtn" title="การทำงานเพิ่มเติม (More actions)" aria-label="การทำงานเพิ่มเติม">⋯</summary>
+        <details @keydown=${this._onMenuKeydown}>
+          <summary class="iconbtn" title="การทำงานเพิ่มเติม (More actions)" aria-label="การทำงานเพิ่มเติม">${icon('more-horizontal')}</summary>
           <div class="menu" @click=${this._closeMenu}>
             <button type="button" @click=${this._onToggleTheme}>สลับเป็น ${this.theme === 'dark' ? 'Light' : 'Dark'} theme</button>
             <div class="menu-separator"></div>
@@ -288,11 +304,20 @@ export class PldHeader extends LitElement {
           </div>
         </details>
 
-        <button class="iconbtn mobile-only" type="button" title="คุณสมบัติ (Properties)"
-          aria-label="เปิดคุณสมบัติ (Open properties)" @click=${() => this._emit('pld-toggle-right-panel')}>☷</button>
+        <slot name="properties-toggle"></slot>
       </div>
     `;
   }
+
+  private _onMenuKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    const details = event.currentTarget as HTMLDetailsElement;
+    if (!details.open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    details.open = false;
+    details.querySelector('summary')?.focus();
+  };
 
   private _emit(name: string) {
     this.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true }));
@@ -300,7 +325,11 @@ export class PldHeader extends LitElement {
 
   private _closeMenu = (event: Event) => {
     if (!(event.target as HTMLElement).closest('button')) return;
-    (event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
+    const details = (event.currentTarget as HTMLElement).closest('details');
+    details?.removeAttribute('open');
+    // Restore synchronously: any modal opened by the action takes focus during
+    // its subsequent Lit update, while nonmodal actions keep a visible target.
+    details?.querySelector('summary')?.focus();
   };
 
   private _onToggleTheme = () => { this.theme = toggleTheme(); };

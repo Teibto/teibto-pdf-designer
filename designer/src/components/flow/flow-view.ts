@@ -4,12 +4,12 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import type { CanvasElement } from '../../models/element';
-import { ELEMENT_ROLES } from '../../constants/roles';
 
 
 @customElement('pld-flow-view')
@@ -19,6 +19,12 @@ export class PldFlowView extends LitElement {
 
   @state() private elements: CanvasElement[] = [];
   @state() private jsonKeys: string[] = [];
+
+  private readonly _onStateChanged = (event: Event) => {
+    const state = (event as StateChangedEvent).state;
+    this.elements = state.elements;
+    this.jsonKeys = state.jsonKeys;
+  };
 
   static styles = css`
     :host {
@@ -48,7 +54,7 @@ export class PldFlowView extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #fff;
+      color: var(--c-brand-on);
       font-size: 14px;
     }
 
@@ -66,7 +72,7 @@ export class PldFlowView extends LitElement {
     }
 
     .column-header {
-      font-size: 10px;
+      font-size: var(--t-sm);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -103,7 +109,7 @@ export class PldFlowView extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 11px;
+      font-size: var(--t-sm);
       flex-shrink: 0;
     }
 
@@ -117,7 +123,7 @@ export class PldFlowView extends LitElement {
     }
 
     .flow-node-sub {
-      font-size: 9px;
+      font-size: var(--t-sm);
       font-family: var(--font-mono);
       color: var(--color-text-muted);
     }
@@ -139,7 +145,9 @@ export class PldFlowView extends LitElement {
       font-size: 18px;
       min-width: 40px;
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+`;
 
   connectedCallback() {
     super.connectedCallback();
@@ -148,11 +156,12 @@ export class PldFlowView extends LitElement {
     // state-changed (#130).
     this.elements = this.store.state.elements;
     this.jsonKeys = this.store.state.jsonKeys;
-    this.store.addEventListener('state-changed', (e: Event) => {
-      const s = (e as StateChangedEvent).state;
-      this.elements = s.elements;
-      this.jsonKeys = s.jsonKeys;
-    });
+    this.store.addEventListener('state-changed', this._onStateChanged);
+  }
+
+  disconnectedCallback() {
+    this.store.removeEventListener('state-changed', this._onStateChanged);
+    super.disconnectedCallback();
   }
 
   render() {
@@ -161,7 +170,7 @@ export class PldFlowView extends LitElement {
     if (boundElements.length === 0 && this.jsonKeys.length === 0) {
       return html`
         <div class="flow-title">
-          <div class="flow-title-icon">⟁</div>
+          <div class="flow-title-icon">${icon('layers')}</div>
           Flow Map
         </div>
         <div class="no-bindings">
@@ -175,23 +184,23 @@ export class PldFlowView extends LitElement {
 
     return html`
       <div class="flow-title">
-        <div class="flow-title-icon">⟁</div>
+        <div class="flow-title-icon">${icon('layers')}</div>
         Flow Map — Data Bindings
       </div>
 
       <div class="flow-container">
         <!-- JSON Keys Column -->
         <div class="flow-column">
-          <div class="column-header">📋 JSON Data Keys</div>
+          <div class="column-header">${icon('copy')} JSON Data Keys</div>
           ${this.jsonKeys.map(
             (key) => html`
               <div class="flow-node ${usedKeys.has(key) ? 'connected' : ''}">
                 <div class="flow-node-icon" style="background: var(--c-brand-soft); color: var(--c-brand);">
-                  {}
+                  ${icon('database')}
                 </div>
                 <div>
                   <div class="flow-node-label">${key}</div>
-                  <div class="flow-node-sub">${usedKeys.has(key) ? '✓ Bound' : 'Available'}</div>
+                  <div class="flow-node-sub">${usedKeys.has(key) ? 'Bound' : 'Available'}</div>
                 </div>
               </div>
             `,
@@ -200,18 +209,17 @@ export class PldFlowView extends LitElement {
 
         <!-- Arrow Column -->
         <div class="arrow-col">
-          ${boundElements.map(() => html`<span>→</span>`)}
+          ${boundElements.map(() => html`<span>${icon('right')}</span>`)}
         </div>
 
         <!-- Elements Column -->
         <div class="flow-column">
-          <div class="column-header">◇ Bound Elements</div>
+          <div class="column-header">${icon('square')} Bound Elements</div>
           ${boundElements.map((el) => {
-            const role = ELEMENT_ROLES[el.role];
             return html`
               <div class="flow-node connected">
-                <div class="flow-node-icon" style="background: ${role.color}22; color: ${role.color};">
-                  ◇
+                <div class="flow-node-icon" style="background: color-mix(in srgb, var(--color-role-${el.role}) 12%, var(--c-surface)); color: var(--color-role-${el.role});">
+                  ${icon('square')}
                 </div>
                 <div>
                   <div class="flow-node-label">${el.name}</div>

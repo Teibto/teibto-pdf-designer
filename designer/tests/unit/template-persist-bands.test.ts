@@ -107,3 +107,29 @@ describe('dragColumnBoundary (#98)', () => {
     expect(JSON.stringify(store.state.bands)).toBe(before);
   });
 });
+
+
+describe('barcode import validation preserves the open document', () => {
+  it.each([undefined, null, 'pdf417', 128, ['code128']])('rejects barcodeType %j before replacing existing content', barcodeType => {
+    const source = new AppStore();
+    addElement(source, 'barcode', 0, 0);
+    const imported = JSON.parse(exportTemplateJson(source));
+    imported.elements[0].barcodeType = barcodeType;
+    const destination = editedStore();
+    const before = destination.state;
+    const session = destination.documentSession;
+    expect(() => importTemplateJson(destination, JSON.stringify(imported))).toThrow('elements[0].barcodeType');
+    expect(destination.state).toBe(before);
+    expect(destination.documentSession).toBe(session);
+  });
+
+  it.each(['code128', 'code39', 'ean13', 'qrcode'])('preserves supported %s without coercion during import', barcodeType => {
+    const source = new AppStore();
+    addElement(source, 'barcode', 0, 0);
+    const imported = JSON.parse(exportTemplateJson(source));
+    imported.elements[0].barcodeType = barcodeType;
+    const destination = editedStore();
+    importTemplateJson(destination, JSON.stringify(imported));
+    expect(destination.state.elements[0]).toMatchObject({ type: 'barcode', barcodeType });
+  });
+});

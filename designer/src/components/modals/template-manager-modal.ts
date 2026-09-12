@@ -5,10 +5,12 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
+import type { AppState } from '../../state/app-state';
 import type { DocumentTemplate } from '../../models/template';
 import {
   listTemplates,
@@ -53,10 +55,17 @@ export class PldTemplateManagerModal extends LitElement {
   @state() private loading = false;
   @state() private nsLoading = false;
   @state() private importJson = '';
+  @state() private importError = '';
   /** เทมเพลตที่กำลังกางประวัติอยู่ (#189) — กางได้ทีละใบ */
   @state() private historyFor: string | null = null;
   @state() private history: NsTemplateHistory | null = null;
   @state() private historyLoading = false;
+  private _loadGeneration = 0;
+
+  disconnectedCallback(): void {
+    ++this._loadGeneration;
+    super.disconnectedCallback();
+  }
 
   static styles = css`
     .tabs {
@@ -86,7 +95,7 @@ export class PldTemplateManagerModal extends LitElement {
 
     .tab.active {
       background: var(--c-brand);
-      color: #fff;
+      color: var(--c-brand-on);
     }
 
     .tab:hover:not(.active) {
@@ -126,7 +135,7 @@ export class PldTemplateManagerModal extends LitElement {
     }
 
     .tpl-meta {
-      font-size: 10px;
+      font-size: var(--t-sm);
       color: var(--c-text-muted);
       display: flex;
       flex-direction: column;
@@ -135,7 +144,7 @@ export class PldTemplateManagerModal extends LitElement {
 
     .tpl-elements {
       font-family: var(--font-mono, monospace);
-      font-size: 9px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
       margin-top: 6px;
     }
@@ -152,7 +161,7 @@ export class PldTemplateManagerModal extends LitElement {
       border-radius: 4px;
       background: var(--c-bg);
       color: var(--c-text-subtle);
-      font-size: 10px;
+      font-size: var(--t-sm);
       cursor: pointer;
       font-family: inherit;
       transition: all 0.15s;
@@ -171,17 +180,20 @@ export class PldTemplateManagerModal extends LitElement {
     .tpl-btn.primary {
       background: var(--c-brand);
       border-color: var(--c-brand);
-      color: #fff;
+      color: var(--c-brand-on);
     }
 
     /* ─── Import Panel ─── */
     .import-area {
+      min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
 
     .import-area textarea {
+      box-sizing: border-box;
+      max-width: 100%;
       width: 100%;
       min-height: 250px;
       background: var(--c-bg);
@@ -189,7 +201,7 @@ export class PldTemplateManagerModal extends LitElement {
       border-radius: 8px;
       color: var(--c-success);
       font-family: var(--font-mono, monospace);
-      font-size: 11px;
+      font-size: var(--t-sm);
       line-height: 1.6;
       padding: 12px;
       resize: vertical;
@@ -201,7 +213,10 @@ export class PldTemplateManagerModal extends LitElement {
       border-color: var(--c-brand);
     }
 
+    .import-error { color: var(--c-danger); background: var(--c-danger-soft); border: 1px solid var(--c-danger); border-radius: var(--r-md); padding: var(--s-3); font-size: var(--t-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+
     .import-actions {
+      flex-wrap: wrap;
       display: flex;
       gap: 8px;
       justify-content: flex-end;
@@ -227,8 +242,10 @@ export class PldTemplateManagerModal extends LitElement {
     .btn-primary {
       background: var(--c-brand);
       border-color: var(--c-brand);
-      color: #fff;
+      color: var(--c-brand-on);
     }
+
+    .btn.btn-primary:hover { background: var(--c-brand-strong); color: var(--c-brand-on); }
 
     .empty-msg {
       text-align: center;
@@ -256,11 +273,11 @@ export class PldTemplateManagerModal extends LitElement {
     .ns-read-only {
       padding: 10px 12px;
       margin-bottom: 10px;
-      background: rgba(245, 166, 35, 0.1);
-      border: 1px solid var(--color-warning, #f5a623);
+      background: var(--c-warning-soft);
+      border: 1px solid var(--c-warning);
       border-radius: 8px;
-      color: var(--color-warning, #f5a623);
-      font-size: 11.5px;
+      color: var(--c-warning);
+      font-size: var(--t-sm);
       line-height: 1.5;
     }
 
@@ -271,7 +288,7 @@ export class PldTemplateManagerModal extends LitElement {
     }
 
     .history-note {
-      font-size: 10.5px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
       margin-bottom: 6px;
       line-height: 1.5;
@@ -282,7 +299,7 @@ export class PldTemplateManagerModal extends LitElement {
       align-items: center;
       gap: 8px;
       padding: 4px 0;
-      font-size: 10.5px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
       border-bottom: 1px solid var(--c-bg);
     }
@@ -303,14 +320,23 @@ export class PldTemplateManagerModal extends LitElement {
       border: 1px solid var(--c-danger);
       border-radius: 8px;
       color: var(--c-danger);
-      font-size: 11.5px;
+      font-size: var(--t-sm);
       line-height: 1.5;
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+    button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   /** Load templates when modal opens */
   async updated(changed: Map<string, unknown>) {
+    if (changed.has('open') && !this.open) {
+      ++this._loadGeneration;
+    }
     if (changed.has('open') && this.open) {
+      this.importError = '';
       await this._refresh();
       this.sampleTemplates = getSampleTemplates();
       if (isNetSuiteEnv()) this._refreshNs();
@@ -340,47 +366,63 @@ export class PldTemplateManagerModal extends LitElement {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="📁 Template Manager"
+        modalTitle="Template Manager"
         size="lg"
         @close=${this._close}
       >
         <div slot="body">
           <!-- Tabs -->
-          <div class="tabs">
-            <button class="tab ${this.activeTab === 'saved' ? 'active' : ''}"
+          <div class="tabs" role="tablist" aria-label="Template sources">
+            <button role="tab" id="manager-saved" aria-controls="manager-content" aria-selected=${this.activeTab === 'saved'} tabindex=${this.activeTab === 'saved' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'saved' ? 'active' : ''}"
               @click=${() => (this.activeTab = 'saved')}>
-              💾 Saved (${this.savedTemplates.length})
+              ${icon('save')} Saved (${this.savedTemplates.length})
             </button>
-            <button class="tab ${this.activeTab === 'samples' ? 'active' : ''}"
+            <button role="tab" id="manager-samples" aria-controls="manager-content" aria-selected=${this.activeTab === 'samples'} tabindex=${this.activeTab === 'samples' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'samples' ? 'active' : ''}"
               @click=${() => (this.activeTab = 'samples')}>
-              ★ Samples
+              ${icon('file')} Samples
             </button>
             ${isNetSuiteEnv() ? html`
-              <button class="tab ${this.activeTab === 'netsuite' ? 'active' : ''}"
+              <button role="tab" id="manager-netsuite" aria-controls="manager-content" aria-selected=${this.activeTab === 'netsuite'} tabindex=${this.activeTab === 'netsuite' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'netsuite' ? 'active' : ''}"
                 @click=${() => (this.activeTab = 'netsuite')}>
-                🌐 NetSuite (${this.nsTemplates.length})
+                ${icon('database')} NetSuite (${this.nsTemplates.length})
               </button>
             ` : nothing}
-            <button class="tab ${this.activeTab === 'import' ? 'active' : ''}"
+            <button role="tab" id="manager-import" aria-controls="manager-content" aria-selected=${this.activeTab === 'import'} tabindex=${this.activeTab === 'import' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'import' ? 'active' : ''}"
               @click=${() => (this.activeTab = 'import')}>
-              ⟨/⟩ Import / Export
+              ${icon('upload')} Import / Export
             </button>
           </div>
 
+          <div id="manager-content" role="tabpanel" aria-labelledby="manager-${this.activeTab}">
           ${this.activeTab === 'saved' ? (this.loading ? html`<p style="text-align:center;padding:24px;color:var(--color-text-muted)">Loading...</p>` : this._renderSaved()) : nothing}
           ${this.activeTab === 'samples' ? this._renderSamples() : nothing}
           ${this.activeTab === 'netsuite' ? (this.nsLoading ? html`<p style="text-align:center;padding:24px;color:var(--color-text-muted)">Loading...</p>` : this._renderNetsuite()) : nothing}
           ${this.activeTab === 'import' ? this._renderImportExport() : nothing}
+          </div>
         </div>
 
         <div slot="footer">
           <div class="footer-btns">
-            <button class="btn" @click=${this._saveCurrentTemplate}>💾 Save Current</button>
+            <button class="btn" @click=${this._saveCurrentTemplate}>${icon('save')} Save Current</button>
             <button class="btn" @click=${this._close}>Close</button>
           </div>
         </div>
       </pld-modal>
     `;
+  }
+
+  private _onTabKeydown(event: KeyboardEvent) {
+    const tabs = ['saved', 'samples', ...(isNetSuiteEnv() ? ['netsuite'] : []), 'import'] as const;
+    const current = tabs.indexOf(this.activeTab);
+    let index: number;
+    if (event.key === 'ArrowRight') index = (current + 1) % tabs.length;
+    else if (event.key === 'ArrowLeft') index = (current - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'Home') index = 0;
+    else if (event.key === 'End') index = tabs.length - 1;
+    else return;
+    event.preventDefault(); event.stopPropagation();
+    this.activeTab = tabs[index] as typeof this.activeTab;
+    void this.updateComplete.then(() => this.shadowRoot?.getElementById(`manager-${this.activeTab}`)?.focus());
   }
 
   private _renderSaved() {
@@ -455,7 +497,7 @@ export class PldTemplateManagerModal extends LitElement {
     const readOnly = !canEditNsTemplates();
 
     return html`
-      ${readOnly ? html`<div class="ns-read-only">🔒 ${READ_ONLY_REASON}</div>` : nothing}
+      ${readOnly ? html`<div class="ns-read-only">${icon('lock')} ${READ_ONLY_REASON}</div>` : nothing}
       ${missingDefault.length > 0 ? html`
         <div class="ns-no-default-warning">
           ⚠ ไม่มีเทมเพลตค่าเริ่มต้น — ${missingDefault.join(', ')}. การพิมพ์${missingDefault.length > 1 ? 'ประเภทเอกสารเหล่านี้' : 'ประเภทเอกสารนี้'}จะล้มเหลวด้วย "No template found" จนกว่าจะตั้งค่าเริ่มต้น
@@ -464,7 +506,7 @@ export class PldTemplateManagerModal extends LitElement {
       <div class="template-grid">
         ${this.nsTemplates.map((tpl) => html`
           <div class="template-card">
-            <div class="tpl-name">${tpl.isDefault ? '★ ' : ''}${tpl.name}</div>
+            <div class="tpl-name">${tpl.isDefault ? html`<span title="Default">${icon('check')}</span>` : nothing}${tpl.name}</div>
             <div class="tpl-meta">
               <span>ประเภทเอกสาร: ${tpl.rectype || '—'}${tpl.isDefault ? ' (ค่าเริ่มต้น)' : ''}</span>
               <span>แก้ไขล่าสุด: ${tpl.modified}</span>
@@ -476,7 +518,7 @@ export class PldTemplateManagerModal extends LitElement {
                 title=${readOnly ? READ_ONLY_REASON : 'สร้างสำเนาใน NetSuite'}
                 @click=${() => this._duplicateNsTemplate(tpl.id)}>Duplicate</button>
               <button class="tpl-btn" @click=${() => this._toggleHistory(tpl.id)}>
-                ${this.historyFor === tpl.id ? '🕘 ปิดประวัติ' : '🕘 ประวัติ'}
+                ${icon('clock')} ${this.historyFor === tpl.id ? 'ปิดประวัติ' : 'ประวัติ'}
               </button>
               <button class="tpl-btn danger" ?disabled=${readOnly}
                 title=${readOnly ? READ_ONLY_REASON : 'ลบเทมเพลตนี้ออกจาก NetSuite'}
@@ -590,17 +632,22 @@ export class PldTemplateManagerModal extends LitElement {
   private _renderImportExport() {
     return html`
       <div class="import-area">
-        <div style="font-size: 12px; color: var(--c-text-subtle); margin-bottom: 4px;">
-          Paste template JSON to import, or export current template:
-        </div>
-        <textarea
+        <label for="template-import-json" style="display:block; font-size: var(--t-sm); color: var(--c-text); margin-bottom: var(--s-1);">
+          Template JSON / JSON เทมเพลต
+        </label>
+        <p id="template-import-help" style="font-size: var(--t-sm); color: var(--c-text-subtle); margin-bottom: var(--s-2);">
+          Paste template JSON to import, or export current template.
+        </p>
+        <textarea id="template-import-json" aria-describedby=${this.importError ? 'template-import-help template-import-error' : 'template-import-help'}
+          aria-invalid=${this.importError ? 'true' : 'false'}
           placeholder='{"id": "...", "name": "...", "elements": [...]}'
           .value=${this.importJson}
-          @input=${(e: Event) => (this.importJson = (e.target as HTMLTextAreaElement).value)}
+          @input=${(e: Event) => { this.importJson = (e.target as HTMLTextAreaElement).value; this.importError = ''; }}
         ></textarea>
+        ${this.importError ? html`<p id="template-import-error" class="import-error" role="alert">${this.importError}</p>` : nothing}
         <div class="import-actions">
-          <button class="btn" @click=${this._exportCurrent}>📋 Export Current to Clipboard</button>
-          <button class="btn btn-primary" @click=${this._importFromJson}>⟨/⟩ Import JSON</button>
+          <button class="btn" @click=${this._exportCurrent}>${icon('copy')} Export Current to Clipboard</button>
+          <button class="btn btn-primary" @click=${this._importFromJson}>${icon('upload')} Import JSON</button>
         </div>
       </div>
     `;
@@ -621,20 +668,30 @@ export class PldTemplateManagerModal extends LitElement {
   }
 
   private async _loadTemplate(id: string) {
+    const generation = ++this._loadGeneration;
     if (!confirmDiscardUnsaved(this.store)) return;
+    const intent = this._captureDocumentIntent(generation);
     try {
-      const { warnings } = await loadTemplate(this.store, id);
+      // loadTemplate performs validation/migration and mutates its target store.
+      // Stage that work away from the live document so a stale IndexedDB read
+      // can be discarded without first overwriting the user's newer intent.
+      const staged = new AppStore();
+      const { warnings } = await loadTemplate(staged, id);
+      if (!this._mayCommitLoad(intent)) return;
+      this._commitLoadedState(staged.state);
       showToast('Template loaded!', 'success');
       // Surface migration / validation / future-schema warnings instead of
       // discarding them (#145) — the user should know the template changed shape.
       warnings.forEach((w) => showToast(w, 'warning'));
       this._close();
     } catch (err) {
+      if (generation !== this._loadGeneration || intent.documentSession !== this.store.documentSession) return;
       showToast(`Load failed: ${err}`, 'error');
     }
   }
 
   private _loadSample(tpl: DocumentTemplate) {
+    ++this._loadGeneration;
     if (!confirmDiscardUnsaved(this.store)) return;
     this.store.beginDocumentSession();
     clearPaginationCache();
@@ -712,9 +769,12 @@ export class PldTemplateManagerModal extends LitElement {
    * creating a new one. Keeps the currently loaded record data (jsonData).
    */
   private async _loadNsTemplate(id: string) {
+    const generation = ++this._loadGeneration;
     if (!confirmDiscardUnsaved(this.store)) return;
+    const intent = this._captureDocumentIntent(generation);
     try {
       const src = await getNsTemplate(id);
+      if (!this._mayCommitLoad(intent)) return;
       let data: Partial<DocumentTemplate>;
       try {
         data = JSON.parse(src.data);
@@ -744,6 +804,7 @@ export class PldTemplateManagerModal extends LitElement {
       showToast(`Loaded from NetSuite: ${src.name}`, 'success');
       this._close();
     } catch (err) {
+      if (generation !== this._loadGeneration || intent.documentSession !== this.store.documentSession) return;
       showToast(`Load failed: ${(err as Error).message}`, 'error');
     }
   }
@@ -762,6 +823,7 @@ export class PldTemplateManagerModal extends LitElement {
   private _exportCurrent() {
     const json = exportTemplateJson(this.store);
     this.importJson = json;
+    this.importError = '';
     navigator.clipboard?.writeText(json);
     showToast('Template JSON copied to clipboard!', 'success');
   }
@@ -769,29 +831,83 @@ export class PldTemplateManagerModal extends LitElement {
   private _exportSingle(tpl: DocumentTemplate) {
     const json = JSON.stringify(tpl, null, 2);
     this.importJson = json;
+    this.importError = '';
     navigator.clipboard?.writeText(json);
     showToast(`Exported: ${tpl.name}`, 'success');
   }
 
   private _importFromJson() {
     if (!this.importJson.trim()) {
-      showToast('Please paste template JSON first', 'warning');
+      this.importError = 'Please paste template JSON first / กรุณาวาง JSON เทมเพลต';
       return;
     }
     if (!confirmDiscardUnsaved(this.store)) return;
 
     try {
       const { warnings } = importTemplateJson(this.store, this.importJson);
+      this.importError = '';
       showToast('Template imported!', 'success');
       warnings.forEach((w) => showToast(w, 'warning')); // #145 — don't discard
       this._close();
     } catch (err) {
-      showToast(`Import failed: ${err}`, 'error');
+      this.importError = `Import failed: ${err instanceof Error ? err.message : String(err)}`;
     }
   }
 
   private _close() {
+    ++this._loadGeneration;
     this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
+  }
+
+  private _captureDocumentIntent(generation: number) {
+    const state = this.store.state;
+    return {
+      generation,
+      documentSession: this.store.documentSession,
+      elements: state.elements,
+      bands: state.bands,
+      page: state.page,
+      pagination: state.pagination,
+      copies: state.copies,
+      jsonData: state.jsonData,
+      template: state.template,
+    };
+  }
+
+  private _mayCommitLoad(intent: ReturnType<PldTemplateManagerModal['_captureDocumentIntent']>): boolean {
+    if (!this.open) return false;
+    if (intent.generation !== this._loadGeneration) return false;
+    if (intent.documentSession !== this.store.documentSession) return false;
+
+    const state = this.store.state;
+    const unchanged = intent.elements === state.elements
+      && intent.bands === state.bands
+      && intent.page === state.page
+      && intent.pagination === state.pagination
+      && intent.copies === state.copies
+      && intent.jsonData === state.jsonData
+      && intent.template === state.template;
+    // Any newer document mutation is newer intent. Never let an older I/O
+    // completion reopen a discard decision and overwrite it.
+    return unchanged;
+  }
+
+  private _commitLoadedState(source: Readonly<AppState>): void {
+    this.store.beginDocumentSession();
+    clearPaginationCache();
+    this.store.dispatch((draft) => {
+      draft.elements = structuredClone(source.elements);
+      draft.bands = structuredClone(source.bands);
+      draft.copies = structuredClone(source.copies);
+      draft.page = structuredClone(source.page);
+      draft.pagination = structuredClone(source.pagination);
+      draft.jsonData = structuredClone(source.jsonData);
+      draft.jsonKeys = [...source.jsonKeys];
+      draft.template = structuredClone(source.template);
+      draft.selectedId = null;
+      draft.multiSelect = [];
+      draft.currentPage = 1;
+    });
   }
 }
 

@@ -74,18 +74,54 @@ export class StateChangedEvent extends Event {
   }
 }
 
+/**
+ * Signals that subsequent state belongs to a different editable document.
+ * Most callers load that document in their next dispatch; history middleware
+ * consumes that one replacement dispatch instead of treating it as an edit.
+ */
+export class DocumentSessionChangedEvent extends Event {
+  readonly session: number;
+
+  constructor(session: number) {
+    super('document-session-changed', { bubbles: false });
+    this.session = session;
+  }
+}
+
 // ─── Store Class ───
 export class AppStore extends EventTarget {
   private _state: AppState;
   // Outside undoable document data: even loading the same template starts a
   // distinct editing session, invalidating pending persistence completions.
   private _documentSession = 0;
+  private _documentReplacementPending = false;
 
   get documentSession(): number { return this._documentSession; }
 
   beginDocumentSession(): void {
+    this._startDocumentSession(true);
+
+    // Session metadata belongs to the prior document. Update it outside the
+    // middleware chain: the caller's next dispatch is the actual document load
+    // and is the single dispatch history must fence.
+    const prev = this._state;
+    this._state = produce(this._state, (d) => { delete d.template.nsMetadata; });
+    if (this._state !== prev) {
+      this.dispatchEvent(new StateChangedEvent(this._state));
+    }
+  }
+
+  /** Used by history middleware to identify the load paired with beginDocumentSession(). */
+  consumeDocumentReplacementBoundary(session: number): boolean {
+    if (!this._documentReplacementPending || session !== this._documentSession) return false;
+    this._documentReplacementPending = false;
+    return true;
+  }
+
+  private _startDocumentSession(expectReplacementDispatch: boolean): void {
     this._documentSession++;
-    this.dispatch((d) => { delete d.template.nsMetadata; });
+    this._documentReplacementPending = expectReplacementDispatch;
+    this.dispatchEvent(new DocumentSessionChangedEvent(this._documentSession));
   }
 
   constructor() {
@@ -130,7 +166,7 @@ export class AppStore extends EventTarget {
 
   /** Reset state to initial defaults */
   reset(): void {
-    this.beginDocumentSession();
+    this._startDocumentSession(false);
     this._state = createInitialState();
     this.dispatchEvent(new StateChangedEvent(this._state));
   }
@@ -140,7 +176,7 @@ export class AppStore extends EventTarget {
    * Use sparingly — prefer dispatch() for granular updates.
    */
   replaceState(newState: AppState): void {
-    this.beginDocumentSession();
+    this._startDocumentSession(false);
     this._state = newState;
     this.dispatchEvent(new StateChangedEvent(this._state));
   }

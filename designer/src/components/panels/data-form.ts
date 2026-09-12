@@ -6,15 +6,24 @@
  *
  * @author Wichit Wongta
  */
+import { icon } from '../shared/icon';
 import { LitElement, html, css, nothing } from 'lit';
 import { isNetSuiteEnv } from '../../services/netsuite-adapter.service';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 
 type JsonData = Record<string, unknown>;
+const ARRAY_PAGE_SIZE = 50;
+const MAX_VISIBLE_SECTIONS = 20;
+const MAX_ARRAY_COLUMNS = 20;
+const MAX_FORM_CONTROLS = 1_000;
+const MAX_INLINE_SIMPLE_ARRAY_ITEMS = 200;
+
+type RenderBudget = { controls: number };
 
 @customElement('pld-data-form')
 export class PldDataForm extends LitElement {
   @property({ type: Object }) jsonData: JsonData | null = null;
+  @state() private _arrayPages = new Map<string, number>();
 
   static styles = css`
     :host {
@@ -32,7 +41,7 @@ export class PldDataForm extends LitElement {
     }
 
     .group-title {
-      font-size: 10px;
+      font-size: var(--t-sm);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -65,7 +74,7 @@ export class PldDataForm extends LitElement {
     }
 
     .field label {
-      font-size: 10px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
       text-transform: capitalize;
     }
@@ -76,7 +85,7 @@ export class PldDataForm extends LitElement {
       border: 1px solid var(--c-border);
       border-radius: var(--radius-sm, 4px);
       color: var(--c-text);
-      font-size: 11px;
+      font-size: var(--t-sm);
       font-family: var(--font-mono, monospace);
       outline: none;
       width: 100%;
@@ -101,7 +110,7 @@ export class PldDataForm extends LitElement {
     .array-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10px;
+      font-size: var(--t-sm);
       margin-top: 4px;
     }
 
@@ -113,7 +122,7 @@ export class PldDataForm extends LitElement {
       font-weight: 600;
       text-transform: capitalize;
       text-align: left;
-      font-size: 9px;
+      font-size: var(--t-sm);
       letter-spacing: 0.5px;
       white-space: nowrap;
     }
@@ -126,7 +135,7 @@ export class PldDataForm extends LitElement {
 
     .array-table input {
       padding: 3px 5px;
-      font-size: 10px;
+      font-size: var(--t-sm);
       border: none;
       border-radius: 2px;
       background: transparent;
@@ -140,7 +149,7 @@ export class PldDataForm extends LitElement {
 
     .row-num {
       color: var(--c-text-muted);
-      font-size: 9px;
+      font-size: var(--t-sm);
       text-align: center;
       width: 24px;
       min-width: 24px;
@@ -151,7 +160,7 @@ export class PldDataForm extends LitElement {
       border: none;
       color: var(--c-text-muted);
       cursor: pointer;
-      font-size: 11px;
+      font-size: var(--t-sm);
       padding: 2px 4px;
       border-radius: 3px;
       transition: all 0.15s;
@@ -167,6 +176,13 @@ export class PldDataForm extends LitElement {
       display: flex;
       gap: 6px;
       margin-top: 6px;
+      align-items: center;
+    }
+
+    .array-page-status {
+      color: var(--c-text-muted);
+      font-size: var(--t-sm);
+      margin-right: auto;
     }
 
     .small-btn {
@@ -175,7 +191,7 @@ export class PldDataForm extends LitElement {
       border-radius: 4px;
       background: var(--c-surface-2);
       color: var(--c-text-subtle);
-      font-size: 10px;
+      font-size: var(--t-sm);
       cursor: pointer;
       font-family: inherit;
       transition: all 0.15s;
@@ -186,12 +202,17 @@ export class PldDataForm extends LitElement {
       color: var(--c-text);
     }
 
+    .small-btn:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
+
     /* ─── Empty state ─── */
     .empty {
       text-align: center;
       padding: 30px 14px;
       color: var(--c-text-muted);
-      font-size: 11px;
+      font-size: var(--t-sm);
       line-height: 1.6;
     }
 
@@ -211,7 +232,12 @@ export class PldDataForm extends LitElement {
     .top-field {
       padding: 6px 0;
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+    button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   /** ขอข้อมูลตัวอย่างจาก engine (#191) — app-shell เป็นคนโหลดเข้า store */
   private _loadSampleData() {
@@ -223,7 +249,7 @@ export class PldDataForm extends LitElement {
       return html`
         <div class="empty">
           ยังไม่ได้โหลดข้อมูล<br />
-          ใช้ <strong>★ ตัวอย่าง</strong> หรือวาง JSON ในมุมมอง <strong>JSON</strong>
+          ใช้ <strong>${icon('file')} ตัวอย่าง</strong> หรือวาง JSON ในมุมมอง <strong>JSON</strong>
           ${isNetSuiteEnv() ? html`
             <p style="margin-top: 10px;">
               <button class="sample-btn" @click=${this._loadSampleData}>
@@ -231,7 +257,7 @@ export class PldDataForm extends LitElement {
               </button>
             </p>
             <p style="margin-top: 4px; font-size: 11px;">
-              เอกสารสมมติที่มีฟิลด์ครบตามที่ engine จ่ายจริง — ผูก binding ได้โดยไม่ต้องเปิดจาก transaction
+              ใช้ข้อมูลเอกสารตัวอย่างเพื่อลองเชื่อมช่องข้อมูลและดูผลลัพธ์ โดยไม่ต้องเปิดเอกสารจริง
             </p>
           ` : nothing}
         </div>
@@ -239,46 +265,56 @@ export class PldDataForm extends LitElement {
     }
 
     const entries = Object.entries(this.jsonData);
+    const visibleEntries = entries.slice(0, MAX_VISIBLE_SECTIONS);
+    const budget: RenderBudget = { controls: MAX_FORM_CONTROLS };
 
     return html`
-      ${entries.map(([key, value]) => this._renderEntry(key, value))}
+      ${visibleEntries.map(([key, value]) => this._renderEntry(key, value, budget))}
+      ${entries.length > visibleEntries.length ? this._renderOverflow(
+        `${entries.length - visibleEntries.length} more top-level sections`,
+      ) : nothing}
     `;
   }
 
-  private _renderEntry(key: string, value: unknown) {
+  private _fieldId(...path: (string | number)[]): string {
+    return `data-field-${encodeURIComponent(JSON.stringify(path))}`;
+  }
+
+  private _renderEntry(key: string, value: unknown, budget: RenderBudget) {
     if (Array.isArray(value)) {
-      return this._renderArray(key, value);
+      return this._renderArray(key, value, budget);
     }
     if (value !== null && typeof value === 'object') {
-      return this._renderObject(key, value as JsonData);
+      return this._renderObject(key, value as JsonData, budget);
     }
-    return this._renderTopPrimitive(key, value);
+    return this._renderTopPrimitive(key, value, budget);
   }
 
   // ═══════════════════════════════════════
   // OBJECT → Field group
   // ═══════════════════════════════════════
 
-  private _renderObject(key: string, obj: JsonData) {
+  private _renderObject(key: string, obj: JsonData, budget: RenderBudget) {
     const entries = Object.entries(obj);
+    const visibleEntries = entries.slice(0, budget.controls);
+    budget.controls -= visibleEntries.length;
 
     return html`
       <div class="group">
         <div class="group-title">
           <span>▸</span> ${this._formatLabel(key)}
         </div>
-        ${entries.map(([subKey, subVal]) => {
-          // Nested objects/arrays: show as read-only JSON
+        ${visibleEntries.map(([subKey, subVal]) => {
+          // Keep nested payloads out of the synchronous visual-form path.
           if (subVal !== null && typeof subVal === 'object') {
+            const summary = Array.isArray(subVal)
+              ? `Array with ${subVal.length} items`
+              : `Object with ${Object.keys(subVal as JsonData).length} keys`;
             return html`
               <div class="row">
                 <div class="field">
-                  <label>${this._formatLabel(subKey)}</label>
-                  <textarea
-                    readonly
-                    .value=${JSON.stringify(subVal, null, 2)}
-                    style="min-height: 50px; color: var(--c-text-muted);"
-                  ></textarea>
+                  <span>${this._formatLabel(subKey)}</span>
+                  <div class="empty">${summary} — edit in JSON view</div>
                 </div>
               </div>
             `;
@@ -289,14 +325,14 @@ export class PldDataForm extends LitElement {
           return html`
             <div class="row">
               <div class="field">
-                <label>${this._formatLabel(subKey)}</label>
+                <label for=${this._fieldId(key, subKey)}>${this._formatLabel(subKey)}</label>
                 ${isLong
-                  ? html`<textarea
+                  ? html`<textarea id=${this._fieldId(key, subKey)}
                       .value=${String(subVal ?? '')}
                       @change=${(e: Event) =>
                         this._updateField(key, subKey, (e.target as HTMLTextAreaElement).value)}
                     ></textarea>`
-                  : html`<input
+                  : html`<input id=${this._fieldId(key, subKey)}
                       type="${typeof subVal === 'number' ? 'number' : 'text'}"
                       .value=${String(subVal ?? '')}
                       @change=${(e: Event) =>
@@ -306,6 +342,9 @@ export class PldDataForm extends LitElement {
             </div>
           `;
         })}
+        ${entries.length > visibleEntries.length
+          ? this._renderOverflow(`${entries.length - visibleEntries.length} more fields`)
+          : nothing}
       </div>
     `;
   }
@@ -314,16 +353,25 @@ export class PldDataForm extends LitElement {
   // ARRAY → Editable table
   // ═══════════════════════════════════════
 
-  private _renderArray(key: string, arr: unknown[]) {
+  private _renderArray(key: string, arr: unknown[], budget: RenderBudget) {
     if (arr.length === 0 || typeof arr[0] !== 'object' || arr[0] === null) {
+      if (arr.length > MAX_INLINE_SIMPLE_ARRAY_ITEMS || budget.controls === 0) {
+        return html`
+          <div class="group">
+            <div class="group-title"><span>▸</span> ${this._formatLabel(key)}</div>
+            ${this._renderOverflow(`${arr.length} items`)}
+          </div>
+        `;
+      }
+      budget.controls -= 1;
       // Simple array or empty — show as comma-separated
       return html`
         <div class="group">
           <div class="group-title"><span>▸</span> ${this._formatLabel(key)}</div>
           <div class="row">
             <div class="field">
-              <label>${arr.length} items</label>
-              <input
+              <label for=${this._fieldId(key)}>${this._formatLabel(key)} (${arr.length} items)</label>
+              <input id=${this._fieldId(key)}
                 type="text"
                 .value=${arr.map(String).join(', ')}
                 @change=${(e: Event) => this._updateSimpleArray(key, (e.target as HTMLInputElement).value)}
@@ -335,7 +383,25 @@ export class PldDataForm extends LitElement {
     }
 
     // Array of objects → table
-    const columns = Object.keys(arr[0] as JsonData);
+    if (budget.controls === 0) {
+      return html`
+        <div class="group">
+          <div class="group-title"><span>▸</span> ${this._formatLabel(key)}</div>
+          ${this._renderOverflow(`${arr.length} rows`)}
+        </div>
+      `;
+    }
+    const allColumns = Object.keys(arr[0] as JsonData);
+    const columns = allColumns.slice(0, MAX_ARRAY_COLUMNS);
+    const pageCount = Math.max(1, Math.ceil(arr.length / ARRAY_PAGE_SIZE));
+    const page = Math.min(Math.max(this._arrayPages.get(key) ?? 0, 0), pageCount - 1);
+    const start = page * ARRAY_PAGE_SIZE;
+    const end = Math.min(start + ARRAY_PAGE_SIZE, arr.length);
+    const affordableRows = columns.length === 0
+      ? end - start
+      : Math.min(end - start, Math.floor(budget.controls / columns.length));
+    const visibleRows = arr.slice(start, start + affordableRows);
+    budget.controls -= visibleRows.length * columns.length;
 
     return html`
       <div class="group">
@@ -353,15 +419,16 @@ export class PldDataForm extends LitElement {
               </tr>
             </thead>
             <tbody>
-              ${arr.map((item, rowIdx) => {
+              ${visibleRows.map((item, localRowIdx) => {
+                const rowIdx = start + localRowIdx;
                 const row = item as JsonData;
                 return html`
-                  <tr>
+                  <tr data-row-index=${rowIdx}>
                     <td class="row-num">${rowIdx + 1}</td>
                     ${columns.map(
                       (col) => html`
                         <td>
-                          <input
+                          <input aria-label=${`${this._formatLabel(key)}, row ${rowIdx + 1}, ${this._formatLabel(col)}`}
                             type="${typeof row[col] === 'number' ? 'number' : 'text'}"
                             .value=${String(row[col] ?? '')}
                             @change=${(e: Event) =>
@@ -371,7 +438,7 @@ export class PldDataForm extends LitElement {
                       `,
                     )}
                     <td>
-                      <button class="del-btn" title="Remove row" @click=${() => this._removeArrayRow(key, rowIdx)}>✕</button>
+                      <button class="del-btn" title="Remove row" @click=${() => this._removeArrayRow(key, rowIdx)}>${icon('close')}</button>
                     </td>
                   </tr>
                 `;
@@ -379,8 +446,29 @@ export class PldDataForm extends LitElement {
             </tbody>
           </table>
         </div>
+        ${allColumns.length > columns.length
+          ? this._renderOverflow(`${allColumns.length - columns.length} more columns`)
+          : nothing}
+        ${visibleRows.length < end - start
+          ? this._renderOverflow(`${end - start - visibleRows.length} rows hidden by the visual-form budget`)
+          : nothing}
         <div class="array-actions">
-          <button class="small-btn" @click=${() => this._addArrayRow(key, columns)}>+ Add Row</button>
+          <button class="small-btn" @click=${() => this._addArrayRow(key, allColumns)}>+ Add Row</button>
+          ${arr.length > ARRAY_PAGE_SIZE ? html`
+            <span class="array-page-status">Rows ${start + 1}–${end} of ${arr.length}</span>
+            <button
+              class="small-btn array-page-prev"
+              aria-label="Previous rows"
+              ?disabled=${page === 0}
+              @click=${() => this._setArrayPage(key, page - 1, arr.length)}
+            >Previous</button>
+            <button
+              class="small-btn array-page-next"
+              aria-label="Next rows"
+              ?disabled=${page === pageCount - 1}
+              @click=${() => this._setArrayPage(key, page + 1, arr.length)}
+            >Next</button>
+          ` : nothing}
         </div>
       </div>
     `;
@@ -390,13 +478,15 @@ export class PldDataForm extends LitElement {
   // TOP-LEVEL PRIMITIVE
   // ═══════════════════════════════════════
 
-  private _renderTopPrimitive(key: string, value: unknown) {
+  private _renderTopPrimitive(key: string, value: unknown, budget: RenderBudget) {
+    if (budget.controls === 0) return this._renderOverflow(this._formatLabel(key));
+    budget.controls -= 1;
     return html`
       <div class="group top-field">
         <div class="row">
           <div class="field">
-            <label>${this._formatLabel(key)}</label>
-            <input
+            <label for=${this._fieldId(key)}>${this._formatLabel(key)}</label>
+            <input id=${this._fieldId(key)}
               type="${typeof value === 'number' ? 'number' : 'text'}"
               .value=${String(value ?? '')}
               @change=${(e: Event) =>
@@ -414,49 +504,48 @@ export class PldDataForm extends LitElement {
 
   private _updateField(section: string, field: string, value: unknown) {
     if (!this.jsonData) return;
-    const updated = structuredClone(this.jsonData);
-    const obj = updated[section] as JsonData;
-    if (obj && typeof obj === 'object') {
-      obj[field] = value;
-    }
-    this._emit(updated);
+    const current = this.jsonData[section];
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return;
+    this._emit({
+      ...this.jsonData,
+      [section]: { ...(current as JsonData), [field]: value },
+    });
   }
 
   private _updateTopLevel(key: string, value: unknown) {
     if (!this.jsonData) return;
-    const updated = structuredClone(this.jsonData);
-    updated[key] = value;
-    this._emit(updated);
+    this._emit({ ...this.jsonData, [key]: value });
   }
 
   private _updateArrayCell(arrayKey: string, rowIdx: number, col: string, value: unknown) {
     if (!this.jsonData) return;
-    const updated = structuredClone(this.jsonData);
-    const arr = updated[arrayKey] as JsonData[];
-    if (arr && arr[rowIdx]) {
-      arr[rowIdx][col] = value;
-    }
-    this._emit(updated);
+    const current = this.jsonData[arrayKey];
+    if (!Array.isArray(current)) return;
+    const currentRow = current[rowIdx];
+    if (!currentRow || typeof currentRow !== 'object' || Array.isArray(currentRow)) return;
+    const rows = current.slice();
+    rows[rowIdx] = { ...(currentRow as JsonData), [col]: value };
+    this._emit({ ...this.jsonData, [arrayKey]: rows });
   }
 
   private _removeArrayRow(arrayKey: string, rowIdx: number) {
     if (!this.jsonData) return;
-    const updated = structuredClone(this.jsonData);
-    const arr = updated[arrayKey] as unknown[];
-    if (arr) {
-      arr.splice(rowIdx, 1);
-    }
-    this._emit(updated);
+    const current = this.jsonData[arrayKey];
+    if (!Array.isArray(current) || rowIdx < 0 || rowIdx >= current.length) return;
+    const rows = current.slice();
+    rows.splice(rowIdx, 1);
+    this._emit({ ...this.jsonData, [arrayKey]: rows });
   }
 
   private _addArrayRow(arrayKey: string, columns: string[]) {
     if (!this.jsonData) return;
-    const updated = structuredClone(this.jsonData);
-    const arr = updated[arrayKey] as JsonData[];
-    if (!arr) return;
+    const current = this.jsonData[arrayKey];
+    if (!Array.isArray(current)) return;
 
     // Create a new row with empty/default values matching existing column types
-    const template = arr.length > 0 ? arr[0] : null;
+    const template = current.length > 0 && current[0] && typeof current[0] === 'object'
+      ? current[0] as JsonData
+      : null;
     const newRow: JsonData = {};
     for (const col of columns) {
       if (template && typeof template[col] === 'number') {
@@ -465,20 +554,33 @@ export class PldDataForm extends LitElement {
         newRow[col] = '';
       }
     }
-    arr.push(newRow);
-    this._emit(updated);
+    this._emit({ ...this.jsonData, [arrayKey]: [...current, newRow] });
   }
 
   private _updateSimpleArray(key: string, value: string) {
     if (!this.jsonData) return;
-    const updated = structuredClone(this.jsonData);
-    updated[key] = value.split(',').map((s) => s.trim()).filter(Boolean);
-    this._emit(updated);
+    this._emit({
+      ...this.jsonData,
+      [key]: value.split(',').map((s) => s.trim()).filter(Boolean),
+    });
+  }
+
+  private _setArrayPage(key: string, requestedPage: number, rowCount: number) {
+    const lastPage = Math.max(0, Math.ceil(rowCount / ARRAY_PAGE_SIZE) - 1);
+    const page = Math.min(Math.max(requestedPage, 0), lastPage);
+    if ((this._arrayPages.get(key) ?? 0) === page) return;
+    const pages = new Map(this._arrayPages);
+    pages.set(key, page);
+    this._arrayPages = pages;
   }
 
   // ═══════════════════════════════════════
   // HELPERS
   // ═══════════════════════════════════════
+
+  private _renderOverflow(label: string) {
+    return html`<div class="empty form-overflow">${label} — use JSON view to inspect or edit the complete data</div>`;
+  }
 
   /** Convert camelCase/snake_case to readable label */
   private _formatLabel(key: string): string {

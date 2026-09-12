@@ -104,7 +104,7 @@ export class PldShortcutsModal extends LitElement {
     .keys { display: inline-flex; gap: 4px; flex-shrink: 0; }
     kbd {
       font-family: var(--font-mono, monospace);
-      font-size: 11px;
+      font-size: var(--t-sm);
       line-height: 1;
       color: var(--c-text);
       background: var(--c-surface-3);
@@ -115,20 +115,25 @@ export class PldShortcutsModal extends LitElement {
       min-width: 16px;
       text-align: center;
     }
-    .sep { color: var(--c-text-subtle); font-size: 11px; align-self: center; }
+    .sep { color: var(--c-text-subtle); font-size: var(--t-sm); align-self: center; }
     .hint {
       margin-top: 16px;
-      font-size: 11px;
+      font-size: var(--t-sm);
       color: var(--c-text-subtle);
       text-align: center;
     }
-  `;
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+    button { min-height: var(--btn-h); }
+    input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--btn-h); box-sizing: border-box; }
+    label.check-item { min-height: var(--btn-h); }
+`;
 
   render() {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="⌨ คีย์ลัด (Keyboard Shortcuts)"
+        modalTitle="คีย์ลัด (Keyboard Shortcuts)"
         size="lg"
         @close=${this._close}
         @keydown=${this._onKeydown}
