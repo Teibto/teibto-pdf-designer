@@ -80,6 +80,14 @@ let _cache: {
 } | null = null;
 type HeaderMode = AppState['pagination']['headerMode'];
 let _finalizedCache = new WeakMap<PaginationResult, Map<HeaderMode, PaginationResult>>();
+// Reuse measurements across immutable one-row edits, without retaining discarded rows.
+let _rowHeightCache: {
+  columns: TableElement['columns'];
+  fontSize: number;
+  baseRowHeight: number;
+  lineHeightPt: number;
+  values: WeakMap<Record<string, unknown>, number>;
+} | null = null;
 
 // Immer freezes the store's input branches. Reference equality detects every
 // edit while keeping UI-only selection/zoom cache hits O(1). Mutable callers
@@ -114,6 +122,7 @@ export function computePagination(state: Readonly<AppState>): PaginationResult {
 export function clearPaginationCache(): void {
   _cache = null;
   _finalizedCache = new WeakMap();
+  _rowHeightCache = null;
 }
 
 export function applyPagination(store: AppStore): void {
@@ -235,11 +244,40 @@ function computeHeightBased(state: Readonly<AppState>): PaginationResult {
   const baseFontSize = 8;
   const columns = tableEl ? tableEl.columns : [];
 
-  const rowHeights: number[] = rows.map((row) =>
-    tableEl
-      ? calculateRowHeight(row, columns, baseFontSize, baseRowHeight, lineHeightPt)
-      : baseRowHeight,
-  );
+  const immutableHeights = Object.values(paginationInputs(state))
+    .every(value => value === null || Object.isFrozen(value))
+    && Object.isFrozen(columns) && columns.every(column => Object.isFrozen(column)
+      && ['key', 'hidden', 'overflow', 'width', 'maxLines'].every(key => {
+        const descriptor = Object.getOwnPropertyDescriptor(column, key);
+        const value = descriptor?.value;
+        return !!descriptor && 'value' in descriptor
+          && (value === null || (typeof value !== 'object' && typeof value !== 'function'));
+      }));
+  if (immutableHeights && (!_rowHeightCache
+    || _rowHeightCache.columns !== columns
+    || _rowHeightCache.fontSize !== baseFontSize
+    || _rowHeightCache.baseRowHeight !== baseRowHeight
+    || _rowHeightCache.lineHeightPt !== lineHeightPt)) {
+    _rowHeightCache = { columns, fontSize: baseFontSize, baseRowHeight, lineHeightPt, values: new WeakMap() };
+  }
+  const wrappedColumns = columns.filter(column => !column.hidden && column.overflow === 'wrap');
+  const rowHeights: number[] = rows.map((row) => {
+    if (!tableEl) return baseRowHeight;
+    // A shallow-frozen row can still contain mutable objects/arrays. Do not cache
+    // their String(value) measurement, nor accessors with changing return values.
+    const frozenRow = immutableHeights && row !== null && typeof row === 'object' && Object.isFrozen(row);
+    const cached = frozenRow ? _rowHeightCache!.values.get(row) : undefined;
+    if (cached !== undefined) return cached;
+    const reusable = frozenRow && wrappedColumns.every(column => {
+      const descriptor = Object.getOwnPropertyDescriptor(row, column.key);
+      const value = descriptor?.value;
+      return !!descriptor && 'value' in descriptor
+        && (value === null || (typeof value !== 'object' && typeof value !== 'function'));
+    });
+    const height = calculateRowHeight(row, columns, baseFontSize, baseRowHeight, lineHeightPt);
+    if (reusable) _rowHeightCache!.values.set(row, height);
+    return height;
+  });
 
   // Build groups (atomic blocks)
   const groups = buildRowGroups(rows, pagination);
