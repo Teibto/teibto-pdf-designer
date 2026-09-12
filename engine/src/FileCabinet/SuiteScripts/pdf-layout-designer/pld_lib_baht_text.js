@@ -80,5 +80,32 @@ define([], function () {
     return (negative ? 'ลบ' : '') + words;
   }
 
-  return { bahtText: bahtText };
+  // Currency-aware words for the reference invoice; do not label foreign totals as baht.
+  function amountInWords(value, currency) {
+    var code = String(currency || '').toUpperCase();
+    if (!code) return '';
+    if (code === 'THB') return bahtText(value);
+    var v = Number(value);
+    if (!isFinite(v) || Math.abs(v) > 999999999999.99) throw new Error('Amount exceeds supported currency-word range');
+    var small = ['ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
+    var tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
+    function spell(n) {
+      if (n < 20) return small[n];
+      if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? '-' + small[n % 10] : '');
+      if (n < 1000) return small[Math.floor(n / 100)] + ' HUNDRED' + (n % 100 ? ' ' + spell(n % 100) : '');
+      var scales = [[1000000000, 'BILLION'], [1000000, 'MILLION'], [1000, 'THOUSAND']];
+      for (var i = 0; i < scales.length; i++) {
+        var scale = scales[i][0];
+        if (n >= scale) return spell(Math.floor(n / scale)) + ' ' + scales[i][1] + (n % scale ? ' ' + spell(n % scale) : '');
+      }
+    }
+    var cents = Math.round(Math.abs(v) * 100);
+    var major = Math.floor(cents / 100), minor = cents % 100;
+    var names = { USD: ['DOLLAR', 'CENT'], EUR: ['EURO', 'CENT'], GBP: ['POUND', 'PENNY'] };
+    var units = names[code] || [code, 'CENT'];
+    return (v < 0 ? 'MINUS ' : '') + spell(major) + ' ' + units[0] +
+      (minor ? ' AND ' + spell(minor) + ' ' + units[1] : ' ONLY');
+  }
+
+  return { bahtText: bahtText, amountInWords: amountInWords };
 });

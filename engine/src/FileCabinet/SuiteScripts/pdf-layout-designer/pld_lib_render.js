@@ -27,8 +27,9 @@ define([
   'N/runtime',
   'N/format',
   './pld_lib_company_config',
-  './pld_lib_invoice_data'
-], function (render, record, search, runtime, format, companyConfig, invoiceData) {
+  './pld_lib_invoice_data',
+  './pld_lib_invoice_reference'
+], function (render, record, search, runtime, format, companyConfig, invoiceData, invoiceReference) {
 
   // ─── Template custom record ───
   var TPL = {
@@ -261,6 +262,7 @@ define([
       var curated = curatedType
         ? invoiceData.buildTransactionData(recType, recId, c.th, c.en)
         : null;
+      curated = referenceData(tplXml, curated, recType, recId);
       if (curated) tranId = tranId || (curated.document && curated.document.number) || '';
       return extractPdfDoc(makeRenderer(tplXml, curated, rec, tel, c).renderAsString());
     });
@@ -279,7 +281,8 @@ define([
    * rather than produce a set that silently drops a copy (R4).
    */
   function extractPdfDoc(resolved) {
-    var start = resolved.indexOf('<pdf>');
+    var root = /<pdf(?:\s[^<>]*?)?>/.exec(resolved);
+    var start = root ? root.index : -1;
     var end = resolved.lastIndexOf('</pdf>');
     if (start < 0 || end < 0) {
       throw new Error('renderAsString produced no <pdf> document — cannot build the copy set');
@@ -309,6 +312,7 @@ define([
       var singleData = invoiceData.isSupportedType(recType)
         ? invoiceData.buildTransactionData(recType, recId, only.th, only.en)
         : null;
+      singleData = referenceData(tplXml, singleData, recType, recId);
       var out = renderXmlWithRecord(tplXml, recType, recId, singleData, tel, only);
       return { pdfFile: out.pdfFile, rec: out.rec, tranId: '' };
     }
@@ -334,17 +338,34 @@ define([
    *
    * @returns {{pdfFile: Object}}
    */
-  function renderSampleDocument(tplXml, recType, copies, tel) {
+  function referenceData(tplXml, data, recType, recId) {
+    if (tplXml.indexOf('pld:reference-layout') === -1) return data;
+    if (recType !== 'invoice' || !data) throw new Error('Reference invoice layout requires a curated invoice');
+    return invoiceReference.enrich(data, recId);
+  }
+
+  function renderSampleDocument(tplXml, recType, copies, tel, suppliedData) {
     if (tel) tel.stage = 'render';
+
+    function dataForCopy(c) {
+      if (!suppliedData) return invoiceData.buildSampleData(recType, c.th, c.en);
+      var data = JSON.parse(JSON.stringify(suppliedData));
+      if (data.document) {
+        data.document.copyTH = c.th;
+        data.document.copyEN = c.en;
+      }
+      data.custbody_doc_copy_label = c.th + ' (' + c.en + ')';
+      return data;
+    }
 
     if (copies.length === 1) {
       var only = copies[0];
-      var data = invoiceData.buildSampleData(recType, only.th, only.en);
+      var data = dataForCopy(only);
       return { pdfFile: makeRenderer(tplXml, data, null, tel, only).renderAsPdf() };
     }
 
     var docs = copies.map(function (c) {
-      var perCopy = invoiceData.buildSampleData(recType, c.th, c.en);
+      var perCopy = dataForCopy(c);
       return extractPdfDoc(makeRenderer(tplXml, perCopy, null, tel, c).renderAsString());
     });
     if (tel) tel.stage = 'copyset';

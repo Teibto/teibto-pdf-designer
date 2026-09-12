@@ -184,7 +184,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
   // scripts/validate-templates.sh reads these three lists and fails a PR whose
   // master template binds a key the engine never provides.
   var CURATED_KEYS = [
-    'subsidiaryId', 'company', 'document', 'customer', 'shipTo', 'totals',
+    'subsidiaryId', 'company', 'referenceCompany', 'document', 'customer', 'shipTo', 'totals',
     'issuer', 'items', 'fields'
   ];
   var RAW_ALIAS_KEYS = [
@@ -247,7 +247,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var hdr = first(
       "SELECT tranid, TO_CHAR(trandate,'DD/MM/YYYY') AS trandate, " +
       "  TO_CHAR(duedate,'DD/MM/YYYY') AS duedate, otherrefnum, " +
-      "  BUILTIN.DF(entity) AS customer_name, BUILTIN.DF(createdby) AS created_by " +
+      "  BUILTIN.DF(entity) AS customer_name, BUILTIN.DF(createdby) AS created_by, " +
+      "  (SELECT symbol FROM currency WHERE currency.id = transaction.currency) AS currency_code " +
       "FROM transaction WHERE id = ?",
       [id]
     );
@@ -281,7 +282,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var vat        = T['Tax Total']  != null ? num(T['Tax Total'])  : num(bodyValue(rec, 'taxtotal'));
     var grandTotal = T['Net Total']  != null ? num(T['Net Total'])  : (baseAmount + vat);
     var wht        = whtTotal || Math.abs(num(T['Withholding Tax']));
-    var customerPaid = grandTotal - wht;
+    var customerPaid = grandTotal - wht - cashCoupon;
     var vatRatePct = taxRate ? (num(taxRate) * 100).toFixed(2) : '7.00';
 
     // ── Line items — mirror the PFTS reference line set (#73, verified against the
@@ -530,11 +531,14 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
 
     // Bordered key/value grids rendered as PLD tables (ShapeElement has no border,
     // so the doc-info and summary boxes are 2-column tables bound to these arrays).
+    var refSo = String(fieldDisplay(rec, 'createdfrom') || fieldDisplay(rec, 'custbody_thl_createdfrom') || '');
+    if (refSo.indexOf('#') !== -1) refSo = refSo.slice(refSo.indexOf('#') + 1);
+    var currencyCode = String(hdr.currency_code || '');
     var docInfoRows = [
       { label: 'Doc No. / เลขที่เอกสาร', value: hdr.tranid || '' },
       { label: 'Date / วันที่', value: hdr.trandate || '' },
       { label: 'Due Date / วันครบกำหนดชำระ', value: hdr.duedate || '' },
-      { label: 'Ref.SO / เลขที่การขาย', value: '' },
+      { label: 'Ref.SO / เลขที่การขาย', value: refSo },
       { label: 'Ref.No / เลขที่อ้างอิง', value: hdr.otherrefnum || '' }
     ];
     // Empty on a goods-movement document (#170): a designer template renders this
@@ -554,7 +558,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
 
     // ── Raw-record aliases for the master pack (#155) ──
     var bodyFields = buildBodyFields(rec);
-    var customerName = wordbreak.breakThai(cleanName(hdr.customer_name));
+    var customerName = wordbreak.breakThai(bodyValue(rec, 'custbody_thl_entlegalname') || cleanName(hdr.customer_name));
     // subtotal + discounttotal == baseAmount by construction, so the master's
     // "มูลค่าหลังหักส่วนลด (Net Amount)" row always matches the statutory Base Total.
     // No summary rows on the transaction → subtotal falls back to Base Total and
@@ -567,6 +571,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       // record handle (e.g. renderCopiesPdf, #144) can still subsidiary-scope the
       // top-level ${company.*} data source — not itself bound by any template.
       subsidiaryId: subsidiaryId,
+      referenceCompany: {},
       company: {
         name: cfg.name, nameEn: cfg.nameEn, address: cfg.address, addressEn: cfg.addressEn,
         phone: cfg.phone, email: cfg.email, taxId: cfg.taxId,
@@ -577,7 +582,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         number: hdr.tranid || '',
         date: hdr.trandate || '',
         dueDate: hdr.duedate || '',
-        refSo: '',
+        refSo: refSo,
+        currencyCode: currencyCode,
         refNo: hdr.otherrefnum || '',
         // Titles per record type (#91), copy label appended (multi-copy #15)
         titleTH: titles.th + (copyLabelTH ? ' (' + copyLabelTH + ')' : ' (ต้นฉบับ)'),
@@ -591,7 +597,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         name: customerName,
         address: wordbreak.breakThai(billAddr),
         taxId: custTaxId || '',
-        branch: branchText(custBranch)
+        branch: branchText(custBranch),
+        branchCode: String(custBranch || '')
       },
       shipTo: { address: wordbreak.breakThai(shipAddr) },
       totals: {
@@ -609,6 +616,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         // On a receipt this row IS the document: the amount received (#170)
         customerPaid: isPayment ? money(paymentAmount) : totalsText(customerPaid),
         bahtText: wordsText,
+        amountInWords: showTotals || isPayment ? bahtText.amountInWords(isPayment ? paymentAmount : customerPaid, currencyCode) : '',
         summaryRows: summaryRows,
         // backward-compat (#69)
         subtotal: totalsText(baseAmount),
@@ -746,12 +754,22 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       sampleRow({ refnum: 'INV-2026-0092', applydate: '02/07/2026', total: 32100 })
     ];
     var rows = isPayment ? applyRows : itemRows;
+    rows.forEach(function (row, index) {
+      row.no = String(index + 1);
+      row.code = row.item || row.refnum || '';
+      row.name = row.description || row.refnum || '';
+      row.memo = '';
+      row.unit = row.units || '';
+      row.unit_price = row.rateText || '';
+      row.discount = '';
+    });
 
     var cfg = {};
     try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
 
     return {
       subsidiaryId: '',
+      referenceCompany: {},
       company: {
         name: cfg.name || 'บริษัท ตัวอย่าง จำกัด (สำนักงานใหญ่)',
         nameEn: cfg.nameEn || 'Example Company Limited',
@@ -769,6 +787,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         date: '17/07/2026',
         dueDate: '16/08/2026',
         refSo: 'SO-2026-0044',
+        currencyCode: 'THB',
+        footerText: 'เอกสารทดสอบระบบ / Synthetic test document',
         refNo: 'PO-CUST-8891',
         titleTH: titles.th + ' (' + (copyLabelTH || 'ต้นฉบับ') + ')',
         titleEN: titles.en + ' (' + (copyLabelEN || 'Original') + ')',
@@ -787,7 +807,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         name: wordbreak.breakThai('บริษัท ผู้ซื้อตัวอย่าง จำกัด'),
         address: wordbreak.breakThai('1 หมู่ 2 ถนนสมมติ ตำบลทดสอบ อำเภอตัวอย่าง จังหวัดสมุทรทดลอง 10540'),
         taxId: '0105599999999',
-        branch: branchText('00000')
+        branch: branchText('00000'),
+        branchCode: '00000'
       },
       shipTo: { address: wordbreak.breakThai('คลังสินค้าตัวอย่าง 55/5 ถนนขนส่ง ตำบลทดสอบ จังหวัดสมุทรทดลอง 10540') },
       totals: {
@@ -802,6 +823,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         cashCoupon: totalsText(cashCoupon),
         customerPaid: isPayment ? money(customerPaid) : totalsText(customerPaid),
         bahtText: showTotals || isPayment ? bahtText.bahtText(grandTotal) : '',
+        amountInWords: showTotals || isPayment ? bahtText.amountInWords(customerPaid, 'THB') : '',
         summaryRows: !showTotals ? [] : [
           { label: 'Total / มูลค่ารวม', value: money(grossTotal) },
           { label: 'Special Discount / ส่วนลดพิเศษ', value: money(specialDiscount) },
