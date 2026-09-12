@@ -26,7 +26,7 @@ vi.mock('idb-keyval', () => {
 const BROKEN_XML = '<pdf><body><p>${record.entity!""}</p></body></pdf>';
 let exported = BROKEN_XML;
 vi.mock('../../src/services/bfo-export.service', () => ({
-  exportBfoXml: () => exported,
+  getCurrentBfoXml: () => exported,
 }));
 
 import { AppStore } from '../../src/state/store';

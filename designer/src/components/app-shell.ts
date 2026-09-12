@@ -42,6 +42,7 @@ import './layout/sidebar-left';
 import './canvas/band-view';
 import './layout/sidebar-right';
 import './flow/flow-view';
+import './canonical-xml-editor';
 import './shared/toast-notification';
 import './shared/error-boundary';
 
@@ -115,6 +116,7 @@ export class PldAppShell extends LitElement {
   private readonly _paginationHandler = () => {
     const state = this.store.state;
     this.view = state.view;
+    this.editorMode = state.editorMode;
     if (state.jsonData !== this._observedJsonData) {
       this._observedJsonData = state.jsonData;
       this._jsonDataRevision++;
@@ -123,6 +125,10 @@ export class PldAppShell extends LitElement {
     // Immer preserves references for untouched branches. Comparing the complete
     // pagination inputs catches edits inside elements/bands/data that the old
     // length-only key missed, without serializing a potentially large document.
+    if (state.editorMode === 'xml') {
+      this._paginationInputs = null;
+      return;
+    }
     const nextInputs = [
       state.elements,
       state.bands,
@@ -152,6 +158,7 @@ export class PldAppShell extends LitElement {
   }, 1500);
 
   @state() private view: 'design' | 'flow' = 'design';
+  @state() private editorMode: 'visual' | 'xml' = 'visual';
   @state() private narrow = false;
   private _drawerMedia: MediaQueryList | null = null;
   private _drawerTrigger: HTMLElement | null = null;
@@ -386,7 +393,9 @@ export class PldAppShell extends LitElement {
     getDraft().then((draft) => {
       if (!this._isCurrentConnection(generation)) return;
       if (!draft) return;
-      const hasContent = draft.elements.length > 0 || !!(draft.bands && draft.bands.length) || !!draft.jsonData;
+      const hasContent = draft.editorMode === 'xml'
+        ? true
+        : draft.elements.length > 0 || !!(draft.bands && draft.bands.length) || !!draft.jsonData;
       if (!hasContent) return;
 
       // Only offer recovery when it actually differs from the freshly-loaded
@@ -397,6 +406,7 @@ export class PldAppShell extends LitElement {
       const current = this.store.state;
       const isBlankState =
         !current.template.isDirty &&
+        current.editorMode === 'visual' &&
         current.elements.length === 0 &&
         !current.jsonData;
       if (!isBlankState) return;
@@ -516,10 +526,12 @@ export class PldAppShell extends LitElement {
   render() {
     return html`
       <pld-header>
-        <button slot="tools-toggle" class="drawer-toggle" type="button" aria-label="เปิดเครื่องมือ (Open tools)"
-          aria-expanded=${this.leftPanelOpen} aria-controls="tools-panel" @click=${this._toggleLeftHandler}>${icon('menu')}</button>
-        <button slot="properties-toggle" class="drawer-toggle" type="button" aria-label="เปิดคุณสมบัติ (Open properties)"
-          aria-expanded=${this.rightPanelOpen} aria-controls="properties-panel" @click=${this._toggleRightHandler}>${icon('settings')}</button>
+        ${this.editorMode === 'visual' ? html`
+          <button slot="tools-toggle" class="drawer-toggle" type="button" aria-label="เปิดเครื่องมือ (Open tools)"
+            aria-expanded=${this.leftPanelOpen} aria-controls="tools-panel" @click=${this._toggleLeftHandler}>${icon('menu')}</button>
+          <button slot="properties-toggle" class="drawer-toggle" type="button" aria-label="เปิดคุณสมบัติ (Open properties)"
+            aria-expanded=${this.rightPanelOpen} aria-controls="properties-panel" @click=${this._toggleRightHandler}>${icon('settings')}</button>
+        ` : ''}
       </pld-header>
       <pld-template-bar></pld-template-bar>
 
@@ -534,6 +546,7 @@ export class PldAppShell extends LitElement {
         : ''}
 
       <div class="main-content">
+        ${this.editorMode === 'xml' ? html`<pld-canonical-xml-editor></pld-canonical-xml-editor>` : html`
         ${this.leftPanelOpen || this.rightPanelOpen
           ? html`<button class="drawer-scrim" type="button" aria-label="ปิดแผงด้านข้าง"
               @click=${this._closePanels}></button>`
@@ -558,6 +571,7 @@ export class PldAppShell extends LitElement {
           id="properties-panel" tabindex="-1" ?inert=${this.narrow && !this.rightPanelOpen} aria-label="คุณสมบัติองค์ประกอบ">
           <pld-sidebar-right></pld-sidebar-right>
         </aside>
+        `}
       </div>
 
       <!-- ═══ MODALS ═══ -->
@@ -647,6 +661,8 @@ export class PldAppShell extends LitElement {
     this.store.beginDocumentSession();
     clearPaginationCache();
     this.store.dispatch((d) => {
+      d.editorMode = draft.editorMode === 'xml' ? 'xml' : 'visual';
+      d.rawXml = draft.editorMode === 'xml' ? draft.rawXml ?? '' : '';
       d.elements = draft.elements;
       d.bands = draft.bands ?? elementsToBands(draft.elements);
       d.copies = draft.copies ?? null;
@@ -680,6 +696,11 @@ export class PldAppShell extends LitElement {
   }
 
   private _exportJson() {
+    if (this.store.state.editorMode === 'xml') {
+      navigator.clipboard?.writeText(this.store.state.rawXml);
+      showToast('Canonical XML copied to clipboard!', 'success');
+      return;
+    }
     const { template, page, pagination, elements, jsonData } = this.store.state;
     const json = JSON.stringify({ name: template.name, page, pagination, elements, jsonData }, null, 2);
     navigator.clipboard?.writeText(json);
@@ -714,6 +735,8 @@ export class PldAppShell extends LitElement {
     this.store.beginDocumentSession();
     clearPaginationCache();
     this.store.dispatch((draft) => {
+      draft.editorMode = 'visual';
+      draft.rawXml = '';
       draft.elements = structuredClone(tpl.elements);
       // Sample carries its band structure (#47 3b) — load it so band mode shows the
       // authored layout directly instead of regenerating from elements on entry.

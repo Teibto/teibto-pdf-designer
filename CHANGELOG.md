@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- Add a canonical XML editing mode to Designer with exact XML preview/save/export, explicit document state and draft recovery; existing visual templates retain the sole BFO exporter.
+
 - Correct Code39 export to BFO's supported `code39` codetype; the former `code3of9` alias caused native PDF preview to fail.
 - Size EAN13 through BFO bar-width inside its retained layout frame, avoiding the native engine failure caused by an explicit barcode width.
 

@@ -23,10 +23,13 @@ export class PldHeader extends LitElement {
   private store!: AppStore;
 
   @state() private activeView: 'design' | 'flow' = 'design';
+  @state() private editorMode: 'visual' | 'xml' = 'visual';
   @state() private theme: Theme = getTheme();
 
   private readonly _onStateChanged = (event: Event) => {
-    this.activeView = (event as StateChangedEvent).state.view;
+    const state = (event as StateChangedEvent).state;
+    this.activeView = state.view;
+    this.editorMode = state.editorMode;
   };
 
   /**
@@ -173,6 +176,20 @@ export class PldHeader extends LitElement {
       white-space: nowrap;
     }
 
+    .xml-mode {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      margin-left: var(--s-2);
+      padding: 0 var(--s-2);
+      border-radius: var(--r-pill);
+      background: var(--c-brand-soft);
+      color: var(--c-brand);
+      font-size: var(--t-xs);
+      font-weight: var(--w-semibold);
+      white-space: nowrap;
+    }
+
     details { position: relative; }
     summary { list-style: none; }
     summary::-webkit-details-marker { display: none; }
@@ -250,6 +267,7 @@ export class PldHeader extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.activeView = this.store.state.view;
+    this.editorMode = this.store.state.editorMode;
     this.store.addEventListener('state-changed', this._onStateChanged);
   }
 
@@ -267,12 +285,12 @@ export class PldHeader extends LitElement {
         <span class="brand-copy"><strong>PDF Layout Designer</strong><small>Oracle Redwood workspace</small></span>
       </div>
 
-      <div class="view-tabs" role="group" aria-label="มุมมอง (Views)">
+      ${this.editorMode === 'visual' ? html`<div class="view-tabs" role="group" aria-label="มุมมอง (Views)">
         <button class="tab" aria-pressed=${this.activeView === 'design'}
           @click=${() => switchView(this.store, 'design')}>ออกแบบ <small>Design</small></button>
         <button class="tab" aria-pressed=${this.activeView === 'flow'}
           @click=${() => switchView(this.store, 'flow')}>ผังข้อมูล <small>Flow</small></button>
-      </div>
+      </div>` : html`<span class="xml-mode">Canonical XML</span>`}
 
       <div class="actions">
         ${this.readOnly ? html`<span class="readonly read-only-badge" title=${READ_ONLY_REASON}>อ่านอย่างเดียว · Read only</span>` : nothing}
@@ -297,8 +315,10 @@ export class PldHeader extends LitElement {
             ${isNetSuiteEnv() ? html`<button class="btn" type="button" @click=${this._onSaveSettings}
               ?disabled=${this.readOnly}>ตั้งค่าการบันทึก · Save settings</button>` : nothing}
             <div class="menu-separator"></div>
-            <button type="button" @click=${this._onSample}>โหลดตัวอย่าง · Sample</button>
-            <button type="button" @click=${this._onExportJson}>ส่งออก JSON · Export JSON</button>
+            ${this.editorMode === 'visual' ? html`
+              <button type="button" @click=${this._onSample}>โหลดตัวอย่าง · Sample</button>
+              <button type="button" @click=${this._onExportJson}>ส่งออก JSON · Export JSON</button>
+            ` : nothing}
             <button type="button" @click=${this._onExportBfo}>ส่งออก NetSuite BFO</button>
             <button type="button" @click=${this._onShortcuts}>คีย์ลัด · Shortcuts</button>
           </div>

@@ -34,6 +34,25 @@ describe('getDraft (#140)', () => {
 });
 
 describe('saveDraft / getDraft round-trip (#140)', () => {
+  it('preserves canonical XML mode and exact source', async () => {
+    const store = new AppStore();
+    const xml = '<?xml version="1.0"?>\n<pdf>\n  <#if record.tranid?has_content>${record.tranid}</#if>\n</pdf>\n';
+    store.dispatch((draft) => {
+      draft.editorMode = 'xml';
+      draft.rawXml = xml;
+      draft.template.name = 'Canonical draft';
+      draft.template.isDirty = true;
+    });
+
+    await saveDraft(store, NOW);
+
+    expect(await getDraft()).toMatchObject({
+      editorMode: 'xml',
+      rawXml: xml,
+      templateName: 'Canonical draft',
+    });
+  });
+
   it('persists the current design under a fixed key and reads it back', async () => {
     const store = new AppStore();
     addElement(store, 'header', 0, 0);

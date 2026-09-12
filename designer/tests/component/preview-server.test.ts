@@ -15,7 +15,10 @@ vi.mock('../../src/services/netsuite-adapter.service', () => ({
   getNsContext: () => ({ recordType: 'invoice', recordId: '42' }),
   renderLivePreview: vi.fn(),
 }));
-vi.mock('../../src/services/bfo-export.service', () => ({ exportBfoXml: () => '<pdf>edited</pdf>' }));
+vi.mock('../../src/services/bfo-export.service', () => ({
+  getCurrentBfoXml: (state: { editorMode: string; rawXml: string }) =>
+    state.editorMode === 'xml' ? state.rawXml : '<pdf>edited</pdf>',
+}));
 
 function deferred() {
   let resolve!: (blob: Blob) => void;
@@ -63,6 +66,21 @@ describe('server preview lifecycle', () => {
     expect(click).toHaveBeenCalledOnce();
     expect(renderLivePreview).toHaveBeenCalledOnce();
     click.mockRestore();
+  });
+
+  it('sends canonical XML to the existing live BFO preview unchanged', async () => {
+    const canonical = '<?xml version="1.0"?>\n<pdf>\n  ${record.tranid!""}\n</pdf>\n';
+    modal.store.dispatch((draft) => {
+      draft.editorMode = 'xml';
+      draft.rawXml = canonical;
+    });
+    vi.mocked(renderLivePreview).mockResolvedValue(new Blob(['canonical pdf']));
+
+    await open();
+    await settle();
+
+    expect(renderLivePreview).toHaveBeenCalledWith(expect.objectContaining({ xml: canonical }));
+    expect(modal.shadowRoot!.querySelector('iframe')).not.toBeNull();
   });
 
   it('discards a response after close without creating an object URL', async () => {
