@@ -46,6 +46,22 @@ export interface BfoExportOptions {
   useBands?: boolean;
 }
 
+/**
+ * Resolve the current document's BFO source. Visual documents continue through
+ * the single generator below; canonical XML documents return their source
+ * verbatim so FreeMarker whitespace and directives are never rewritten.
+ */
+export function getCurrentBfoXml(
+  state: Readonly<AppState>,
+  options: BfoExportOptions = {},
+): string {
+  if (state.editorMode !== 'xml') return exportBfoXml(state, options);
+  if (!state.rawXml.trim()) {
+    throw new Error('Canonical XML is empty / XML ต้นฉบับว่างเปล่า');
+  }
+  return state.rawXml;
+}
+
 const EMBEDDED_IMAGE_ERROR = 'รูปภาพฝังไม่รองรับหรือข้อมูลเสียหาย กรุณาอัปโหลดไฟล์ PNG/JPEG ใหม่ '
   + '(Invalid or unsupported embedded image. Please upload a base64 PNG/JPEG file.)';
 const MAX_EMBEDDED_DATA_URL_LENGTH = 2_000_000;

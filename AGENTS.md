@@ -8,7 +8,8 @@ in `CLAUDE.md`. Keep those layers distinct when splitting work across agents.
 
 ## Start here
 
-- Read `CLAUDE.md` and `docs/architecture/OVERVIEW.md`, then inspect only the relevant layer.
+- Read `CLAUDE.md`, `docs/architecture/OVERVIEW.md`, and `docs/AGENT-WORKFLOW.md`, then inspect only
+  the relevant layer.
 - Inspect the working tree before editing and preserve unrelated user changes.
 - Treat `templates/master/` as the template source of truth and
   `designer/src/services/bfo-export.service.ts` as the only BFO generator.
@@ -35,6 +36,8 @@ in `CLAUDE.md`. Keep those layers distinct when splitting work across agents.
 
 ## Multi-agent coordination
 
+- Delegate only when the user or repository workflow authorizes it. Give each agent an explicit
+  layer, file set, and handoff contract; use `docs/AGENT-WORKFLOW.md` as the common contract.
 - `pdf-explorer` maps data flow, template ownership, and affected tests without editing.
 - `designer-implementer` owns an explicitly assigned change under `designer/**`.
 - `engine-template-implementer` owns either `engine/**` or `templates/**` for one assignment, never

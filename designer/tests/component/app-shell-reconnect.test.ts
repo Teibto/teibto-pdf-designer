@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getDraft: vi.fn(),
+  claimDraft: vi.fn(),
   isNetSuiteEnv: vi.fn(),
   autoLoadRecordIfAvailable: vi.fn(),
   fetchNsSampleData: vi.fn(),
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../src/services/template.service', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../src/services/template.service')>(),
   getDraft: mocks.getDraft,
+  claimDraft: mocks.claimDraft,
 }));
 
 vi.mock('../../src/services/netsuite-adapter.service', async (importOriginal) => ({
@@ -37,6 +39,7 @@ vi.mock('../../src/components/shared/toast-notification', async (importOriginal)
 
 import '../../src/components/app-shell';
 import { addElementToNewBand } from '../../src/state/actions';
+import { AppStore } from '../../src/state/store';
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -63,6 +66,7 @@ async function reconnect(shell: HTMLElement & { updateComplete: Promise<unknown>
 
 beforeEach(() => {
   mocks.getDraft.mockReset().mockResolvedValue(null);
+  mocks.claimDraft.mockReset().mockResolvedValue(undefined);
   mocks.isNetSuiteEnv.mockReset().mockReturnValue(false);
   mocks.autoLoadRecordIfAvailable.mockReset().mockResolvedValue(null);
   mocks.fetchNsSampleData.mockReset().mockResolvedValue({ data: {} });
@@ -76,6 +80,33 @@ afterEach(() => {
 });
 
 describe('app-shell reconnect lifecycle', () => {
+  it('offers recovery after an XML edit deletes the entire source', async () => {
+    const seed = new AppStore();
+    mocks.getDraft.mockResolvedValue({
+      templateId: '207',
+      templateName: 'Empty canonical edit',
+      editorMode: 'xml',
+      rawXml: '',
+      page: structuredClone(seed.state.page),
+      pagination: structuredClone(seed.state.pagination),
+      elements: [],
+      savedAt: '2026-09-13T00:00:00.000Z',
+    });
+    const shell = document.createElement('pld-app-shell') as any;
+    document.body.appendChild(shell);
+    await settle(shell);
+
+    expect(shell.showDraftBanner).toBe(true);
+    shell._restoreDraft();
+
+    expect(shell.store.state).toMatchObject({
+      editorMode: 'xml',
+      rawXml: '',
+      template: { id: '207', name: 'Empty canonical edit', isDirty: true },
+    });
+    expect(mocks.claimDraft).toHaveBeenCalledOnce();
+  });
+
   it('runs host and window actions exactly once after 100 reconnects', async () => {
     const shell = document.createElement('pld-app-shell') as any;
     document.body.appendChild(shell);

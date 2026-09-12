@@ -97,6 +97,39 @@ beforeEach(() => {
 });
 
 describe('template-manager load intent', () => {
+  it('opens XML-only NetSuite records in canonical source mode without fake elements', async () => {
+    const canonical = '<?xml version="1.0"?>\n<pdf>\n<#list record.item as line>${line.amount}</#list>\n</pdf>\n';
+    mocks.getNsTemplate.mockResolvedValue({
+      id: 'xml-207', name: 'Canonical invoice', rectype: 'invoice', isDefault: false,
+      data: '', xml: canonical,
+    });
+    const modal = createModal();
+
+    await modal._loadNsTemplate('xml-207');
+
+    expect(modal.store.state).toMatchObject({
+      editorMode: 'xml',
+      rawXml: canonical,
+      elements: [],
+      bands: [],
+      template: { id: 'xml-207', name: 'Canonical invoice', isDirty: false },
+    });
+    expect(mocks.showToast).toHaveBeenCalledWith('Opened canonical XML: Canonical invoice', 'success');
+  });
+
+  it('rejects an XML-only record whose canonical source is empty', async () => {
+    mocks.getNsTemplate.mockResolvedValue({
+      id: 'empty', name: 'Empty', rectype: 'invoice', isDefault: false,
+      data: '', xml: ' \n',
+    });
+    const modal = createModal();
+
+    await modal._loadNsTemplate('empty');
+
+    expect(modal.store.state.editorMode).toBe('visual');
+    expect(mocks.showToast).toHaveBeenCalledWith(expect.stringMatching(/Load failed:.*XML is empty/), 'error');
+  });
+
   it('keeps the latest local template when reads resolve in reverse order', async () => {
     const first = deferred<void>();
     const second = deferred<void>();

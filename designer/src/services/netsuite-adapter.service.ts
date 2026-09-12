@@ -325,7 +325,7 @@ export async function listNsTemplates(
 export async function saveNsTemplate(opts: {
   id?: string;
   name: string;
-  data: string;    // Designer JSON state
+  data?: string;   // Designer JSON state; omitted for canonical XML-only records
   xml: string;     // BFO XML output
   rectype?: string;
   isDefault?: boolean;
@@ -334,8 +334,8 @@ export async function saveNsTemplate(opts: {
   const result = await suiteletFetch(baseUrl, 'save', {}, 'POST', {
     id: opts.id || null,
     name: opts.name,
-    data: opts.data,
     xml: opts.xml,
+    ...(opts.data !== undefined ? { data: opts.data } : {}),
     ...(opts.rectype !== undefined ? { rectype: opts.rectype } : {}),
     ...(opts.isDefault !== undefined ? { isDefault: opts.isDefault } : {}),
   });

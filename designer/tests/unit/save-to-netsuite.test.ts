@@ -24,6 +24,7 @@ import { AppStore } from '../../src/state/store';
 import { addElementToNewBand } from '../../src/state/actions';
 import { set } from 'idb-keyval';
 import { saveDraft, getDraft, saveTemplate, saveTemplateToNetSuite } from '../../src/services/template.service';
+import { exportBfoXml } from '../../src/services/bfo-export.service';
 
 const savedBodies: Record<string, unknown>[] = [];
 const originalWindow = (globalThis as { window?: unknown }).window;
@@ -196,6 +197,40 @@ describe('saveTemplateToNetSuite (#137)', () => {
     const data = JSON.parse(body.data);
     expect(data.bands).toBeTruthy();
     expect(data.elements).toHaveLength(1);
+  });
+
+  it('POSTs canonical XML unchanged and omits designer data for an XML-only record', async () => {
+    const store = storeWithContent();
+    const canonical = `${exportBfoXml(store.state)}\n<!-- preserve trailing source -->\n`;
+    store.dispatch((draft) => {
+      draft.editorMode = 'xml';
+      draft.rawXml = canonical;
+      draft.elements = [];
+      draft.bands = [];
+      draft.template.id = '207';
+      draft.template.nsMetadata = { rectype: 'invoice', isDefault: false };
+      draft.template.isDirty = true;
+    });
+
+    await saveTemplateToNetSuite(store);
+
+    expect(savedBodies[0].xml).toBe(canonical);
+    expect(savedBodies[0]).not.toHaveProperty('data');
+    expect(savedBodies[0]).not.toHaveProperty('rectype');
+    expect(store.state.template).toMatchObject({ id: '42', isDirty: false });
+  });
+
+  it('rejects empty canonical XML before sending a save request', async () => {
+    const store = storeWithContent();
+    store.dispatch((draft) => {
+      draft.editorMode = 'xml';
+      draft.rawXml = '  \n';
+      draft.template.id = '207';
+    });
+
+    await expect(saveTemplateToNetSuite(store)).rejects.toThrow(/XML.*empty|XML.*ว่าง/i);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(store.state.template.isDirty).toBe(true);
   });
 
   it('retains the durable saved ID and propagates server warnings', async () => {

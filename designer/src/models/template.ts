@@ -119,6 +119,10 @@ export interface DocumentTemplate {
   copies?: TemplateCopy[];
   /** Bound JSON data (optional) */
   jsonData?: Record<string, unknown> | null;
+  /** Explicit editing mode for locally persisted/recovered canonical XML. */
+  editorMode?: 'visual' | 'xml';
+  /** Canonical BFO/FreeMarker source, preserved byte-for-byte in XML mode. */
+  rawXml?: string;
 }
 
 /** Default pagination config */

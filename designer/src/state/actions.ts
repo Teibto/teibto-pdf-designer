@@ -393,6 +393,15 @@ export function switchView(store: AppStore, view: 'design' | 'flow'): void {
   }, { name: 'switchView', undoable: false }));
 }
 
+/** Update canonical XML without parsing or normalizing it. */
+export function updateRawXml(store: AppStore, xml: string): void {
+  store.dispatch(tagAction((draft) => {
+    if (draft.editorMode !== 'xml' || draft.rawXml === xml) return;
+    draft.rawXml = xml;
+    draft.template.isDirty = true;
+  }, { name: 'updateRawXml', undoable: true, batchKey: 'raw-xml-input' }));
+}
+
 // ═══════════════════════════════════════
 // JSON DATA ACTIONS
 // ═══════════════════════════════════════

@@ -10,7 +10,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore } from '../../state/store';
-import { exportBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
+import { getCurrentBfoXml, type BfoExportOptions } from '../../services/bfo-export.service';
 import { lintBfoXml, type LintReport } from '../../services/bfo-lint.service';
 import { showToast } from '../shared/toast-notification';
 import {
@@ -33,6 +33,7 @@ export class PldBfoExportModal extends LitElement {
   @state() private useFreeMarker = true;
   @state() private includePageHeaders = true;
   @state() private xmlPreview = '';
+  @state() private xmlError = '';
   /** ผลตรวจกับดัก BFO ของ XML ที่เห็นอยู่ (#191) */
   @state() private lint: LintReport | null = null;
 
@@ -324,7 +325,7 @@ export class PldBfoExportModal extends LitElement {
       >
         <div slot="body">
           <!-- Config Section -->
-          <div class="config-section">
+          ${this.store.state.editorMode === 'visual' ? html`<div class="config-section">
             <div class="section-label">Export Settings</div>
             <div class="config-row">
               <div class="config-field">
@@ -358,7 +359,7 @@ export class PldBfoExportModal extends LitElement {
                 Include Page Header/Footer CSS
               </label>
             </div>
-          </div>
+          </div>` : html`<p class="config-section">Canonical XML is exported exactly as edited. Generator options do not apply.</p>`}
 
           <!-- ฟอนต์ไทยยังไม่ได้ตั้งใน config (#156): binding company.fontRegular
                จะว่าง → BFO เมินฟอนต์เงียบ ๆ แล้วตัวอักษรไทยหายทั้งใบ -->
@@ -370,15 +371,15 @@ export class PldBfoExportModal extends LitElement {
               </p>`
             : nothing}
 
-          ${this._renderLint()}
+          ${this.xmlError ? html`<div class="lint-box err" role="alert">${this.xmlError}</div>` : this._renderLint()}
 
           <!-- XML Preview -->
           <div class="xml-preview-area">
             <div class="xml-toolbar">
-              <h3>⟨/⟩ Generated XML</h3>
+              <h3>⟨/⟩ ${this.store.state.editorMode === 'xml' ? 'Canonical XML' : 'Generated XML'}</h3>
               <div class="xml-actions">
-                <button class="small-btn" @click=${this._copyToClipboard}>${icon('copy')} Copy</button>
-                <button class="small-btn" @click=${this._downloadFile}>${icon('download')} Download .xml</button>
+                <button class="small-btn" ?disabled=${!!this.xmlError} @click=${this._copyToClipboard}>${icon('copy')} Copy</button>
+                <button class="small-btn" ?disabled=${!!this.xmlError} @click=${this._downloadFile}>${icon('download')} Download .xml</button>
                 <button class="small-btn" @click=${this._generatePreview}>${icon('refresh')} Regenerate</button>
               </div>
             </div>
@@ -398,8 +399,8 @@ export class PldBfoExportModal extends LitElement {
         <div slot="footer">
           <div class="footer-btns">
             <button class="btn" @click=${this._close}>Close</button>
-            <button class="btn" @click=${this._copyToClipboard}>${icon('copy')} Copy XML</button>
-            <button class="btn btn-bfo" @click=${this._downloadFile}>${icon('download')} Download</button>
+            <button class="btn" ?disabled=${!!this.xmlError} @click=${this._copyToClipboard}>${icon('copy')} Copy XML</button>
+            <button class="btn btn-bfo" ?disabled=${!!this.xmlError} @click=${this._downloadFile}>${icon('download')} Download</button>
           </div>
         </div>
       </pld-modal>
@@ -457,8 +458,15 @@ export class PldBfoExportModal extends LitElement {
 
     // The Thai <link type="font"> is bound to the config record (#156) — nothing
     // account-specific is baked into the XML, so this output is safe to commit.
-    this.xmlPreview = exportBfoXml(this.store.state, options);
-    this.lint = lintBfoXml(this.xmlPreview, getCachedBindingContract());
+    try {
+      this.xmlPreview = getCurrentBfoXml(this.store.state, options);
+      this.xmlError = '';
+      this.lint = lintBfoXml(this.xmlPreview, getCachedBindingContract());
+    } catch (error) {
+      this.xmlPreview = '';
+      this.lint = null;
+      this.xmlError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   private _copyToClipboard() {

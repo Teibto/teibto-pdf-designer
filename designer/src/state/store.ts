@@ -20,6 +20,8 @@ export const storeContext = createContext<AppStore>('pld-store');
 // ─── Initial State ───
 function createInitialState(): AppState {
   return {
+    editorMode: 'visual',
+    rawXml: '',
     elements: [],
     bands: [],
     selectedId: null,

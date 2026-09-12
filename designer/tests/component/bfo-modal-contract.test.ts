@@ -48,4 +48,21 @@ describe('BFO export modal — binding contract (#193)', () => {
 
     expect(seen).toContain('sample-data');
   });
+
+  it('shows canonical XML unchanged and removes generator-only options in raw mode', async () => {
+    const h = await mount();
+    const canonical = '<?xml version="1.0"?>\n<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n<pdf><body>${record.tranid!""?xml}</body></pdf>\n';
+    h.store.dispatch((draft: any) => {
+      draft.editorMode = 'xml';
+      draft.rawXml = canonical;
+    });
+
+    h.shell.dispatchEvent(new CustomEvent('pld-show-bfo-export', { bubbles: true, composed: true }));
+    await h.flush(120);
+
+    const modal = h.comp('pld-bfo-export-modal');
+    expect(modal.shadowRoot.querySelector('.xml-code').textContent).toBe(canonical);
+    expect(modal.shadowRoot.querySelectorAll('.config-section input')).toHaveLength(0);
+    expect(modal.shadowRoot.textContent).toContain('exported exactly as edited');
+  });
 });
