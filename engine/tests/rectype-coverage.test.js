@@ -85,6 +85,12 @@ test('the curated/raw split is exactly as declared — a new button forces a dec
     '(add curated data in pld_lib_invoice_data.js, or add it to RAW_PATH_TYPES here) — #159');
 });
 
+test('the purchase requisition (#215) is declared in all three runtimes', () => {
+  for (const [name, list] of [['button', buttonTypes], ['curated', curatedTypes], ['designer', designerTypes]]) {
+    assert.ok(list.indexOf('purchaserequisition') !== -1, `purchaserequisition missing from the ${name} list`);
+  }
+});
+
 test('raw-path types still print a real copy label (no curated data needed)', () => {
   // the ${copy.*} data source is added on every render pass, so the label no longer
   // depends on the curated schema — see pld_lib_render.js copyBinding() (#159).

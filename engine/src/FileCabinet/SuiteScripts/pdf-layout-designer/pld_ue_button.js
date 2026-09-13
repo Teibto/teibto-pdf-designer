@@ -36,7 +36,8 @@ define([
     'itemfulfillment',
     'creditmemo',
     'returnauthorization',
-    'customerpayment'
+    'customerpayment',
+    'purchaserequisition'
   ];
 
   function beforeLoad(context) {

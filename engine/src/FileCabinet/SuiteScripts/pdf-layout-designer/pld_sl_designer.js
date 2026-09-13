@@ -360,6 +360,7 @@ define([
       invoice: [...common, 'entity', 'duedate', 'subtotal', 'taxtotal', 'total', 'amountpaid', 'amountremaining', 'terms', 'otherrefnum'],
       salesorder: [...common, 'entity', 'shipdate', 'subtotal', 'taxtotal', 'total', 'terms', 'shipmethod'],
       purchaseorder: [...common, 'entity', 'shipdate', 'subtotal', 'taxtotal', 'total', 'terms', 'approvalstatus'],
+      purchaserequisition: [...common, 'entity', 'duedate', 'location', 'subtotal', 'taxtotal', 'total', 'approvalstatus'],
       estimate: [...common, 'entity', 'duedate', 'subtotal', 'taxtotal', 'total', 'probability', 'expectedclosedate'],
       vendorbill: [...common, 'entity', 'duedate', 'subtotal', 'taxtotal', 'total', 'terms'],
       itemfulfillment: [...common, 'entity', 'shipdate', 'shipmethod', 'shipstatus'],
@@ -374,6 +375,7 @@ define([
       invoice: 'item',
       salesorder: 'item',
       purchaseorder: 'item',
+      purchaserequisition: 'item',
       estimate: 'item',
       vendorbill: 'item',
       itemfulfillment: 'item',
@@ -390,6 +392,7 @@ define([
       invoice: [...common, 'units', 'grossamt', 'location'],
       salesorder: [...common, 'units', 'location', 'commitmentfirm'],
       purchaseorder: [...common, 'units', 'quantityreceived', 'quantitybilled', 'expectedreceiptdate'],
+      purchaserequisition: [...common, 'units', 'expectedreceiptdate'],
       itemfulfillment: ['item', 'description', 'quantity', 'units', 'location', 'serialnumbers', 'inventorydetail'],
     };
 

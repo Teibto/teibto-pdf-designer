@@ -69,6 +69,22 @@ export const COLUMN_PRESETS: ColumnPreset[] = [
     ],
   },
   {
+    id: 'purchase-requisition',
+    name: 'Purchase Requisition',
+    description: 'ใบขอให้ซื้อ',
+    icon: '🛒',
+    columns: [
+      col('index', '#', 30, 'center', 'text', { isIndex: true }),
+      col('item_code', 'รหัสสินค้า / Item Code', 90, 'left'),
+      col('description', 'รายละเอียด / Description', 200, 'left', 'text', { overflow: 'wrap', maxLines: 2 }),
+      col('quantity', 'จำนวน / Qty', 60, 'center', 'number'),
+      col('unit', 'หน่วย / Unit', 50, 'center'),
+      col('expected_receipt_date', 'วันที่ต้องการ / Expt. Date', 80, 'center'),
+      col('unit_price', 'ราคา / Price', 90, 'right', 'currency'),
+      col('amount', 'รวม / Total', 90, 'right', 'currency', { bold: true }),
+    ],
+  },
+  {
     id: 'sales-order',
     name: 'Sales Order',
     description: 'ใบสั่งขาย',

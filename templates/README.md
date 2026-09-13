@@ -3,7 +3,7 @@
 **Source of truth ของ product** — master BFO XML ต่อประเภทเอกสาร แก้ผ่าน PR เท่านั้น
 
 ```
-master/    BFO XML ต้นแบบ: tax-invoice, invoice, purchase-order, delivery-note, receipt, quotation
+master/    BFO XML ต้นแบบ: tax-invoice, invoice, purchase-order, purchase-requisition, delivery-note, receipt, quotation
 samples/   sample data สังเคราะห์ (JSON) สำหรับ preview/QA — ห้ามใช้ข้อมูลจริงจาก account ลูกค้า
 ```
 

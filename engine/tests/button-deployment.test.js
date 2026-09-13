@@ -25,6 +25,8 @@ test('SDF registers the documented button script and one deployment per supporte
   assert.equal(new Set(deployments.map(row => row[1])).size, deployments.length);
   assert.match(deployments.find(row => row[1] === 'customdeploy_pld_ue_btn')[2], /<recordtype>INVOICE<\/recordtype>/);
   for (const [, id] of deployments) assert.ok(id.length <= 40, id + ': SDF scriptid limit');
+  // #215: the natural id (customdeploy_pld_ue_btn_purchaserequisition, 43 chars) breaks the limit above
+  assert.match(deployments.find(row => row[1] === 'customdeploy_pld_ue_btn_purchreq')[2], /<recordtype>PURCHASEREQUISITION<\/recordtype>/);
 });
 
 test('buttons run only on authenticated internal-role UI views without privilege elevation', () => {

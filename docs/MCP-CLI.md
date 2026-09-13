@@ -78,8 +78,8 @@ node automation/src/cli.mjs status
 node automation/src/cli.mjs render --template invoice --output invoice-sample.pdf --copies 2
 ```
 
-Available IDs: `invoice`, `tax-invoice`, `quotation`, `purchase-order`, `receipt`,
-`delivery-note`. Record types come from each master XML's `pld:rectype` marker.
+Available IDs: `invoice`, `tax-invoice`, `quotation`, `purchase-order`, `purchase-requisition`,
+`receipt`, `delivery-note`. Record types come from each master XML's `pld:rectype` marker.
 Omitting `--record-id` uses engine-generated synthetic transaction data. Runtime
 company configuration still supplies branding and fonts: inspect/redact artifacts
 before sharing them, even when the transaction data is synthetic.

@@ -133,7 +133,7 @@ test('designer Invoice sample populates curated columns with live display format
     no: 2, code: 'ITEM-B220', name: 'ITEM-B220',
     memo: sample.items[1].memo,
     description: 'ITEM-B220\n' + sample.items[1].memo,
-    quantity: '5', unit: 'กล่อง', unit_price: '2,500.00', discount: '', amount: '12,500.00',
+    quantity: '5', unit: 'กล่อง', unit_price: '2,500.00', expected_receipt_date: '31/07/2026', discount: '', amount: '12,500.00',
   });
   assert.ok(sample.items[1].memo.length > 0);
   assert.equal(sample.item[1].rate, 2500);

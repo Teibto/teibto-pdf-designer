@@ -29,6 +29,9 @@ const HDR = {
   otherrefnum: 'PO-8842',
   customer_name: '02901 บริษัท ผู้ซื้อทดสอบ จำกัด',
   created_by: '105 สมชาย ทดสอบ',
+  // counterparty contact details (#215) — the entity row behind t.entity
+  entity_email: 'buyer@example.test',
+  entity_phone: '02-000-1234',
 };
 
 const SUMS = [
@@ -43,10 +46,10 @@ const LINES = [
   {
     seq: 1, itemtype: 'InvtPart', item_code: 'PD0001', item_name: 'สินค้าทดสอบ ก',
     memo: 'รายละเอียดเพิ่มเติมของสินค้า', quantity: 12, unit_price: 1000,
-    unit_name: 'Pack12', conv: 12, amount: 12000,
+    unit_name: 'Pack12', conv: 12, amount: 12000, expected_receipt_date: '30/07/2026',
   },
-  { seq: 2, itemtype: 'Discount', item_code: null, item_name: null, memo: '', quantity: null, unit_price: null, unit_name: null, conv: null, amount: -2000 },
-  { seq: 3, itemtype: 'Markup', item_code: null, item_name: null, memo: 'ค่าดำเนินการ', quantity: null, unit_price: null, unit_name: null, conv: null, amount: 0 },
+  { seq: 2, itemtype: 'Discount', item_code: null, item_name: null, memo: '', quantity: null, unit_price: null, unit_name: null, conv: null, amount: -2000, expected_receipt_date: null },
+  { seq: 3, itemtype: 'Markup', item_code: null, item_name: null, memo: 'ค่าดำเนินการ', quantity: null, unit_price: null, unit_name: null, conv: null, amount: 0, expected_receipt_date: null },
 ];
 
 const BODY_VALUES = {
@@ -57,6 +60,10 @@ const BODY_VALUES = {
   terms: '2',
   salesrep: '77',
   employee: '88',
+  // select fields whose DISPLAY text the requisition header prints (#215)
+  department: '12',
+  location: '5',
+  currency: '1',
   subtotal: 10000,
   taxtotal: 700,
   createdfrom: '9911',
@@ -73,6 +80,7 @@ const BODY_TEXTS = {
   terms: 'Net 30', salesrep: 'สุดา ขายเก่ง', employee: 'อนงค์ จัดซื้อ',
   createdfrom: 'Sales Order #SO2026-0044',
   paymentmethod: 'โอนเงินผ่านธนาคาร',
+  department: 'ฝ่ายจัดซื้อ', location: 'คลังกลาง', currency: 'THB',
 };
 
 /**
@@ -120,6 +128,7 @@ const invoiceFormatStub = {
 /** Returns the module plus the query stub, so a test can assert on the SQL issued. */
 function buildLibWith(overrides = {}) {
   const values = { ...BODY_VALUES, ...(overrides.values || {}) };
+  const texts = { ...BODY_TEXTS, ...(overrides.texts || {}) };
   const header = { ...HDR, ...(overrides.header || {}) };
   const q = queryStub([
     { match: 'FROM transaction t LEFT JOIN customrecord_thl_summarytotal', rows:
@@ -135,7 +144,7 @@ function buildLibWith(overrides = {}) {
     'N/record': recordStub({
       id: 42,
       values,
-      texts: BODY_TEXTS,
+      texts,
       sublists: {
         apply: overrides.apply || APPLY_LINES,
         item: overrides.itemLines || ITEM_LINES,
@@ -294,6 +303,7 @@ test('every curated type prints its own Thai document title', () => {
     cashsale: ['ใบเสร็จรับเงิน/ใบกำกับภาษี', 'RECEIPT/TAX INVOICE'],
     vendorbill: ['ใบรับวางบิล', 'VENDOR BILL'],
     returnauthorization: ['ใบรับคืนสินค้า', 'RETURN AUTHORIZATION'],
+    purchaserequisition: ['ใบขอให้ซื้อ', 'PURCHASE REQUISITION'],
   };
 
   for (const [rectype, [th, en]] of Object.entries(titles)) {
@@ -541,6 +551,103 @@ test('buyer tax id / branch prefer the account field and fall back to Thai-Loc v
   }).buildTransactionData('invoice', 42);
   assert.equal(own.custbody_buyer_taxid, '0107000000000');
   assert.equal(own.custbody_buyer_branch, '00012');
+});
+
+// ─── #215: purchase requisition — header contacts and expected receipt dates ──
+const REQUISITION_HEADER_KEYS = ['department', 'location', 'currency', 'createdby', 'entityEmail', 'entityPhone'];
+
+test('requisition header aliases carry real values on every curated type', () => {
+  // Declared for every type so a template never binds a key that vanishes on one
+  // record type (#155). The fixture gives each a value: an alias that is present
+  // but always empty would pass a hasOwnProperty check and still print blank.
+  const lib = buildLib();
+  for (const type of lib.supportedTypes) {
+    const data = lib.buildTransactionData(type, 42);
+    assert.equal(data.department, 'ฝ่ายจัดซื้อ', `${type}: display text of the record field`);
+    assert.equal(data.location, 'คลังกลาง', type);
+    assert.equal(data.currency, 'THB', `${type}: currency display text, not the internal id`);
+    assert.equal(data.createdby, 'สมชาย ทดสอบ', `${type}: BUILTIN.DF prefix dropped`);
+    assert.equal(data.createdby, data.issuer.createdBy);
+    assert.equal(data.entityEmail, 'buyer@example.test', type);
+    assert.equal(data.entityPhone, '02-000-1234', type);
+    for (const key of REQUISITION_HEADER_KEYS) {
+      assert.equal(typeof data[key], 'string', `${type}.${key} must be a string`);
+    }
+  }
+});
+
+test('requisition header aliases are empty strings, never absent, when the record has none', () => {
+  const data = buildLib({
+    values: { department: '', location: '', currency: '' },
+    texts: { department: '', location: '', currency: '' },
+    header: { entity_email: null, entity_phone: null },
+  }).buildTransactionData('purchaserequisition', 42);
+  for (const key of REQUISITION_HEADER_KEYS.filter((k) => k !== 'createdby')) {
+    assert.ok(Object.prototype.hasOwnProperty.call(data, key), `${key} must exist`);
+    assert.equal(data[key], '', `${key} must be "" — a null would print "null" through ?xml`);
+  }
+});
+
+test('a requisition with no summary rows and no subtotal body field prints its body total, not 0.00 (#215)', () => {
+  // NetSuite's purchaserequisition has `total` but no `subtotal`/`taxtotal`; the
+  // record stub returns '' for an unknown field exactly like N/record does here.
+  const data = buildLib({
+    values: { subtotal: '', taxtotal: '', total: 2255 },
+    sums: [],
+  }).buildTransactionData('purchaserequisition', 42);
+  assert.equal(data.subtotalText, '2,255.00');
+  assert.equal(data.taxtotalText, '0.00');
+  assert.equal(data.totalText, '2,255.00');
+  assert.equal(data.subtotal, 2255);
+  // an invoice that DOES carry a subtotal keeps using it
+  const inv = buildLib({ values: { subtotal: 10000, taxtotal: 700, total: 10700 }, sums: [] })
+    .buildTransactionData('invoice', 42);
+  assert.equal(inv.subtotalText, '10,000.00');
+});
+
+test('counterparty contact details come off the entity row of t.entity in the header query', () => {
+  // Employee for a requisition, vendor/customer elsewhere — the `entity` table is the
+  // one view that covers all of them, so no per-type record load is needed and the
+  // per-type SuiteQL call count stays at three.
+  const built = buildLibWith();
+  built.lib.buildTransactionData('purchaserequisition', 42);
+  const header = built.query.seen[0].query;
+  assert.match(header, /\(SELECT e\.email FROM entity e WHERE e\.id = t\.entity\) AS entity_email/);
+  assert.match(header, /\(SELECT e\.phone FROM entity e WHERE e\.id = t\.entity\) AS entity_phone/);
+  assert.equal(built.query.seen.length, 3, 'header + summaries, printed lines, custom line fields — no extra call');
+});
+
+test('every item row carries expectedreceiptdate — formatted on line rows, blank elsewhere', () => {
+  const lib = buildLib();
+  for (const type of lib.supportedTypes) {
+    for (const row of lib.buildTransactionData(type, 42).item) {
+      assert.ok(Object.prototype.hasOwnProperty.call(row, 'expectedreceiptdate'), `${type}: key must exist`);
+      assert.equal(typeof row.expectedreceiptdate, 'string', `${type}: must be text, never null`);
+    }
+  }
+  const [first, second] = lib.buildTransactionData('purchaserequisition', 42).item;
+  assert.equal(first.expectedreceiptdate, '30/07/2026', 'DD/MM/YYYY from TO_CHAR in the line query');
+  assert.equal(second.expectedreceiptdate, '', 'an item-less charge line has no receipt date');
+  assert.equal(lib.buildTransactionData('customerpayment', 42).apply[0].expectedreceiptdate, '');
+  assert.equal(lib.buildTransactionData('itemfulfillment', 42).item[0].expectedreceiptdate, '');
+});
+
+test('a purchase requisition prints its own title and keeps the stored line sign', () => {
+  const built = buildLibWith();
+  const data = built.lib.buildTransactionData('purchaserequisition', 42);
+  assert.equal(data.document.titleTH, 'ใบขอให้ซื้อ (ต้นฉบับ)');
+  assert.equal(data.document.titleEN, 'PURCHASE REQUISITION (Original)');
+  assert.equal(built.lib.isSupportedType('purchaserequisition'), true);
+
+  const sql = built.query.seen.map((s) => s.query).join('\n');
+  assert.ok(sql.indexOf('-tl.quantity') === -1,
+    'requisition lines are stored positive like a purchase order — do not negate them');
+  assert.match(sql, /TO_CHAR\(tl\.expectedreceiptdate,'DD\/MM\/YYYY'\) AS expected_receipt_date/);
+  assert.equal(data.item[0].quantity, 1, 'display units, positive');
+  assert.equal(data.item[0].amountText, '12,000.00');
+  // the statutory box still prints (not a NO_TOTALS type) and the summary path is shared
+  assert.equal(data.totalText, '10,700.00');
+  assert.equal(data.totals.summaryRows.length, 9);
 });
 
 test('every key in the declared binding contract exists on the built object', () => {
