@@ -122,7 +122,7 @@ test('import errors remain inside the modal and hovered primary controls retain 
   await manager.getByRole('tab', { name: 'นำเข้า/ส่งออก (Import / Export)', exact: true }).click();
   const input = manager.getByLabel('Template JSON / JSON เทมเพลต', { exact: true });
   await input.fill('{');
-  const submit = manager.getByRole('button', { name: 'Import JSON', exact: true });
+  const submit = manager.getByRole('button', { name: /นำเข้า JSON/ });
   await submit.click();
   const alert = manager.getByRole('alert');
   await expect(alert).toBeVisible();

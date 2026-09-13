@@ -354,7 +354,7 @@ export class PldTemplateManagerModal extends LitElement {
     try {
       this.nsTemplates = await listNsTemplates();
     } catch (err) {
-      showToast(`Failed to list NetSuite templates: ${(err as Error).message}`, 'error');
+      showToast(`โหลดรายชื่อเทมเพลต NetSuite ไม่สำเร็จ: ${(err as Error).message}`, 'error');
     } finally {
       this.nsLoading = false;
     }
@@ -394,9 +394,9 @@ export class PldTemplateManagerModal extends LitElement {
           </div>
 
           <div id="manager-content" role="tabpanel" aria-labelledby="manager-${this.activeTab}">
-          ${this.activeTab === 'saved' ? (this.loading ? html`<p style="text-align:center;padding:24px;color:var(--color-text-muted)">Loading...</p>` : this._renderSaved()) : nothing}
+          ${this.activeTab === 'saved' ? (this.loading ? html`<p style="text-align:center;padding:24px;color:var(--color-text-muted)">กำลังโหลด…</p>` : this._renderSaved()) : nothing}
           ${this.activeTab === 'samples' ? this._renderSamples() : nothing}
-          ${this.activeTab === 'netsuite' ? (this.nsLoading ? html`<p style="text-align:center;padding:24px;color:var(--color-text-muted)">Loading...</p>` : this._renderNetsuite()) : nothing}
+          ${this.activeTab === 'netsuite' ? (this.nsLoading ? html`<p style="text-align:center;padding:24px;color:var(--color-text-muted)">กำลังโหลด…</p>` : this._renderNetsuite()) : nothing}
           ${this.activeTab === 'import' ? this._renderImportExport() : nothing}
           </div>
         </div>
@@ -461,7 +461,7 @@ export class PldTemplateManagerModal extends LitElement {
             <div class="tpl-meta">
               <span>กระดาษ: ${tpl.page.size} ${tpl.page.orientation}</span>
             </div>
-            <div class="tpl-elements">${tpl.elements.length} องค์ประกอบ • Includes sample data</div>
+            <div class="tpl-elements">${tpl.elements.length} องค์ประกอบ • มีข้อมูลตัวอย่าง (Includes sample data)</div>
             <div class="tpl-actions">
               <button class="tpl-btn primary">เปิด (Load)</button>
             </div>
@@ -636,7 +636,7 @@ export class PldTemplateManagerModal extends LitElement {
           Template JSON / JSON เทมเพลต
         </label>
         <p id="template-import-help" style="font-size: var(--t-sm); color: var(--c-text-subtle); margin-bottom: var(--s-2);">
-          Paste template JSON to import, or export current template.
+          วาง JSON เทมเพลตเพื่อนำเข้า หรือส่งออกเทมเพลตปัจจุบัน (Paste template JSON to import, or export current template)
         </p>
         <textarea id="template-import-json" aria-describedby=${this.importError ? 'template-import-help template-import-error' : 'template-import-help'}
           aria-invalid=${this.importError ? 'true' : 'false'}
@@ -646,8 +646,8 @@ export class PldTemplateManagerModal extends LitElement {
         ></textarea>
         ${this.importError ? html`<p id="template-import-error" class="import-error" role="alert">${this.importError}</p>` : nothing}
         <div class="import-actions">
-          <button class="btn" @click=${this._exportCurrent}>${icon('copy')} Export Current to Clipboard</button>
-          <button class="btn btn-primary" @click=${this._importFromJson}>${icon('upload')} Import JSON</button>
+          <button class="btn" @click=${this._exportCurrent}>${icon('copy')} ส่งออกปัจจุบันไปคลิปบอร์ด (Export Current to Clipboard)</button>
+          <button class="btn btn-primary" @click=${this._importFromJson}>${icon('upload')} นำเข้า JSON (Import JSON)</button>
         </div>
       </div>
     `;
@@ -661,9 +661,9 @@ export class PldTemplateManagerModal extends LitElement {
     try {
       await saveTemplate(this.store);
       await this._refresh();
-      showToast('Template saved!', 'success');
+      showToast('บันทึกเทมเพลตแล้ว (Template saved)', 'success');
     } catch (err) {
-      showToast(`Save failed: ${err}`, 'error');
+      showToast(`บันทึกไม่สำเร็จ: ${err}`, 'error');
     }
   }
 
@@ -679,14 +679,14 @@ export class PldTemplateManagerModal extends LitElement {
       const { warnings } = await loadTemplate(staged, id);
       if (!this._mayCommitLoad(intent)) return;
       this._commitLoadedState(staged.state);
-      showToast('Template loaded!', 'success');
+      showToast('โหลดเทมเพลตแล้ว (Template loaded)', 'success');
       // Surface migration / validation / future-schema warnings instead of
       // discarding them (#145) — the user should know the template changed shape.
       warnings.forEach((w) => showToast(w, 'warning'));
       this._close();
     } catch (err) {
       if (generation !== this._loadGeneration || intent.documentSession !== this.store.documentSession) return;
-      showToast(`Load failed: ${err}`, 'error');
+      showToast(`โหลดไม่สำเร็จ: ${err}`, 'error');
     }
   }
 
@@ -725,9 +725,9 @@ export class PldTemplateManagerModal extends LitElement {
     try {
       const copy = await duplicateTemplate(id);
       await this._refresh();
-      showToast(`Duplicated as "${copy.name}"`, 'success');
+      showToast(`ทำสำเนาเป็น "${copy.name}" (Duplicated as)`, 'success');
     } catch (err) {
-      showToast(`Duplicate failed: ${(err as Error).message}`, 'error');
+      showToast(`ทำสำเนาไม่สำเร็จ: ${(err as Error).message}`, 'error');
     }
   }
 
@@ -735,9 +735,9 @@ export class PldTemplateManagerModal extends LitElement {
     try {
       const copy = await duplicateNsTemplate(id);
       await this._refreshNs();
-      showToast(`Duplicated in NetSuite as "${copy.name}" (ID: ${copy.id})`, 'success');
+      showToast(`ทำสำเนา NetSuite เป็น "${copy.name}" (ID: ${copy.id})`, 'success');
     } catch (err) {
-      showToast(`Duplicate failed: ${(err as Error).message}`, 'error');
+      showToast(`ทำสำเนาไม่สำเร็จ: ${(err as Error).message}`, 'error');
     }
   }
 
@@ -749,19 +749,19 @@ export class PldTemplateManagerModal extends LitElement {
    * with "No template found" until a new default is saved.
    */
   private async _deleteNsTemplate(id: string, name: string) {
-    if (!confirm(`Delete "${name}" from NetSuite? This cannot be undone.`)) return;
+    if (!confirm(`ลบ "${name}" ออกจาก NetSuite หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้`)) return;
     try {
       const { wasDefault } = await deleteNsTemplate(id);
       await this._refreshNs();
-      showToast('Deleted from NetSuite', 'info');
+      showToast('ลบออกจาก NetSuite แล้ว (Deleted from NetSuite)', 'info');
       if (wasDefault) {
         showToast(
-          `"${name}" was the default template — this record type now has NO default. Print will fail until a new default is set.`,
+          `"${name}" เป็นเทมเพลตค่าเริ่มต้น — ประเภทเอกสารนี้ขาดเทมเพลตค่าเริ่มต้น จึงไม่สามารถพิมพ์ได้จนกว่าตั้งค่าเริ่มต้นใหม่`,
           'warning',
         );
       }
     } catch (err) {
-      showToast(`Delete failed: ${(err as Error).message}`, 'error');
+      showToast(`ลบไม่สำเร็จ: ${(err as Error).message}`, 'error');
     }
   }
 
@@ -807,24 +807,24 @@ export class PldTemplateManagerModal extends LitElement {
         draft.currentPage = 1;
       });
       showToast(
-        visual ? `Loaded from NetSuite: ${src.name}` : `Opened canonical XML: ${src.name}`,
+        visual ? `โหลดจาก NetSuite: ${src.name}` : `เปิด canonical XML: ${src.name}`,
         'success',
       );
       this._close();
     } catch (err) {
       if (generation !== this._loadGeneration || intent.documentSession !== this.store.documentSession) return;
-      showToast(`Load failed: ${(err as Error).message}`, 'error');
+      showToast(`โหลดไม่สำเร็จ: ${(err as Error).message}`, 'error');
     }
   }
 
   private async _deleteTemplate(id: string, name: string) {
-    if (!confirm(`Delete "${name}"?`)) return;
+    if (!confirm(`ลบ "${name}" หรือไม่?`)) return;
     try {
       await deleteTemplate(id);
       await this._refresh();
-      showToast('Template deleted', 'info');
+      showToast('ลบเทมเพลตแล้ว (Template deleted)', 'info');
     } catch (err) {
-      showToast(`Delete failed: ${err}`, 'error');
+      showToast(`ลบไม่สำเร็จ: ${err}`, 'error');
     }
   }
 
@@ -833,7 +833,7 @@ export class PldTemplateManagerModal extends LitElement {
     this.importJson = json;
     this.importError = '';
     navigator.clipboard?.writeText(json);
-    showToast('Template JSON copied to clipboard!', 'success');
+    showToast('คัดลอก JSON เทมเพลตไปยังคลิปบอร์ดแล้ว (Template JSON copied to clipboard)', 'success');
   }
 
   private _exportSingle(tpl: DocumentTemplate) {
@@ -841,7 +841,7 @@ export class PldTemplateManagerModal extends LitElement {
     this.importJson = json;
     this.importError = '';
     navigator.clipboard?.writeText(json);
-    showToast(`Exported: ${tpl.name}`, 'success');
+    showToast(`ส่งออก: ${tpl.name}`, 'success');
   }
 
   private _importFromJson() {
@@ -854,7 +854,7 @@ export class PldTemplateManagerModal extends LitElement {
     try {
       const { warnings } = importTemplateJson(this.store, this.importJson);
       this.importError = '';
-      showToast('Template imported!', 'success');
+      showToast('นำเข้าเทมเพลตแล้ว (Template imported)', 'success');
       warnings.forEach((w) => showToast(w, 'warning')); // #145 — don't discard
       this._close();
     } catch (err) {

@@ -114,7 +114,7 @@ describe('template-manager load intent', () => {
       bands: [],
       template: { id: 'xml-207', name: 'Canonical invoice', isDirty: false },
     });
-    expect(mocks.showToast).toHaveBeenCalledWith('Opened canonical XML: Canonical invoice', 'success');
+    expect(mocks.showToast).toHaveBeenCalledWith('เปิด canonical XML: Canonical invoice', 'success');
   });
 
   it('rejects an XML-only record whose canonical source is empty', async () => {
@@ -127,7 +127,7 @@ describe('template-manager load intent', () => {
     await modal._loadNsTemplate('empty');
 
     expect(modal.store.state.editorMode).toBe('visual');
-    expect(mocks.showToast).toHaveBeenCalledWith(expect.stringMatching(/Load failed:.*XML is empty/), 'error');
+    expect(mocks.showToast).toHaveBeenCalledWith(expect.stringMatching(/โหลดไม่สำเร็จ:.*XML is empty/), 'error');
   });
 
   it('keeps the latest local template when reads resolve in reverse order', async () => {
@@ -273,7 +273,7 @@ describe('template-manager import accessibility', () => {
       expect(modal.importJson).toBe(pastedJson);
       expect(textarea.value).toBe(pastedJson);
       const importButton = modal.shadowRoot.querySelector('.import-actions .btn-primary') as HTMLButtonElement;
-      expect(importButton.textContent?.trim()).toBe('Import JSON');
+      expect(importButton.textContent?.trim()).toContain('นำเข้า JSON');
       expect(importButton.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
     } finally {
       modal.remove();
