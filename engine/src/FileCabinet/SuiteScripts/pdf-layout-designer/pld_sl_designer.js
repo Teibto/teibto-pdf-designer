@@ -191,6 +191,8 @@ define([
    * Called via AJAX: ?action=load-record&rectype=invoice&recid=123
    */
   function loadRecordData(context) {
+    const started = Date.now();
+    const usageBefore = remainingUsage();
     try {
       const recType = context.request.parameters.rectype;
       const recId = context.request.parameters.recid;
@@ -207,13 +209,28 @@ define([
         ? invoiceData.buildTransactionData(recType, recId)
         : extractRecordData(record.load({ type: recType, id: recId }), recType);
 
+      const loaded = Date.now();
+      const payload = JSON.stringify(data);
+      const usageAfter = remainingUsage();
       context.response.setHeader({ name: 'Content-Type', value: 'application/json' });
-      context.response.write(JSON.stringify(data));
+      context.response.setHeader({ name: 'Server-Timing', value:
+        'data;dur=' + Math.max(0, loaded - started) + ', serialize;dur=' + Math.max(0, Date.now() - loaded) });
+      if (usageBefore !== null && usageAfter !== null) {
+        context.response.setHeader({ name: 'X-PLD-Usage', value: String(Math.max(0, usageBefore - usageAfter)) });
+      }
+      context.response.write(payload);
 
     } catch (e) {
       log.error({ title: 'loadRecordData', details: e });
       context.response.write(JSON.stringify({ error: e.message }));
     }
+  }
+
+  function remainingUsage() {
+    try {
+      const value = runtime.getCurrentScript().getRemainingUsage();
+      return typeof value === 'number' && isFinite(value) ? value : null;
+    } catch (e) { return null; }
   }
 
   /**

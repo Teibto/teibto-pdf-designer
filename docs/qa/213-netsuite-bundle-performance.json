@@ -1,0 +1,128 @@
+{
+  "source": "Parsed final Playwright console aggregates from the inline NetSuite bundle test; raw individual runs were not retained.",
+  "scope": "Local Chromium with dist-netsuite and mocked load-record responses; not NetSuite server latency.",
+  "command": "npx playwright test --config playwright.netsuite-performance.config.ts",
+  "samples": [
+    {
+      "rectype": "invoice",
+      "count": 50,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 346.1000000014901,
+      "requestToObservedFormPaintP95": 421.5,
+      "editP50": 33,
+      "editP95": 57.19999999552965,
+      "maxLongTask": 52
+    },
+    {
+      "rectype": "invoice",
+      "count": 1000,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 395.70000000298023,
+      "requestToObservedFormPaintP95": 432.70000000298023,
+      "editP50": 33.30000000447035,
+      "editP95": 67.79999999701977,
+      "maxLongTask": 56
+    },
+    {
+      "rectype": "invoice",
+      "count": 10000,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 577.0999999940395,
+      "requestToObservedFormPaintP95": 714.7000000029802,
+      "editP50": 32.70000000298023,
+      "editP95": 50.100000001490116,
+      "maxLongTask": 56
+    },
+    {
+      "rectype": "salesorder",
+      "count": 50,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 338.80000000447035,
+      "requestToObservedFormPaintP95": 405.6000000014901,
+      "editP50": 32.79999999701977,
+      "editP95": 37.79999999701977,
+      "maxLongTask": 0
+    },
+    {
+      "rectype": "salesorder",
+      "count": 1000,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 372,
+      "requestToObservedFormPaintP95": 423.3999999985099,
+      "editP50": 32.20000000298023,
+      "editP95": 50.30000000447035,
+      "maxLongTask": 57
+    },
+    {
+      "rectype": "salesorder",
+      "count": 10000,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 611.0999999940395,
+      "requestToObservedFormPaintP95": 664.6000000014901,
+      "editP50": 33,
+      "editP95": 60.5,
+      "maxLongTask": 50
+    },
+    {
+      "rectype": "purchaseorder",
+      "count": 50,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 329.5,
+      "requestToObservedFormPaintP95": 374.79999999701977,
+      "editP50": 32.600000001490116,
+      "editP95": 41,
+      "maxLongTask": 52
+    },
+    {
+      "rectype": "purchaseorder",
+      "count": 1000,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 361.79999999701977,
+      "requestToObservedFormPaintP95": 460.79999999701977,
+      "editP50": 33.5,
+      "editP95": 42.399999998509884,
+      "maxLongTask": 56
+    },
+    {
+      "rectype": "purchaseorder",
+      "count": 10000,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 603.5,
+      "requestToObservedFormPaintP95": 637.8999999985099,
+      "editP50": 33.599999994039536,
+      "editP95": 48.899999998509884,
+      "maxLongTask": 0
+    },
+    {
+      "rectype": "creditmemo",
+      "count": 50,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 338.1000000014901,
+      "requestToObservedFormPaintP95": 389.40000000596046,
+      "editP50": 29.899999998509884,
+      "editP95": 34.399999998509884,
+      "maxLongTask": 0
+    },
+    {
+      "rectype": "creditmemo",
+      "count": 1000,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 340.19999999552965,
+      "requestToObservedFormPaintP95": 393,
+      "editP50": 33.30000000447035,
+      "editP95": 50.600000001490116,
+      "maxLongTask": 56
+    },
+    {
+      "rectype": "creditmemo",
+      "count": 10000,
+      "runs": 10,
+      "requestToObservedFormPaintP50": 582,
+      "requestToObservedFormPaintP95": 622.1000000014901,
+      "editP50": 33.20000000298023,
+      "editP95": 39.600000001490116,
+      "maxLongTask": 59
+    }
+  ],
+  "passedTests": 12
+}

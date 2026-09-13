@@ -9,7 +9,9 @@ import { createService } from '../src/service.mjs';
 const fixture = Buffer.from('%PDF-1.4\ntransport test only\n%%EOF\n');
 test('canonical catalog needs no session and maps record types from XML', async () => {
   const result = await createService().listTemplates();
-  assert.equal(result.templates.length, 7);
+  assert.deepEqual(result.templates.map(template => template.id), [
+    'delivery-note', 'invoice-reference', 'invoice', 'purchase-order', 'quotation', 'receipt', 'tax-invoice',
+  ]);
   assert.deepEqual(result.templates.find(t => t.id === 'invoice-reference'), { id: 'invoice-reference', rectype: 'invoice' });
   assert.deepEqual(result.templates.find(t => t.id === 'receipt'), { id: 'receipt', rectype: 'customerpayment' });
 });
@@ -71,4 +73,17 @@ test('record mode requires operator opt-in and forwards only a validated record 
   const result = await service.render({ template: 'invoice', outputName: 'r.pdf', recordId: '1' });
   assert.equal(result.mode, 'record');
   assert.equal(request.recordId, '1');
+});
+
+test('measured render publishes the same validated PDF and returns timing metadata', async t => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), 'pld-service-'));
+  t.after(() => rm(outputDir, { recursive: true, force: true }));
+  const metrics = { elapsedMs: 12, usage: 10, pdfBytes: fixture.length, phases: { bfo: 8 } };
+  const service = createService({ outputDir, transport: { render: async input => {
+    assert.equal(input.measure, true);
+    return { pdf: fixture, metrics };
+  } } });
+  const result = await service.render({ template: 'invoice', outputName: 'measured.pdf', measure: true });
+  assert.deepEqual(result.performance, metrics);
+  assert.deepEqual(await readFile(result.path), fixture);
 });

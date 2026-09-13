@@ -149,3 +149,30 @@ test('rejects a forged PDF MIME type and cancels an oversized streamed PDF', asy
   await assert.rejects(oversized.coordinator.render({ xml: '<pdf/>', rectype: 'invoice' }), { code: 'PLD_SIZE' });
   assert.equal(canceled, true);
 });
+
+test('measured rendering allowlists numeric timing headers and preserves PDF bytes', async () => {
+  const h = harness({ fetch: async (url) => {
+    const response = new Response('%PDF-1.7\nsynthetic', { headers: {
+      'Content-Type': 'application/pdf',
+      'Server-Timing': 'total;dur=25, data;dur=12, bfo;dur=10, private-record;dur=42, binding;dur=NaN',
+      'X-PLD-Usage': '35',
+    } });
+    Object.defineProperty(response, 'url', { value: url });
+    return response;
+  } });
+  const result = await h.coordinator.render({ xml: '<pdf/>', rectype: 'invoice', measure: true });
+  assert.equal(result.pdf.toString(), '%PDF-1.7\nsynthetic');
+  assert.deepEqual(result.metrics.phases, { total: 25, data: 12, bfo: 10 });
+  assert.equal(result.metrics.usage, 35);
+  assert.equal(result.metrics.pdfBytes, result.pdf.length);
+  assert.equal(result.metrics.requestBytes, Buffer.byteLength(h.requests[0].init.body));
+  assert.ok(result.metrics.elapsedMs >= 0);
+  assert.equal('measure' in JSON.parse(h.requests[0].init.body), false);
+});
+
+test('measured rendering reports absent server telemetry as missing', async () => {
+  const h = harness();
+  const result = await h.coordinator.render({ xml: '<pdf/>', rectype: 'invoice', measure: true });
+  assert.deepEqual(result.metrics.phases, {});
+  assert.equal(result.metrics.usage, null);
+});

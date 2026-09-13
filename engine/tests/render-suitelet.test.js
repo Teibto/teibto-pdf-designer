@@ -52,7 +52,7 @@ function buildSuitelet({ templates = [], recordValues = {} } = {}) {
       isSupportedType: () => false,
       buildTransactionData: () => ({}),
       buildSampleData: (recType, th, en) => {
-        const data = { rectype: recType, copyTh: th, copyEn: en };
+        const data = { rectype: recType, document: { copyTH: th || 'ต้นฉบับ', copyEN: en || 'Original' } };
         sampleCalls.push(data);
         return data;
       },
@@ -212,6 +212,10 @@ test('a successful render still returns the pdf inline, unchanged', () => {
   assert.equal(response.state.body, '', 'no error body on the happy path');
   assert.equal(log.entries.filter((e) => e.level === 'error').length, 0);
   assert.equal(log.entries.filter((e) => e.level === 'audit').length, 1);
+  assert.match(response.state.headers['Server-Timing'], /^total;dur=\d+/);
+  assert.equal(response.state.headers['X-PLD-Usage'], '0');
+  assert.equal(log.entries.find((e) => e.level === 'audit').details.performance.pdfBytes, 21);
+  assert.doesNotMatch(response.state.headers['Server-Timing'], /IF-0001|recid|subsidiary/);
 });
 
 // ─── #159: the copy set applies to EVERY record type ─────────────────────────
@@ -332,9 +336,9 @@ test('?action=preview renders the saved template through the canonical sample pi
   assert.equal(render.calls.renderedAsPdf, 0, 'two copies use the core XML-to-pdfset pipeline');
   assert.equal(render.calls.renderedAsString, 2, 'the core renders once per copy');
   assert.equal(render.calls.xmlToPdf.length, 1, 'the core combines both copies into one PDF');
-  assert.deepEqual(sampleCalls.map((d) => d.copyTh), ['ต้นฉบับ', 'สำเนา']);
+  assert.equal(sampleCalls.length, 1, 'build one engine sample snapshot for the copy set');
   assert.deepEqual(
-    render.calls.dataSources.filter((d) => d.alias === 'record').map((d) => d.data.copyTh),
+    render.calls.dataSources.filter((d) => d.alias === 'record').map((d) => d.data.document.copyTH),
     ['ต้นฉบับ', 'สำเนา'],
     'preview binds engine sample data instead of deleting FreeMarker expressions'
   );
@@ -360,7 +364,7 @@ test('?action=preview trusts the stored non-invoice rectype and its one-copy def
   assert.equal(render.calls.renderedAsPdf, 1, 'non-invoice defaults to one original copy');
   assert.equal(render.calls.renderedAsString, 0);
   assert.deepEqual(sampleCalls, [{
-    rectype: 'itemfulfillment', copyTh: 'ต้นฉบับ', copyEn: 'Original',
+    rectype: 'itemfulfillment', document: { copyTH: 'ต้นฉบับ', copyEN: 'Original' },
   }]);
   const audit = log.entries.find((e) => e.level === 'audit');
   assert.equal(audit.details.rectype, 'itemfulfillment');

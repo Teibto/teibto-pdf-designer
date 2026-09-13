@@ -1,0 +1,686 @@
+{
+  "classification": "Internal; redacted numeric aggregates only",
+  "date": "2026-09-13",
+  "backendCommit": "3c0d69f",
+  "formFrontendCommit": "ae582ce",
+  "method": "Sequential before/after; median and nearest-rank p95; no cache reset; small samples do not establish an SLA",
+  "form": {
+    "baseline": {
+      "requestToPaint": {
+        "samples": 10,
+        "median": 2203.7,
+        "p95": 9220.4,
+        "max": 9220.4
+      },
+      "serverWait": {
+        "samples": 10,
+        "median": 2174.5,
+        "p95": 9191.8,
+        "max": 9191.8
+      },
+      "responseToPaint": {
+        "samples": 10,
+        "median": 25.8,
+        "p95": 59.2,
+        "max": 59.2
+      },
+      "responseEndToPaint": {
+        "samples": 10,
+        "median": 15.3,
+        "p95": 52.6,
+        "max": 52.6
+      },
+      "edit": {
+        "samples": 10,
+        "median": 39.8,
+        "p95": 40.5,
+        "max": 40.5
+      },
+      "maxTask": {
+        "samples": 10,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "governance": {
+        "samples": 0,
+        "median": null,
+        "p95": null,
+        "max": null
+      },
+      "successes": 10
+    },
+    "requestReuse": {
+      "requestToPaint": {
+        "samples": 10,
+        "median": 2211.8,
+        "p95": 9210.4,
+        "max": 9210.4
+      },
+      "serverWait": {
+        "samples": 10,
+        "median": 2182.1,
+        "p95": 9169.4,
+        "max": 9169.4
+      },
+      "responseToPaint": {
+        "samples": 10,
+        "median": 21.2,
+        "p95": 61.6,
+        "max": 61.6
+      },
+      "responseEndToPaint": {
+        "samples": 10,
+        "median": 16.5,
+        "p95": 38.6,
+        "max": 38.6
+      },
+      "edit": {
+        "samples": 10,
+        "median": 39.8,
+        "p95": 39.9,
+        "max": 39.9
+      },
+      "maxTask": {
+        "samples": 10,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "governance": {
+        "samples": 10,
+        "median": 80.0,
+        "p95": 80.0,
+        "max": 80.0
+      },
+      "successes": 10
+    },
+    "queryFusion": {
+      "requestToPaint": {
+        "samples": 10,
+        "median": 2112.0,
+        "p95": 8895.6,
+        "max": 8895.6
+      },
+      "serverWait": {
+        "samples": 10,
+        "median": 2092.5,
+        "p95": 8883.3,
+        "max": 8883.3
+      },
+      "responseToPaint": {
+        "samples": 10,
+        "median": 14.9,
+        "p95": 38.1,
+        "max": 38.1
+      },
+      "responseEndToPaint": {
+        "samples": 10,
+        "median": 13.9,
+        "p95": 37.0,
+        "max": 37.0
+      },
+      "edit": {
+        "samples": 10,
+        "median": 39.9,
+        "p95": 40.3,
+        "max": 40.3
+      },
+      "maxTask": {
+        "samples": 10,
+        "median": 0.0,
+        "p95": 0.0,
+        "max": 0.0
+      },
+      "governance": {
+        "samples": 10,
+        "median": 70.0,
+        "p95": 70.0,
+        "max": 70.0
+      },
+      "successes": 10
+    }
+  },
+  "render": {
+    "baseline": {
+      "delivery-note-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 1582.3,
+          "p95": 18792.3,
+          "max": 18792.3
+        },
+        "governance": {
+          "samples": 0,
+          "median": null,
+          "p95": null,
+          "max": null
+        },
+        "firstMs": 18792.3,
+        "successes": 3
+      },
+      "invoice-2": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 2579.5,
+          "p95": 2976.4,
+          "max": 2976.4
+        },
+        "governance": {
+          "samples": 0,
+          "median": null,
+          "p95": null,
+          "max": null
+        },
+        "firstMs": 2976.4,
+        "successes": 3
+      },
+      "invoice-reference-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 4585.5,
+          "p95": 10630.1,
+          "max": 10630.1
+        },
+        "governance": {
+          "samples": 0,
+          "median": null,
+          "p95": null,
+          "max": null
+        },
+        "firstMs": 10630.1,
+        "successes": 3
+      },
+      "invoice-reference-2": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 3407.2,
+          "p95": 3414.7,
+          "max": 3414.7
+        },
+        "governance": {
+          "samples": 0,
+          "median": null,
+          "p95": null,
+          "max": null
+        },
+        "firstMs": 3407.2,
+        "successes": 3
+      },
+      "purchase-order-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 3303.1,
+          "p95": 15367.1,
+          "max": 15367.1
+        },
+        "governance": {
+          "samples": 0,
+          "median": null,
+          "p95": null,
+          "max": null
+        },
+        "firstMs": 15367.1,
+        "successes": 3
+      },
+      "receipt-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 2449.6,
+          "p95": 33928.3,
+          "max": 33928.3
+        },
+        "governance": {
+          "samples": 0,
+          "median": null,
+          "p95": null,
+          "max": null
+        },
+        "firstMs": 33928.3,
+        "successes": 3
+      },
+      "invoice-1": {
+        "elapsedMs": {
+          "samples": 5,
+          "median": 9233,
+          "p95": 41132,
+          "max": 41132
+        },
+        "governance": {
+          "samples": 0,
+          "median": null,
+          "p95": null,
+          "max": null
+        },
+        "firstMs": 41132,
+        "successes": 5
+      }
+    },
+    "requestReuse": {
+      "delivery-note-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 1150.2,
+          "p95": 1207.1,
+          "max": 1207.1
+        },
+        "governance": {
+          "samples": 3,
+          "median": 70.0,
+          "p95": 70.0,
+          "max": 70.0
+        },
+        "firstMs": 1207.1,
+        "successes": 3
+      },
+      "invoice-1": {
+        "elapsedMs": {
+          "samples": 5,
+          "median": 2566.0,
+          "p95": 2968.1,
+          "max": 2968.1
+        },
+        "governance": {
+          "samples": 5,
+          "median": 90.0,
+          "p95": 90.0,
+          "max": 90.0
+        },
+        "firstMs": 2968.1,
+        "successes": 5
+      },
+      "invoice-2": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 2491.6,
+          "p95": 2562.9,
+          "max": 2562.9
+        },
+        "governance": {
+          "samples": 3,
+          "median": 90.0,
+          "p95": 90.0,
+          "max": 90.0
+        },
+        "firstMs": 2562.9,
+        "successes": 3
+      },
+      "invoice-reference-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 2435.3,
+          "p95": 2538.3,
+          "max": 2538.3
+        },
+        "governance": {
+          "samples": 3,
+          "median": 110.0,
+          "p95": 110.0,
+          "max": 110.0
+        },
+        "firstMs": 2538.3,
+        "successes": 3
+      },
+      "invoice-reference-2": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 2512.7,
+          "p95": 2527.5,
+          "max": 2527.5
+        },
+        "governance": {
+          "samples": 3,
+          "median": 110.0,
+          "p95": 110.0,
+          "max": 110.0
+        },
+        "firstMs": 2512.7,
+        "successes": 3
+      },
+      "purchase-order-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 2172.0,
+          "p95": 2863.1,
+          "max": 2863.1
+        },
+        "governance": {
+          "samples": 3,
+          "median": 90.0,
+          "p95": 90.0,
+          "max": 90.0
+        },
+        "firstMs": 2863.1,
+        "successes": 3
+      },
+      "receipt-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 1606.7,
+          "p95": 1620.8,
+          "max": 1620.8
+        },
+        "governance": {
+          "samples": 3,
+          "median": 70.0,
+          "p95": 70.0,
+          "max": 70.0
+        },
+        "firstMs": 1620.8,
+        "successes": 3
+      }
+    },
+    "queryFusion": {
+      "delivery-note-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 1148.7,
+          "p95": 1572.6,
+          "max": 1572.6
+        },
+        "governance": {
+          "samples": 3,
+          "median": 60.0,
+          "p95": 60.0,
+          "max": 60.0
+        },
+        "firstMs": 1148.7,
+        "successes": 3
+      },
+      "invoice-1": {
+        "elapsedMs": {
+          "samples": 5,
+          "median": 2551.2,
+          "p95": 15366.6,
+          "max": 15366.6
+        },
+        "governance": {
+          "samples": 5,
+          "median": 80.0,
+          "p95": 80.0,
+          "max": 80.0
+        },
+        "firstMs": 15366.6,
+        "successes": 5
+      },
+      "invoice-2": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 3095.6,
+          "p95": 4668.1,
+          "max": 4668.1
+        },
+        "governance": {
+          "samples": 3,
+          "median": 80.0,
+          "p95": 80.0,
+          "max": 80.0
+        },
+        "firstMs": 3095.6,
+        "successes": 3
+      },
+      "invoice-reference-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 4473.7,
+          "p95": 8529.8,
+          "max": 8529.8
+        },
+        "governance": {
+          "samples": 3,
+          "median": 100.0,
+          "p95": 100.0,
+          "max": 100.0
+        },
+        "firstMs": 8529.8,
+        "successes": 3
+      },
+      "invoice-reference-2": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 2481.9,
+          "p95": 2515.1,
+          "max": 2515.1
+        },
+        "governance": {
+          "samples": 3,
+          "median": 100.0,
+          "p95": 100.0,
+          "max": 100.0
+        },
+        "firstMs": 2515.1,
+        "successes": 3
+      },
+      "purchase-order-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 2344.8,
+          "p95": 3176.7,
+          "max": 3176.7
+        },
+        "governance": {
+          "samples": 3,
+          "median": 80.0,
+          "p95": 80.0,
+          "max": 80.0
+        },
+        "firstMs": 3176.7,
+        "successes": 3
+      },
+      "receipt-1": {
+        "elapsedMs": {
+          "samples": 3,
+          "median": 1576.1,
+          "p95": 2552.6,
+          "max": 2552.6
+        },
+        "governance": {
+          "samples": 3,
+          "median": 60.0,
+          "p95": 60.0,
+          "max": 60.0
+        },
+        "firstMs": 1576.1,
+        "successes": 3
+      }
+    }
+  },
+  "parity": {
+    "canonicalPdfPairs": 23,
+    "pagesCompared": 29,
+    "passed": 23,
+    "dataTypesCompared": 4,
+    "dataEqualExceptPrintedDate": true,
+    "designerXmlEqual": true,
+    "designerPdfPages": 2,
+    "designerPdfEqualExceptPrintedDate": true,
+    "savedRenderVsPreviewPages": 2,
+    "savedRenderVsPreviewEqualExceptPrintedDate": true
+  },
+  "liveRecordSizes": {
+    "invoice": 1,
+    "purchaseorder": 1,
+    "itemfulfillment": 1,
+    "customerpayment": 1
+  },
+  "initialPostFusionDataPhaseMs": {
+    "invoice": 19718,
+    "purchaseorder": 13347,
+    "itemfulfillment": 9141,
+    "customerpayment": 17419
+  },
+  "schedulerFixCommit": "7460586",
+  "schedulerFollowup": {
+    "status": "passed",
+    "focusedTests": 7,
+    "actualPreviewStatus": 200,
+    "visibilityAtInstallation": "hidden",
+    "pointerDownToRequestMs": 1104,
+    "fetchThroughBytesMs": 4481.4,
+    "xmlEqual": true,
+    "pdfParityPages": 2,
+    "pendingRequestAbort": {
+      "attempts": 1,
+      "aborted": 1,
+      "completed": 0
+    },
+    "earlierCloseAfterCompletedResponse": {
+      "attempts": 1,
+      "aborted": 0,
+      "completed": 1
+    },
+    "visibleFormSmoke": {
+      "runs": 1,
+      "requestToPaintMs": 3483.0,
+      "responseToPaintMs": 12.6,
+      "editMs": 34.3
+    }
+  },
+  "diagnosticObservations": [
+    {
+      "kind": "form-observation-timeout",
+      "count": 1,
+      "series": "before instrumented ten-run query-fusion form series",
+      "phase": "unclassified; original markers insufficient",
+      "includedInSuccessfulSeries": false
+    },
+    {
+      "kind": "preview-observation-deadline",
+      "deadlineSeconds": 45,
+      "outcome": "later HTTP 200 and PDF parity passed",
+      "prefetchCause": "rAF-only wait possible; occurrence not conclusively attributed",
+      "includedInSuccessfulFormOrCanonicalRenderSeries": false
+    },
+    {
+      "kind": "final-form-hidden-tab-observation-timeout",
+      "count": 1,
+      "phase": "form-ready; response and Lit updates completed, form rAF not delivered",
+      "visibility": "hidden",
+      "outcome": "frames resumed after owned tab brought forward; fresh visible smoke passed",
+      "includedInSuccessfulSeries": false
+    }
+  ],
+  "ci": {
+    "atReportCreation": "final-head run pending",
+    "statusReference": "https://github.com/Teibto/teibto-pdf-designer/pull/214",
+    "testClockCorrection": {
+      "failedRun": 34724111890,
+      "cause": "synthetic fixture print date depended on runner day",
+      "focusedPassesPerTimezone": 40,
+      "timezones": [
+        "Pacific/Honolulu",
+        "Asia/Bangkok"
+      ],
+      "productionSourceChanged": false
+    }
+  },
+  "deployedSourceAtInitialCapture": "7460586",
+  "currentDeploymentStatusReference": "https://github.com/Teibto/teibto-pdf-designer/pull/214",
+  "paginationCacheFollowup": {
+    "sourceCommit": "36feb36",
+    "focusedTestsPassed": 91,
+    "heightMeasurementsCold": 1000,
+    "heightMeasurementsAfterOneRowEdit": 1,
+    "failedCiRun": 34724370277,
+    "failedCiAttempts": [
+      {
+        "attempt": 1,
+        "editPhaseLongTaskMs": 161
+      },
+      {
+        "attempt": 2,
+        "editP95Ms": 283.4,
+        "longTaskMs": 170
+      }
+    ],
+    "unchangedBuildLocalRepeats": [
+      {
+        "rectype": "creditmemo",
+        "count": 10000,
+        "runs": 10,
+        "requestToObservedFormPaintP50": 493.20000000298023,
+        "requestToObservedFormPaintP95": 737.6999999955297,
+        "responseToFormPaintP50": 171.40000000596046,
+        "responseToFormPaintP95": 211.89999999850988,
+        "responseEndToFormPaintP95": 211.89999999850988,
+        "editP50": 35.600000001490116,
+        "editP95": 45.5,
+        "maxLongTask": 56,
+        "maxAllPhaseLongTask": 80
+      },
+      {
+        "rectype": "creditmemo",
+        "count": 10000,
+        "runs": 10,
+        "requestToObservedFormPaintP50": 468.1000000014901,
+        "requestToObservedFormPaintP95": 549.7000000029802,
+        "responseToFormPaintP50": 165.89999999850988,
+        "responseToFormPaintP95": 182.89999999850988,
+        "responseEndToFormPaintP95": 182.89999999850988,
+        "editP50": 31,
+        "editP95": 39.100000001490116,
+        "maxLongTask": 0,
+        "maxAllPhaseLongTask": 0
+      },
+      {
+        "rectype": "creditmemo",
+        "count": 10000,
+        "runs": 10,
+        "requestToObservedFormPaintP50": 459.29999999701977,
+        "requestToObservedFormPaintP95": 560,
+        "responseToFormPaintP50": 163.39999999850988,
+        "responseToFormPaintP95": 179.20000000298023,
+        "responseEndToFormPaintP95": 179.20000000298023,
+        "editP50": 35.5,
+        "editP95": 44.79999999701977,
+        "maxLongTask": 0,
+        "maxAllPhaseLongTask": 0
+      }
+    ],
+    "cacheLocalRepeats": [
+      {
+        "rectype": "creditmemo",
+        "count": 10000,
+        "runs": 10,
+        "requestToObservedFormPaintP50": 468.1000000014901,
+        "requestToObservedFormPaintP95": 568.0999999940395,
+        "responseToFormPaintP50": 168,
+        "responseToFormPaintP95": 184.89999999850988,
+        "responseEndToFormPaintP95": 184.89999999850988,
+        "editP50": 23.700000002980232,
+        "editP95": 43.79999999701977,
+        "maxLongTask": 0,
+        "maxAllPhaseLongTask": 0
+      },
+      {
+        "rectype": "creditmemo",
+        "count": 10000,
+        "runs": 10,
+        "requestToObservedFormPaintP50": 475.5,
+        "requestToObservedFormPaintP95": 586.7999999970198,
+        "responseToFormPaintP50": 168.39999999850988,
+        "responseToFormPaintP95": 199,
+        "responseEndToFormPaintP95": 199,
+        "editP50": 24.399999998509884,
+        "editP95": 34.100000001490116,
+        "maxLongTask": 0,
+        "maxAllPhaseLongTask": 0
+      },
+      {
+        "rectype": "creditmemo",
+        "count": 10000,
+        "runs": 10,
+        "requestToObservedFormPaintP50": 479.1000000014901,
+        "requestToObservedFormPaintP95": 530.8999999985099,
+        "responseToFormPaintP50": 178.5,
+        "responseToFormPaintP95": 193.39999999850988,
+        "responseEndToFormPaintP95": 193.39999999850988,
+        "editP50": 23.5,
+        "editP95": 42.100000001490116,
+        "maxLongTask": 0,
+        "maxAllPhaseLongTask": 0
+      }
+    ],
+    "laterNativeAndCiStatusReference": "https://github.com/Teibto/teibto-pdf-designer/pull/214"
+  }
+}

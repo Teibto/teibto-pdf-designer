@@ -3,6 +3,10 @@
 <!-- @author Wichit Wongta @since 2026-09-13 -->
 
 Issue #203 adds a local automation adapter for the existing NetSuite PDF product.
+
+Issue #213 adds `render --measure` and a serial benchmark command; see
+[transaction performance measurements](qa/213-transaction-performance.md) for
+phase definitions, private evidence handling and the real-record acceptance matrix.
 AI clients use MCP tools; operators use a CLI. Both read canonical XML from
 `templates/master/` and call the deployed render Suitelet. PDF generation remains
 in `pld_lib_render.js` through `N/render`; no new generator or server deployment is required.

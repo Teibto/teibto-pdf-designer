@@ -1,0 +1,567 @@
+{
+  "provenance": "Synthetic output captured from pre-fusion builder ae582ce; financial/header parity baseline for issue #213.",
+  "keys": [
+    "document",
+    "customer",
+    "totals",
+    "subtotal",
+    "discounttotal",
+    "taxtotal",
+    "total",
+    "subtotalText",
+    "discounttotalText",
+    "netAmountText",
+    "taxtotalText",
+    "totalText",
+    "bahtText"
+  ],
+  "cases": [
+    {
+      "name": "existing summary",
+      "sums": [
+        {
+          "sumtype": "Product/Service Total",
+          "total": 12000,
+          "taxrate": null
+        },
+        {
+          "sumtype": "Special Discount",
+          "total": -2000,
+          "taxrate": null
+        },
+        {
+          "sumtype": "Base Total",
+          "total": 10000,
+          "taxrate": null
+        },
+        {
+          "sumtype": "Tax Total",
+          "total": 700,
+          "taxrate": 0.07
+        },
+        {
+          "sumtype": "Net Total",
+          "total": 10700,
+          "taxrate": null
+        }
+      ],
+      "expected": {
+        "document": {
+          "number": "INV2026-0007",
+          "date": "25/07/2026",
+          "dueDate": "24/08/2026",
+          "refSo": "SO2026-0044",
+          "currencyCode": "",
+          "refNo": "PO-8842",
+          "titleTH": "ใบแจ้งหนี้/ใบกำกับภาษี (ต้นฉบับ)",
+          "titleEN": "INVOICE/TAX INVOICE (Original)",
+          "copyTH": "ต้นฉบับ",
+          "copyEN": "Original",
+          "printedDate": "13/09/2026 10:30",
+          "docInfoRows": [
+            {
+              "label": "Doc No. / เลขที่เอกสาร",
+              "value": "INV2026-0007"
+            },
+            {
+              "label": "Date / วันที่",
+              "value": "25/07/2026"
+            },
+            {
+              "label": "Due Date / วันครบกำหนดชำระ",
+              "value": "24/08/2026"
+            },
+            {
+              "label": "Ref.SO / เลขที่การขาย",
+              "value": "SO2026-0044"
+            },
+            {
+              "label": "Ref.No / เลขที่อ้างอิง",
+              "value": "PO-8842"
+            }
+          ]
+        },
+        "customer": {
+          "name": "บริษัท ผู้ซื้อ​ทดสอบ จำกัด",
+          "address": "บริษัท ผู้ซื้อ​ทดสอบ จำกัด\n1 ถนน​สุขุมวิท กรุงเทพฯ",
+          "taxId": "0994000000000",
+          "branch": "สำนักงานใหญ่",
+          "branchCode": "00000"
+        },
+        "totals": {
+          "gross": "12,000.00",
+          "specialDiscount": "2,000.00",
+          "advanceReceive": "0.00",
+          "baseAmount": "10,000.00",
+          "vatRate": "7.00",
+          "vat": "700.00",
+          "grandTotal": "10,700.00",
+          "wht": "0.00",
+          "cashCoupon": "0.00",
+          "customerPaid": "10,700.00",
+          "bahtText": "หนึ่งหมื่นเจ็ดร้อยบาทถ้วน",
+          "amountInWords": "",
+          "summaryRows": [
+            {
+              "label": "Total / มูลค่ารวม",
+              "value": "12,000.00"
+            },
+            {
+              "label": "Special Discount / ส่วนลดพิเศษ",
+              "value": "2,000.00"
+            },
+            {
+              "label": "Advance Receive / หักเงินรับล่วงหน้า",
+              "value": "0.00"
+            },
+            {
+              "label": "Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม",
+              "value": "10,000.00"
+            },
+            {
+              "label": "VAT / ภาษีมูลค่าเพิ่ม 7.00%",
+              "value": "700.00"
+            },
+            {
+              "label": "Grand Total / มูลค่าสุทธิ",
+              "value": "10,700.00"
+            },
+            {
+              "label": "Withholding Tax / ภาษีหัก ณ ที่จ่าย",
+              "value": "0.00"
+            },
+            {
+              "label": "Cash Coupon / คูปองส่วนลดเงินสด",
+              "value": "0.00"
+            },
+            {
+              "label": "Customer Paid / ยอดชำระ (บาท)",
+              "value": "10,700.00"
+            }
+          ],
+          "subtotal": "10,000.00",
+          "tax": "700.00",
+          "total": "10,700.00"
+        },
+        "subtotal": 12000,
+        "discounttotal": -2000,
+        "taxtotal": 700,
+        "total": 10700,
+        "subtotalText": "12,000.00",
+        "discounttotalText": "2,000.00",
+        "netAmountText": "10,000.00",
+        "taxtotalText": "700.00",
+        "totalText": "10,700.00",
+        "bahtText": "หนึ่งหมื่นเจ็ดร้อยบาทถ้วน"
+      }
+    },
+    {
+      "name": "no summary",
+      "sums": [],
+      "expected": {
+        "document": {
+          "number": "INV2026-0007",
+          "date": "25/07/2026",
+          "dueDate": "24/08/2026",
+          "refSo": "SO2026-0044",
+          "currencyCode": "",
+          "refNo": "PO-8842",
+          "titleTH": "ใบแจ้งหนี้/ใบกำกับภาษี (ต้นฉบับ)",
+          "titleEN": "INVOICE/TAX INVOICE (Original)",
+          "copyTH": "ต้นฉบับ",
+          "copyEN": "Original",
+          "printedDate": "13/09/2026 10:30",
+          "docInfoRows": [
+            {
+              "label": "Doc No. / เลขที่เอกสาร",
+              "value": "INV2026-0007"
+            },
+            {
+              "label": "Date / วันที่",
+              "value": "25/07/2026"
+            },
+            {
+              "label": "Due Date / วันครบกำหนดชำระ",
+              "value": "24/08/2026"
+            },
+            {
+              "label": "Ref.SO / เลขที่การขาย",
+              "value": "SO2026-0044"
+            },
+            {
+              "label": "Ref.No / เลขที่อ้างอิง",
+              "value": "PO-8842"
+            }
+          ]
+        },
+        "customer": {
+          "name": "บริษัท ผู้ซื้อ​ทดสอบ จำกัด",
+          "address": "บริษัท ผู้ซื้อ​ทดสอบ จำกัด\n1 ถนน​สุขุมวิท กรุงเทพฯ",
+          "taxId": "0994000000000",
+          "branch": "สำนักงานใหญ่",
+          "branchCode": "00000"
+        },
+        "totals": {
+          "gross": "0.00",
+          "specialDiscount": "0.00",
+          "advanceReceive": "0.00",
+          "baseAmount": "10,000.00",
+          "vatRate": "7.00",
+          "vat": "700.00",
+          "grandTotal": "10,700.00",
+          "wht": "0.00",
+          "cashCoupon": "0.00",
+          "customerPaid": "10,700.00",
+          "bahtText": "หนึ่งหมื่นเจ็ดร้อยบาทถ้วน",
+          "amountInWords": "",
+          "summaryRows": [
+            {
+              "label": "Total / มูลค่ารวม",
+              "value": "0.00"
+            },
+            {
+              "label": "Special Discount / ส่วนลดพิเศษ",
+              "value": "0.00"
+            },
+            {
+              "label": "Advance Receive / หักเงินรับล่วงหน้า",
+              "value": "0.00"
+            },
+            {
+              "label": "Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม",
+              "value": "10,000.00"
+            },
+            {
+              "label": "VAT / ภาษีมูลค่าเพิ่ม 7.00%",
+              "value": "700.00"
+            },
+            {
+              "label": "Grand Total / มูลค่าสุทธิ",
+              "value": "10,700.00"
+            },
+            {
+              "label": "Withholding Tax / ภาษีหัก ณ ที่จ่าย",
+              "value": "0.00"
+            },
+            {
+              "label": "Cash Coupon / คูปองส่วนลดเงินสด",
+              "value": "0.00"
+            },
+            {
+              "label": "Customer Paid / ยอดชำระ (บาท)",
+              "value": "10,700.00"
+            }
+          ],
+          "subtotal": "10,000.00",
+          "tax": "700.00",
+          "total": "10,700.00"
+        },
+        "subtotal": 10000,
+        "discounttotal": 0,
+        "taxtotal": 700,
+        "total": 10700,
+        "subtotalText": "10,000.00",
+        "discounttotalText": "",
+        "netAmountText": "10,000.00",
+        "taxtotalText": "700.00",
+        "totalText": "10,700.00",
+        "bahtText": "หนึ่งหมื่นเจ็ดร้อยบาทถ้วน"
+      }
+    },
+    {
+      "name": "repeated types and deductions",
+      "sums": [
+        {
+          "sumtype": "Product/Service Total",
+          "total": 12000,
+          "taxrate": null
+        },
+        {
+          "sumtype": "Special Discount",
+          "total": -2000,
+          "taxrate": null
+        },
+        {
+          "sumtype": "Base Total",
+          "total": 10000,
+          "taxrate": null
+        },
+        {
+          "sumtype": "Tax Total",
+          "total": 700,
+          "taxrate": 0.07
+        },
+        {
+          "sumtype": "Net Total",
+          "total": 10700,
+          "taxrate": null
+        },
+        {
+          "sumtype": "Product/Service Total",
+          "total": 500
+        },
+        {
+          "sumtype": "Special Discount",
+          "total": -100
+        },
+        {
+          "sumtype": "Base Total",
+          "total": 400
+        },
+        {
+          "sumtype": "Tax Total",
+          "total": 28,
+          "taxrate": 0.07
+        },
+        {
+          "sumtype": "Net Total",
+          "total": 428
+        },
+        {
+          "sumtype": "Cash Coupon",
+          "total": -25
+        },
+        {
+          "sumtype": "Withholding Tax",
+          "total": -50
+        }
+      ],
+      "expected": {
+        "document": {
+          "number": "INV2026-0007",
+          "date": "25/07/2026",
+          "dueDate": "24/08/2026",
+          "refSo": "SO2026-0044",
+          "currencyCode": "",
+          "refNo": "PO-8842",
+          "titleTH": "ใบแจ้งหนี้/ใบกำกับภาษี (ต้นฉบับ)",
+          "titleEN": "INVOICE/TAX INVOICE (Original)",
+          "copyTH": "ต้นฉบับ",
+          "copyEN": "Original",
+          "printedDate": "13/09/2026 10:30",
+          "docInfoRows": [
+            {
+              "label": "Doc No. / เลขที่เอกสาร",
+              "value": "INV2026-0007"
+            },
+            {
+              "label": "Date / วันที่",
+              "value": "25/07/2026"
+            },
+            {
+              "label": "Due Date / วันครบกำหนดชำระ",
+              "value": "24/08/2026"
+            },
+            {
+              "label": "Ref.SO / เลขที่การขาย",
+              "value": "SO2026-0044"
+            },
+            {
+              "label": "Ref.No / เลขที่อ้างอิง",
+              "value": "PO-8842"
+            }
+          ]
+        },
+        "customer": {
+          "name": "บริษัท ผู้ซื้อ​ทดสอบ จำกัด",
+          "address": "บริษัท ผู้ซื้อ​ทดสอบ จำกัด\n1 ถนน​สุขุมวิท กรุงเทพฯ",
+          "taxId": "0994000000000",
+          "branch": "สำนักงานใหญ่",
+          "branchCode": "00000"
+        },
+        "totals": {
+          "gross": "12,500.00",
+          "specialDiscount": "2,100.00",
+          "advanceReceive": "0.00",
+          "baseAmount": "10,400.00",
+          "vatRate": "7.00",
+          "vat": "728.00",
+          "grandTotal": "11,128.00",
+          "wht": "50.00",
+          "cashCoupon": "25.00",
+          "customerPaid": "11,053.00",
+          "bahtText": "หนึ่งหมื่นหนึ่งพันหนึ่งร้อยยี่สิบแปดบาทถ้วน",
+          "amountInWords": "",
+          "summaryRows": [
+            {
+              "label": "Total / มูลค่ารวม",
+              "value": "12,500.00"
+            },
+            {
+              "label": "Special Discount / ส่วนลดพิเศษ",
+              "value": "2,100.00"
+            },
+            {
+              "label": "Advance Receive / หักเงินรับล่วงหน้า",
+              "value": "0.00"
+            },
+            {
+              "label": "Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม",
+              "value": "10,400.00"
+            },
+            {
+              "label": "VAT / ภาษีมูลค่าเพิ่ม 7.00%",
+              "value": "728.00"
+            },
+            {
+              "label": "Grand Total / มูลค่าสุทธิ",
+              "value": "11,128.00"
+            },
+            {
+              "label": "Withholding Tax / ภาษีหัก ณ ที่จ่าย",
+              "value": "50.00"
+            },
+            {
+              "label": "Cash Coupon / คูปองส่วนลดเงินสด",
+              "value": "25.00"
+            },
+            {
+              "label": "Customer Paid / ยอดชำระ (บาท)",
+              "value": "11,053.00"
+            }
+          ],
+          "subtotal": "10,400.00",
+          "tax": "728.00",
+          "total": "11,128.00"
+        },
+        "subtotal": 12500,
+        "discounttotal": -2100,
+        "taxtotal": 728,
+        "total": 11128,
+        "subtotalText": "12,500.00",
+        "discounttotalText": "2,100.00",
+        "netAmountText": "10,400.00",
+        "taxtotalText": "728.00",
+        "totalText": "11,128.00",
+        "bahtText": "หนึ่งหมื่นหนึ่งพันหนึ่งร้อยยี่สิบแปดบาทถ้วน"
+      }
+    },
+    {
+      "name": "present zero overrides body fallback",
+      "sums": [
+        {
+          "sumtype": "Base Total",
+          "total": 0
+        },
+        {
+          "sumtype": "Tax Total",
+          "total": 0,
+          "taxrate": 0
+        },
+        {
+          "sumtype": "Net Total",
+          "total": 0
+        }
+      ],
+      "expected": {
+        "document": {
+          "number": "INV2026-0007",
+          "date": "25/07/2026",
+          "dueDate": "24/08/2026",
+          "refSo": "SO2026-0044",
+          "currencyCode": "",
+          "refNo": "PO-8842",
+          "titleTH": "ใบแจ้งหนี้/ใบกำกับภาษี (ต้นฉบับ)",
+          "titleEN": "INVOICE/TAX INVOICE (Original)",
+          "copyTH": "ต้นฉบับ",
+          "copyEN": "Original",
+          "printedDate": "13/09/2026 10:30",
+          "docInfoRows": [
+            {
+              "label": "Doc No. / เลขที่เอกสาร",
+              "value": "INV2026-0007"
+            },
+            {
+              "label": "Date / วันที่",
+              "value": "25/07/2026"
+            },
+            {
+              "label": "Due Date / วันครบกำหนดชำระ",
+              "value": "24/08/2026"
+            },
+            {
+              "label": "Ref.SO / เลขที่การขาย",
+              "value": "SO2026-0044"
+            },
+            {
+              "label": "Ref.No / เลขที่อ้างอิง",
+              "value": "PO-8842"
+            }
+          ]
+        },
+        "customer": {
+          "name": "บริษัท ผู้ซื้อ​ทดสอบ จำกัด",
+          "address": "บริษัท ผู้ซื้อ​ทดสอบ จำกัด\n1 ถนน​สุขุมวิท กรุงเทพฯ",
+          "taxId": "0994000000000",
+          "branch": "สำนักงานใหญ่",
+          "branchCode": "00000"
+        },
+        "totals": {
+          "gross": "0.00",
+          "specialDiscount": "0.00",
+          "advanceReceive": "0.00",
+          "baseAmount": "0.00",
+          "vatRate": "7.00",
+          "vat": "0.00",
+          "grandTotal": "0.00",
+          "wht": "0.00",
+          "cashCoupon": "0.00",
+          "customerPaid": "0.00",
+          "bahtText": "ศูนย์บาทถ้วน",
+          "amountInWords": "",
+          "summaryRows": [
+            {
+              "label": "Total / มูลค่ารวม",
+              "value": "0.00"
+            },
+            {
+              "label": "Special Discount / ส่วนลดพิเศษ",
+              "value": "0.00"
+            },
+            {
+              "label": "Advance Receive / หักเงินรับล่วงหน้า",
+              "value": "0.00"
+            },
+            {
+              "label": "Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม",
+              "value": "0.00"
+            },
+            {
+              "label": "VAT / ภาษีมูลค่าเพิ่ม 7.00%",
+              "value": "0.00"
+            },
+            {
+              "label": "Grand Total / มูลค่าสุทธิ",
+              "value": "0.00"
+            },
+            {
+              "label": "Withholding Tax / ภาษีหัก ณ ที่จ่าย",
+              "value": "0.00"
+            },
+            {
+              "label": "Cash Coupon / คูปองส่วนลดเงินสด",
+              "value": "0.00"
+            },
+            {
+              "label": "Customer Paid / ยอดชำระ (บาท)",
+              "value": "0.00"
+            }
+          ],
+          "subtotal": "0.00",
+          "tax": "0.00",
+          "total": "0.00"
+        },
+        "subtotal": 0,
+        "discounttotal": 0,
+        "taxtotal": 0,
+        "total": 0,
+        "subtotalText": "0.00",
+        "discounttotalText": "",
+        "netAmountText": "0.00",
+        "taxtotalText": "0.00",
+        "totalText": "0.00",
+        "bahtText": "ศูนย์บาทถ้วน"
+      }
+    }
+  ]
+}

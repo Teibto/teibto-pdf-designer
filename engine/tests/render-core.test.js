@@ -274,3 +274,277 @@ test('reference marker must be a metadata line inside one FreeMarker comment', (
   const raw = buildCore();
   assert.throws(() => raw.core.renderDocumentXml('<#--\npld:reference-layout\n-->' + TPL_XML, 'other', 42, TWO_COPIES), /requires a curated invoice/);
 });
+
+// Exercise the actual render -> data -> reference graph with one shared N/record
+// counter. Per-module stubs cannot detect duplicate loads across those boundaries.
+function countingGraph({ subsidiary = '2', denied = false, missingFonts = false, invalidUsage = false, rich = false, dataFailure = false, referenceFailure = false } = {}) {
+  const calls = { loads: 0, config: [], searches: 0, queries: 0 };
+  let version = 1, usage = 1000;
+  const render = renderStub();
+  const page = rows => ({ runPaged: () => ({ pageRanges: [{ index: 0 }], fetch: () => ({ data: rows }) }) });
+  const row = {
+    getValue({ name, join }) {
+      if (join === 'CUSTBODY_THL_COMPANYBRANCHADDRESS') return {
+        custrecord_cba_companyname: 'Synthetic branch', custrecord_cba_address: 'Test road',
+        custrecord_cba_vatregistrationno: '0105500000000', custrecord_cba_branchno: '00000', custrecord_cba_doclogo: '501'
+      }[name] || '';
+      if (join === 'CURRENCY') return 'THB';
+      return { custcol_thl_summarytype: '0', quantityuom: 1, fxrate: 100, fxamount: 100 }[name] || '';
+    },
+    getText: () => ''
+  };
+  const stubs = {
+    'N/render': render.module,
+    'N/record': { load() {
+      calls.loads++; usage -= 10;
+      if (denied) throw new Error('record permission denied');
+      return recordStub({ values: { subsidiary, tranid: 'SYN-' + version, memo: 'revision-' + version,
+        taxtotal: 7, subtotal: rich ? 100 : 0, payment: rich ? 57 : 0,
+        ntype: '7', custbody_thl_docprintouttype: '3', custbody_synthetic: 'Preserve body' },
+        sublists: { item: rich ? [{ itemname: 'SYN-BOX', displayname: 'Synthetic boxes',
+          itemdescription: 'Delivered item', quantity: 3, unitsdisplay: 'Box12', custcol_lot: 'SYN-LOT' }] : [],
+        apply: rich ? [{ apply: true, refnum: 'SYN-A', applydate: '01/09/2026', total: 107, amount: 50 },
+          { apply: false, refnum: 'SYN-UNSELECTED', total: 999, amount: 999 },
+          { apply: true, refnum: 'SYN-B', total: 7, amount: 7 }] : [] } }).rec;
+    } },
+    'N/query': { runSuiteQL({ query }) {
+      calls.queries++; usage -= 10;
+      if (dataFailure) throw new Error('data query failed');
+      if (rich && query.includes('FROM transactionline tl')) {
+        const sign = query.includes('-tl.quantity AS quantity') ? -1 : 1;
+        return { asMappedResults: () => [{ seq: 1, itemtype: 'InvtPart', item_code: 'SYN-ITEM',
+          item_name: 'Synthetic item', memo: 'Line memo', quantity: sign * -2, unit_price: 50,
+          unit_name: 'Each', conv: 1, amount: sign * -100 }] };
+      }
+      if (rich && query.includes('SELECT * FROM transactionline')) {
+        return { asMappedResults: () => [{ linesequencenumber: 1, custcol_lot: 'SYN-LOT' }] };
+      }
+      return { asMappedResults: () => query.includes('FROM transaction t LEFT JOIN customrecord_thl_summarytotal')
+        ? [{ tranid: 'SYN-' + version, currency_code: 'THB', summary_id: null, summary_type: null, summary_total: null, summary_taxrate: null }] : [] };
+    } },
+    'N/search': { Sort: { DESC: 'DESC' }, createColumn: value => value,
+      create: () => page([]), load({ id }) {
+        calls.searches++; usage -= 5;
+        if (referenceFailure) throw new Error('reference search failed');
+        const financeRow = (type, amount) => ({ getText: row.getText,
+          getValue(column) { return ({ custcol_thl_summarytype: type, fxamount: amount })[column.name] ?? row.getValue(column); } });
+        const lines = rich ? [row, financeRow('3', -10), financeRow('4', -5), financeRow('8', 2)] : [row];
+        const summaries = rich ? [{ getValue: ({ name }) => ({ custrecord_sum_type: 7, custrecord_sum_total: -3 })[name] || '' }] : [];
+        return Object.assign({ filterExpression: [], columns: [] }, page(id.includes('transactiondataprintinv') ? lines : summaries));
+      } },
+    'N/file': { load: () => ({ url: '/synthetic-logo' }) },
+    'N/format': formatStub,
+    'N/runtime': runtimeStub({ usage: () => invalidUsage ? NaN : usage }),
+    './pld_lib_company_config': { load(scope, options) {
+      calls.config.push({ scope, options }); usage -= 2;
+      assert.equal(options.forRender, true);
+      if (missingFonts) throw new Error('Thai fonts missing');
+      return { ...companyConfigStub.load(), name: 'Config-' + version };
+    } }
+  };
+  return { core: loadAmd('./pld_lib_render', stubs), data: loadAmd('./pld_lib_invoice_data', stubs),
+    calls, render, reference: loadAmd('./pld_lib_invoice_reference', stubs), next: () => { version++; } };
+}
+
+for (const type of [...countingGraph().data.supportedTypes, 'unsupportedraw']) {
+  for (const copies of [1, 2, 20]) {
+    test(`shared module graph loads ${type} once for ${copies} copies and reloads next request`, () => {
+      const h = countingGraph();
+      const labels = Array.from({ length: copies }, (_, i) => ({ th: 'Copy ' + i, en: 'Copy ' + i }));
+      const tel = {};
+      h.core.renderDocument(TPL_XML, type, '42', labels, tel);
+      assert.equal(h.calls.loads, 1);
+      assert.equal(h.calls.config.length, 1);
+      assert.equal(h.calls.config[0].scope, '2');
+      assert.equal(tel.performance.copies, copies);
+      assert.equal(tel.performance.phases.data.usage >= 10, true);
+      assert.equal(h.render.calls.renderedAsPdf, copies === 1 ? 1 : 0);
+      assert.equal(h.render.calls.renderedAsString, copies === 1 ? 0 : copies);
+      h.next();
+      h.core.renderDocument(TPL_XML, type, '42', labels, {});
+      assert.equal(h.calls.loads, 2);
+      assert.equal(h.calls.config.length, 2);
+      const companies = h.render.calls.dataSources.filter(d => d.alias === 'company');
+      assert.equal(companies[0].data.name, 'Config-1');
+      assert.equal(companies.at(-1).data.name, 'Config-2');
+      const records = h.render.calls.dataSources.filter(d => d.alias === 'record');
+      if (records.length) {
+        assert.equal(records[0].data.document.number, 'SYN-1');
+        assert.equal(records.at(-1).data.document.number, 'SYN-2');
+      } else {
+        assert.equal(h.render.calls.records.at(-1).record.getValue({ fieldId: 'tranid' }), 'SYN-2');
+      }
+    });
+  }
+}
+
+for (const copies of [1, 2, 20]) {
+  test(`reference invoice shares real record/data/enricher across ${copies} copies`, () => {
+    const h = countingGraph();
+    const labels = Array.from({ length: copies }, (_, i) => ({ th: 'Copy ' + i, en: 'Copy ' + i }));
+    const tel = {};
+    h.core.renderDocument('<#--\npld:reference-layout\n-->' + TPL_XML, 'invoice', '42', labels, tel);
+    assert.equal(h.calls.loads, 1);
+    assert.equal(h.calls.config.length, 1);
+    assert.equal(h.calls.searches, 2);
+    assert.equal(tel.performance.phases.reference.usage, 10);
+    assert.equal(tel.performance.itemCount, 1);
+    const records = h.render.calls.dataSources.filter(d => d.alias === 'record');
+    assert.equal(records.length, copies);
+    assert.equal(records[0].data.referenceCompany.name, 'Synthetic branch');
+    assert.equal(records[0].data.total, 107);
+    assert.equal(records.at(-1).data.document.copyEN, 'Copy ' + (copies - 1));
+    h.next();
+    h.core.renderDocument('<#--\npld:reference-layout\n-->' + TPL_XML, 'invoice', '42', labels, {});
+    assert.equal(h.calls.loads, 2);
+    assert.equal(h.calls.config.length, 2);
+    assert.equal(h.calls.searches, 4);
+  });
+}
+
+test('request reuse preserves global subsidiary fallback and font failures', () => {
+  const h = countingGraph({ subsidiary: '' });
+  h.core.renderDocument(TPL_XML, 'invoice', '42', TWO_COPIES, {});
+  assert.equal(h.calls.config.length, 1);
+  assert.equal(h.calls.config[0].scope, '');
+  const fonts = countingGraph({ missingFonts: true });
+  assert.throws(() => fonts.core.renderDocument(TPL_XML, 'invoice', '42', TWO_COPIES, {}), /Thai fonts missing/);
+  assert.equal(fonts.render.calls.created, 0);
+  const denied = countingGraph({ denied: true });
+  assert.throws(() => denied.core.renderDocument(TPL_XML, 'invoice', '42', TWO_COPIES, {}), /record permission denied/);
+  assert.equal(denied.calls.queries, 0);
+  assert.equal(denied.calls.config.length, 0);
+});
+
+
+test('phase metrics expose only bounded aggregate values, including combine', () => {
+  const h = countingGraph();
+  const tel = {};
+  h.core.renderDocument(TPL_XML, 'invoice', '42', TWO_COPIES, tel);
+  assert.deepEqual(Object.keys(tel.performance).sort(), ['copies', 'itemCount', 'phases']);
+  assert.deepEqual(Object.keys(tel.performance.phases).sort(), ['bfo', 'binding', 'combine', 'data', 'reference']);
+  for (const phase of Object.values(tel.performance.phases)) {
+    assert.deepEqual(Object.keys(phase).sort(), ['elapsedMs', 'usage']);
+    assert.ok(Number.isFinite(phase.elapsedMs) && phase.elapsedMs >= 0);
+    assert.ok(Number.isFinite(phase.usage) && phase.usage >= 0);
+  }
+});
+
+
+for (const copies of [1, 2, 20]) {
+  for (const supplied of [false, true]) {
+    test(`sample preview reuses config and reports phases for ${copies} copies, supplied=${supplied}`, () => {
+      const h = countingGraph();
+      const tel = {};
+      const labels = Array.from({ length: copies }, (_, i) => ({ th: 'Copy ' + i, en: 'Copy ' + i }));
+      const data = supplied ? { document: { number: 'SYN-SAMPLE', footerText: 'Supplied footer' },
+        items: [{ name: 'Supplied item' }], referenceCompany: { name: 'Supplied reference company' } } : undefined;
+      const before = JSON.stringify(data);
+      h.core.renderSampleDocument(TPL_XML, 'invoice', labels, tel, data);
+      assert.equal(h.calls.loads, 0);
+      assert.equal(h.calls.queries, 0);
+      assert.equal(h.calls.searches, 0);
+      assert.equal(h.calls.config.length, 1);
+      assert.equal(h.calls.config[0].options.forRender, true);
+      assert.equal(tel.performance.copies, copies);
+      assert.ok(tel.performance.itemCount > 0);
+      for (const phase of ['data', 'binding', 'bfo', ...(copies > 1 ? ['combine'] : [])]) {
+        assert.ok(tel.performance.phases[phase].elapsedMs >= 0);
+        assert.ok(tel.performance.phases[phase].usage >= 0);
+      }
+      const records = h.render.calls.dataSources.filter(d => d.alias === 'record');
+      assert.equal(records.length, copies);
+      assert.equal(records.at(-1).data.document.copyEN, 'Copy ' + (copies - 1));
+      assert.equal(records[0].data.items, records.at(-1).data.items);
+      if (supplied) {
+        assert.equal(JSON.stringify(data), before);
+        assert.equal(records.at(-1).data.document.footerText, 'Supplied footer');
+        assert.equal(records.at(-1).data.referenceCompany.name, 'Supplied reference company');
+      }
+      h.next();
+      h.core.renderSampleDocument(TPL_XML, 'invoice', labels, {}, data);
+      assert.equal(h.calls.loads, 0);
+      assert.equal(h.calls.config.length, 2);
+      assert.equal(h.render.calls.dataSources.filter(d => d.alias === 'company').at(-1).data.name, 'Config-2');
+    });
+  }
+}
+
+test('sample rendering rejects missing render fonts before generating a PDF', () => {
+  const h = countingGraph({ missingFonts: true });
+  assert.throws(() => h.core.renderSampleDocument(TPL_XML, 'invoice', TWO_COPIES, {}), /Thai fonts missing/);
+  assert.equal(h.calls.loads, 0);
+  assert.equal(h.render.calls.created, 0);
+});
+
+
+test('metrics tolerate preinitialized empty performance and invalid governance values', () => {
+  const h = countingGraph({ invalidUsage: true });
+  const tel = { performance: {} };
+  h.core.renderSampleDocument(TPL_XML, 'invoice', TWO_COPIES, tel);
+  for (const phase of Object.values(tel.performance.phases)) assert.equal(phase.usage, null);
+  const denied = countingGraph({ denied: true });
+  assert.throws(() => denied.core.renderDocument(TPL_XML, 'invoice', '42', TWO_COPIES,
+    { performance: Object.freeze({}) }), /record permission denied/);
+});
+
+
+for (const type of ['invoice', 'purchaseorder', 'itemfulfillment', 'customerpayment']) {
+  for (const copyCount of [1, 2]) {
+    test(`request reuse preserves complete standalone ${type} binding with ${copyCount} copies`, () => {
+      const h = countingGraph({ rich: true });
+      const labels = TWO_COPIES.slice(0, copyCount);
+      h.core.renderDocument(TPL_XML, type, '42', labels, {});
+      assert.equal(h.calls.loads, 1);
+      const records = h.render.calls.dataSources.filter(d => d.alias === 'record');
+      for (let index = 0; index < labels.length; index++) {
+        const label = labels[index];
+        const expected = h.data.buildTransactionData(type, '42', label.th, label.en);
+        assert.deepEqual(JSON.parse(JSON.stringify(records[index].data)), JSON.parse(JSON.stringify(expected)));
+      }
+      const data = records[0].data;
+      if (type === 'customerpayment') {
+        assert.deepEqual(Array.from(data.apply, item => item.refnum), ['SYN-A', 'SYN-B']);
+        assert.equal(data.payment, 57);
+      } else if (type === 'itemfulfillment') {
+        assert.equal(data.item[0].quantity, 3);
+        assert.equal(data.items[0].custcol_lot, 'SYN-LOT');
+        assert.equal(data.totalText, '');
+      } else {
+        assert.equal(data.item[0].quantity, type === 'invoice' ? 2 : -2);
+        assert.equal(data.item[0].amount, type === 'invoice' ? 100 : -100);
+        assert.equal(data.items[0].custcol_lot, 'SYN-LOT');
+      }
+    });
+  }
+}
+
+for (const copyCount of [1, 2]) {
+  test(`reference request binding equals full standalone enrichment for ${copyCount} copies`, () => {
+    const h = countingGraph({ rich: true });
+    const labels = TWO_COPIES.slice(0, copyCount);
+    h.core.renderDocument('<#--\npld:reference-layout\n-->' + TPL_XML, 'invoice', '42', labels, {});
+    assert.equal(h.calls.loads, 1);
+    const records = h.render.calls.dataSources.filter(d => d.alias === 'record');
+    for (let index = 0; index < labels.length; index++) {
+      const label = labels[index];
+      const expected = h.reference.enrich(h.data.buildTransactionData('invoice', '42', label.th, label.en), '42');
+      assert.deepEqual(JSON.parse(JSON.stringify(records[index].data)), JSON.parse(JSON.stringify(expected)));
+    }
+    assert.equal(records[0].data.total, 92);
+    assert.equal(records[0].data.discounttotal, -15);
+    assert.equal(records[0].data.totals.customerPaid, '87.00');
+    assert.equal(records[0].data.item[0].amount, 100);
+  });
+}
+
+for (const [option, stage, message] of [['dataFailure', 'data', /data query failed/], ['referenceFailure', 'reference', /reference search failed/]]) {
+  test(`transaction failure identifies ${stage} phase`, () => {
+    const h = countingGraph({ [option]: true });
+    const tel = {};
+    assert.throws(() => h.core.renderDocument('<#--\npld:reference-layout\n-->' + TPL_XML, 'invoice', '42', TWO_COPIES, tel), message);
+    assert.equal(tel.stage, stage);
+    assert.ok(tel.performance.phases[stage].elapsedMs >= 0);
+    assert.equal(h.render.calls.created, 0);
+  });
+}

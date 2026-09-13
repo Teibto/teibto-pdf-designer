@@ -76,10 +76,72 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('app-shell reconnect lifecycle', () => {
+  it('deep-freezes fetched JSON before yielding and commits only after the task resumes', async () => {
+    const nextTask = deferred<void>();
+    const yieldSpy = vi.fn(() => nextTask.promise);
+    vi.stubGlobal('scheduler', { yield: yieldSpy });
+    const shell = document.createElement('pld-app-shell') as any;
+    document.body.appendChild(shell);
+    await settle(shell);
+    const data = { _recordType: 'invoice', items: [{ nested: { description: 'fresh' } }] };
+    mocks.autoLoadRecordIfAvailable.mockResolvedValue(data);
+    const load = shell._loadRecord();
+    await Promise.resolve();
+    expect(yieldSpy).toHaveBeenCalledOnce();
+    expect(Object.isFrozen(data.items[0].nested)).toBe(true);
+    expect(shell.store.state.jsonData).toBeNull();
+    expect(shell._recordLoadController).not.toBeNull();
+    nextTask.resolve();
+    await load;
+    expect(shell.store.state.jsonData).toEqual(data);
+    expect(shell._recordLoadController).toBeNull();
+  });
+
+  it.each(['local edit', 'document switch', 'disconnect', 'reload'])(
+    'does not commit a record superseded during the task yield by %s', async (action) => {
+      const nextTask = deferred<void>();
+      vi.stubGlobal('scheduler', { yield: () => nextTask.promise });
+      const shell = document.createElement('pld-app-shell') as any;
+      document.body.appendChild(shell);
+      await settle(shell);
+      mocks.autoLoadRecordIfAvailable.mockResolvedValueOnce({ _recordType: 'invoice', _internalId: 'stale', marker: 'stale' });
+      const load = shell._loadRecord();
+      await Promise.resolve();
+      const oldController = shell._recordLoadController;
+      let newerLoad: Promise<void> | undefined;
+      if (action === 'local edit') {
+        shell.store.dispatch((draft: any) => { draft.jsonData = { marker: 'local' }; });
+      } else if (action === 'document switch') {
+        shell.store.beginDocumentSession();
+      } else if (action === 'disconnect') {
+        shell.remove();
+      } else {
+        mocks.autoLoadRecordIfAvailable.mockResolvedValueOnce({ marker: 'new' });
+        newerLoad = shell._loadRecord();
+        await Promise.resolve();
+        expect(oldController.signal.aborted).toBe(true);
+        await load;
+        expect(shell._recordLoadController).not.toBe(oldController);
+        expect(shell._recordLoadController).not.toBeNull();
+      }
+      if (action === 'disconnect') {
+        expect(oldController.signal.aborted).toBe(true);
+        await load; // Abort settles even while scheduler.yield remains pending.
+      }
+      nextTask.resolve();
+      await load;
+      await newerLoad;
+      expect(shell.store.state.jsonData?.marker).not.toBe('stale');
+      if (action === 'reload') expect(shell.store.state.jsonData.marker).toBe('new');
+      expect(mocks.showToast).not.toHaveBeenCalledWith('Loaded invoice #stale', 'success');
+    },
+  );
+
   it('offers recovery after an XML edit deletes the entire source', async () => {
     const seed = new AppStore();
     mocks.getDraft.mockResolvedValue({
@@ -183,6 +245,43 @@ describe('app-shell reconnect lifecycle', () => {
     expect(shell.store.state.jsonData).toMatchObject({ marker: 'new' });
     expect(mocks.showToast).toHaveBeenCalledTimes(1);
     expect(mocks.showToast).toHaveBeenCalledWith('Loaded invoice #new', 'success');
+  });
+
+  it('shares auto-load and editor reload intent before either response commits', async () => {
+    const initial = deferred<Record<string, unknown> | null>();
+    const reload = deferred<Record<string, unknown> | null>();
+    mocks.isNetSuiteEnv.mockReturnValue(true);
+    mocks.autoLoadRecordIfAvailable.mockReturnValueOnce(initial.promise).mockReturnValueOnce(reload.promise);
+    const shell = document.createElement('pld-app-shell') as any;
+    document.body.appendChild(shell);
+    await settle(shell);
+    const editor = document.createElement('pld-json-editor') as any;
+    editor.store = shell.store;
+    shell.appendChild(editor);
+    editor._loadFromRecord();
+    expect(mocks.autoLoadRecordIfAvailable.mock.calls[0][0].aborted).toBe(true);
+    initial.resolve({ marker: 'stale' });
+    await settle(shell);
+    expect(shell.store.state.jsonData).toBeNull();
+    reload.resolve({ marker: 'reload' });
+    await settle(shell);
+    expect(shell.store.state.jsonData).toEqual({ marker: 'reload' });
+  });
+
+  it('aborts auto-load for an invalid editor draft and on disconnect', async () => {
+    mocks.isNetSuiteEnv.mockReturnValue(true);
+    mocks.autoLoadRecordIfAvailable.mockReturnValue(new Promise(() => {}));
+    const shell = document.createElement('pld-app-shell') as any;
+    document.body.appendChild(shell);
+    await settle(shell);
+    const editor = document.createElement('pld-json-editor') as any;
+    editor.store = shell.store;
+    shell.appendChild(editor);
+    editor._onInput({ target: { value: '{' } });
+    expect(mocks.autoLoadRecordIfAvailable.mock.calls[0][0].aborted).toBe(true);
+    editor._loadFromRecord();
+    shell.remove();
+    expect(mocks.autoLoadRecordIfAvailable.mock.calls[1][0].aborted).toBe(true);
   });
 
   it('does not let initial NetSuite auto-load overwrite a newer local data edit', async () => {

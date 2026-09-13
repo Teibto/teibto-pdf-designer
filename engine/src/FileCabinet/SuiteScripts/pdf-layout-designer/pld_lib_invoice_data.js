@@ -28,10 +28,6 @@
 define(['N/query', 'N/record', 'N/format', './pld_lib_company_config', './pld_lib_baht_text', './pld_lib_thai_wordbreak'],
 function (query, record, format, companyConfig, bahtText, wordbreak) {
 
-  function first(sql, params) {
-    var rows = query.runSuiteQL({ query: sql, params: params }).asMappedResults();
-    return rows.length ? rows[0] : {};
-  }
   function many(sql, params) {
     return query.runSuiteQL({ query: sql, params: params }).asMappedResults();
   }
@@ -230,7 +226,9 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
    * @param {string} [copyLabelTH] e.g. 'ต้นฉบับ' / 'สำเนา' (multi-copy); default original
    * @param {string} [copyLabelEN] e.g. 'Original' / 'Copy'
    */
-  function buildTransactionData(recType, recId, copyLabelTH, copyLabelEN) {
+  // Optional internal request is supplied only by the render core; standalone
+  // callers retain record authorization and forRender config validation below.
+  function buildTransactionData(recType, recId, copyLabelTH, copyLabelEN, request) {
     var id = Number(recId);
     var titles = DOC_TITLES[recType] || DOC_TITLES.invoice;
     // '-' negates GL-signed sales lines for display; '' keeps purchase lines as-is
@@ -242,16 +240,24 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var isPayment = !!APPLY_SOURCE[recType];
     // A delivery note's rows come from the `item` sublist, for the same reason (#176).
     var isSublistItems = !!SUBLIST_ITEMS[recType];
-    var rec = record.load({ type: recType, id: id });
+    // Internal request context is created by the render core after its record load.
+    var rec = request ? request.rec : record.load({ type: recType, id: id });
 
-    var hdr = first(
-      "SELECT tranid, TO_CHAR(trandate,'DD/MM/YYYY') AS trandate, " +
-      "  TO_CHAR(duedate,'DD/MM/YYYY') AS duedate, otherrefnum, " +
-      "  BUILTIN.DF(entity) AS customer_name, BUILTIN.DF(createdby) AS created_by, " +
-      "  (SELECT symbol FROM currency WHERE currency.id = transaction.currency) AS currency_code " +
-      "FROM transaction WHERE id = ?",
+    // Root the join in the transaction so invoices with no Thai-Loc summary
+    // still retain their header and body-total fallback. Prefix joined aliases
+    // to keep statutory totals distinct from transaction header fields.
+    var headerRows = many(
+      "SELECT t.tranid, TO_CHAR(t.trandate,'DD/MM/YYYY') AS trandate, " +
+      "  TO_CHAR(t.duedate,'DD/MM/YYYY') AS duedate, t.otherrefnum, " +
+      "  BUILTIN.DF(t.entity) AS customer_name, BUILTIN.DF(t.createdby) AS created_by, " +
+      "  (SELECT symbol FROM currency WHERE currency.id = t.currency) AS currency_code, " +
+      "  s.id AS summary_id, BUILTIN.DF(s.custrecord_sum_type) AS summary_type, " +
+      "  s.custrecord_sum_total AS summary_total, s.custrecord_sum_taxrate AS summary_taxrate " +
+      "FROM transaction t LEFT JOIN customrecord_thl_summarytotal s " +
+      "  ON s.custrecord_sum_parenttransaction = t.id WHERE t.id = ?",
       [id]
     );
+    var hdr = headerRows[0] || {};
 
     // ── Thai-Loc body fields (custbody_thl_*) ──
     var custTaxId  = bodyValue(rec, 'custbody_thl_entvatregistrationno');
@@ -261,12 +267,12 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var shipAddr   = bodyValue(rec, 'shipaddress') || '';
 
     // ── Statutory totals: customrecord_thl_summarytotal, one row per sum type ──
-    var sums = many(
-      "SELECT BUILTIN.DF(custrecord_sum_type) AS sumtype, custrecord_sum_total AS total, " +
-      "  custrecord_sum_taxrate AS taxrate FROM customrecord_thl_summarytotal " +
-      "WHERE custrecord_sum_parenttransaction = ?",
-      [id]
-    );
+    var sums = headerRows.filter(function (row) {
+      // A LEFT JOIN's synthetic null row is not a zero-valued summary record.
+      return row.summary_id != null && row.summary_id !== '';
+    }).map(function (row) {
+      return { sumtype: row.summary_type, total: row.summary_total, taxrate: row.summary_taxrate };
+    });
     var T = {}, taxRate = 0;
     sums.forEach(function (s) {
       T[s.sumtype] = (T[s.sumtype] || 0) + num(s.total);
@@ -527,7 +533,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // body field decides which customrecord_pld_config row companyConfig.load()
     // matches — empty/absent (non-OneWorld) falls back to the global config.
     var subsidiaryId = bodyValue(rec, 'subsidiary') || '';
-    var cfg = companyConfig.load(subsidiaryId, { forRender: true });
+    var cfg = request ? request.loadCompany(subsidiaryId) : companyConfig.load(subsidiaryId, { forRender: true });
 
     // Bordered key/value grids rendered as PLD tables (ShapeElement has no border,
     // so the doc-info and summary boxes are 2-column tables bound to these arrays).
@@ -728,7 +734,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
    * @param {string} [copyLabelTH] ป้ายชุดสำเนาของ pass นี้
    * @param {string} [copyLabelEN]
    */
-  function buildSampleData(recType, copyLabelTH, copyLabelEN) {
+  function buildSampleData(recType, copyLabelTH, copyLabelEN, request) {
     var type = isSupportedType(recType) ? String(recType) : 'invoice';
     var titles = DOC_TITLES[type];
     var showTotals = !NO_TOTALS[type];
@@ -786,7 +792,13 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     });
 
     var cfg = {};
-    try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
+    if (request) {
+      // Rendering requires validated fonts; standalone sample generation keeps
+      // its existing config-optional behavior for callers building fixtures.
+      cfg = request.loadCompany(undefined);
+    } else {
+      try { cfg = companyConfig.load(); } catch (e) { cfg = {}; }
+    }
 
     var sampleCompany = {
       name: cfg.name || 'บริษัท ตัวอย่าง จำกัด (สำนักงานใหญ่)',
