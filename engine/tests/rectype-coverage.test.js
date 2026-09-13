@@ -102,7 +102,9 @@ test('master templates bind the copy label through ${copy.*}', () => {
   for (const file of masters) {
     const src = read(path.join(masterDir, file));
     // ?xml wraps every data binding since #184 — ${(copy.label!"…")?xml}
-    assert.match(src, /\$\{\(copy\.label!/, `${file} must print the copy label via \${copy.label}`);
+    const combined = /\$\{\(copy\.label!/.test(src);
+    const bilingual = /\$\{\(copy\.th!/.test(src) && /\$\{\(copy\.en!/.test(src);
+    assert.ok(combined || bilingual, `${file} must print copy.label or both copy.th and copy.en`);
     assert.ok(src.indexOf('record.custbody_doc_copy_label') === -1,
       `${file} still reads the copy label off the record — that only ever worked on curated types`);
   }

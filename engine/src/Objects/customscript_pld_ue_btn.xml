@@ -1,0 +1,112 @@
+<!-- @author Wichit Wongta -->
+<!-- @since 2026-09-12 -->
+<usereventscript scriptid="customscript_pld_ue_btn">
+  <name>PLD - Transaction Buttons</name>
+  <isinactive>F</isinactive>
+  <notifyadmins>F</notifyadmins>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/pdf-layout-designer/pld_ue_button.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>INVOICE</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_salesorder">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>SALESORDER</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_purchaseorder">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>PURCHASEORDER</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_estimate">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>ESTIMATE</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_vendorbill">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>VENDORBILL</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_cashsale">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>CASHSALE</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_itemfulfillment">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>ITEMFULFILLMENT</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_creditmemo">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>CREDITMEMO</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_returnauth">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>RETURNAUTHORIZATION</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_customerpayment">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>CUSTOMERPAYMENT</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
+  </scriptdeployments>
+</usereventscript>

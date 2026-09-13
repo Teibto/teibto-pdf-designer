@@ -160,15 +160,21 @@ export const READ_ONLY_REASON =
 /**
  * Whether this account can render Thai text at all (#156).
  *
- * The designer Suitelet fills `fontRegularUrl` from its script parameter and falls
- * back to the company-config record, so an empty value means NEITHER is set. Every
- * template printed on that account then comes out with the Thai glyphs dropped and
- * BFO reports nothing — worth warning about at save/export time instead of letting
- * the user discover it from a PDF with missing text.
+ * The designer Suitelet fills both URLs from its script parameters and falls back
+ * to the company-config record. The render path requires both weights and resolves
+ * only File Cabinet media URLs, so the preflight must use that same minimum contract.
+ * Otherwise regular text can appear healthy while bold Thai glyphs disappear (or
+ * the server rejects the render) only after the user saves the template.
  */
 export function hasThaiFontConfigured(): boolean {
   const ctx = getNsContext();
-  return !!(ctx && ctx.fontRegularUrl);
+  if (!ctx) return false;
+
+  const isFileCabinetUrl = (value: string | null | undefined): boolean =>
+    typeof value === 'string'
+    && /^(?:https:\/\/[^/]+)?\/core\/media\/media\.nl\?/i.test(value.trim());
+
+  return isFileCabinetUrl(ctx.fontRegularUrl) && isFileCabinetUrl(ctx.fontBoldUrl);
 }
 
 function getDesignerUrl(): string {
@@ -213,16 +219,18 @@ async function suiteletFetch(
 
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  // A failed response does not prove a mutation failed on the server. Retrying
+  // save/delete/rollback can create duplicate records or history versions.
+  const maxRetries = method === 'GET' ? MAX_RETRIES : 0;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
       const response = await fetch(url.toString(), {
         ...options,
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
 
       if (response.ok) {
         // NetSuite returns HTTP 200 + an HTML login page when the session has
@@ -260,10 +268,12 @@ async function suiteletFetch(
       } else {
         throw err; // Non-retryable error (e.g., our own thrown error)
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     // Exponential backoff before retry
-    if (attempt < MAX_RETRIES) {
+    if (attempt < maxRetries) {
       const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
       console.warn(`[NS API] Retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms: ${lastError?.message}`);
       await new Promise((r) => setTimeout(r, delay));
@@ -315,26 +325,26 @@ export async function listNsTemplates(
 export async function saveNsTemplate(opts: {
   id?: string;
   name: string;
-  data: string;    // Designer JSON state
+  data?: string;   // Designer JSON state; omitted for canonical XML-only records
   xml: string;     // BFO XML output
   rectype?: string;
   isDefault?: boolean;
-}): Promise<{ id: string; success: boolean; version?: number }> {
+}): Promise<{ id: string; success: boolean; version?: number; warning?: string }> {
   const baseUrl = getRendererUrl() || getDesignerUrl();
   const result = await suiteletFetch(baseUrl, 'save', {}, 'POST', {
     id: opts.id || null,
     name: opts.name,
-    data: opts.data,
     xml: opts.xml,
-    rectype: opts.rectype || '',
-    isDefault: opts.isDefault || false,
+    ...(opts.data !== undefined ? { data: opts.data } : {}),
+    ...(opts.rectype !== undefined ? { rectype: opts.rectype } : {}),
+    ...(opts.isDefault !== undefined ? { isDefault: opts.isDefault } : {}),
   });
-  return unwrap<{ id: string; success: boolean; version?: number }>(result);
+  return unwrap<{ id: string; success: boolean; version?: number; warning?: string }>(result);
 }
 
 export async function getNsTemplate(
   tplId: string,
-): Promise<{ id: string; name: string; data: string; xml: string; rectype: string }> {
+): Promise<{ id: string; name: string; data: string; xml: string; rectype: string; isDefault: boolean }> {
   const baseUrl = getRendererUrl() || getDesignerUrl();
   const result = await suiteletFetch(baseUrl, 'get', { tplid: tplId });
   return unwrap(result);
@@ -396,6 +406,7 @@ export async function duplicateNsTemplate(
     data: src.data,
     xml: src.xml,
     rectype: src.rectype || undefined,
+    isDefault: false,
   });
   return { id: result.id, name };
 }
@@ -521,7 +532,7 @@ export async function renderLivePreview(opts: {
     return await response.blob();
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`Preview render timeout after ${DEFAULT_TIMEOUT_MS}ms`);
+      throw new Error(`Preview render timeout after ${DEFAULT_TIMEOUT_MS}ms`, { cause: err });
     }
     throw err;
   } finally {

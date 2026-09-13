@@ -9,7 +9,7 @@
  * Subsidiary scoping (OneWorld, issue #144): load(subsidiaryId) เลือก config
  * ตามลำดับ (1) active record ที่ custrecord_pld_cfg_subsidiary == subsidiaryId
  * (2) active record ที่ subsidiary ว่าง (global fallback) (3) active record
- * แรกสุด (legacy/single-subsidiary — คงพฤติกรรมเดิมไว้)
+ * แรกสุด เฉพาะเมื่อไม่มี subsidiary context (legacy/single-subsidiary)
  *
  * @author Wichit Wongta
  * @since 2026-07-17
@@ -67,36 +67,51 @@ define(['N/search', 'N/file', 'N/log'], function (search, file, log) {
   function fileUrlById(fileId) {
     if (Object.prototype.hasOwnProperty.call(urlCache, fileId)) return urlCache[fileId];
     var url = file.load({ id: fileId }).url;
+    if (typeof url !== 'string' || !url.trim()) throw new Error('File has no usable URL');
     urlCache[fileId] = url;
     return url;
   }
 
-  function resolveFileUrl(raw, alias) {
-    var value = String(raw == null ? '' : raw).trim();
-    if (!value) return '';
+  function configError(code, message) {
+    var error = new Error(code + ': ' + message);
+    error.name = code;
+    return error;
+  }
 
-    var fileId = /^\d+$/.test(value) ? value : (value.match(URL_FILE_ID) || [])[1];
-    if (!fileId) return value;
+  function resolveFileUrl(raw, alias, forRender) {
+    var value = String(raw == null ? '' : raw).trim();
+    var required = forRender && (alias === 'fontRegular' || alias === 'fontBold');
+    if (!value) {
+      if (required) throw configError('PLD_FONT_MISSING', 'ตั้งค่าฟอนต์ไทย ' + alias + ' ใน Company Config ก่อนพิมพ์ / Configure the required Thai font in Company Config.');
+      return '';
+    }
+
+    var isCabinetUrl = /^(?:https:\/\/[^/]+)?\/core\/media\/media\.nl\?/i.test(value);
+    var fileId = /^\d+$/.test(value) ? value : (isCabinetUrl ? (value.match(URL_FILE_ID) || [])[1] : null);
+    if (!fileId) {
+      if (required) throw configError('PLD_FONT_UNRESOLVED', 'ฟอนต์ไทย ' + alias + ' ต้องใช้ File Cabinet file ID หรือ URL / Configure a File Cabinet font ID or URL.');
+      return value;
+    }
 
     try {
       return fileUrlById(fileId);
     } catch (e) {
-      // ฟอนต์/โลโก้ต้องไม่ทำให้เอกสารพิมพ์ไม่ออก แต่ห้ามเงียบ (R4) — log ให้เห็นว่าทำไม
-      // PDF อาจไม่มีตัวอักษรไทยหรือไม่มีโลโก้ แล้วใช้ค่าที่ตั้งไว้ต่อไปตามเดิม
+      if (required) throw configError('PLD_FONT_UNRESOLVED', 'โหลดฟอนต์ไทย ' + alias + ' ไม่ได้ (file ID ' + fileId + ') / Check the font file and its permissions in Company Config.');
       log.audit({
         title: 'PLD config file url unresolved',
         details: alias + ': file id ' + fileId + ' โหลดไม่ได้ (' + ((e && e.message) || e) +
-          ') — ใช้ค่าที่ตั้งไว้ตามเดิม; ถ้าเป็น URL เก่าที่ token หมดอายุ ฟอนต์/โลโก้จะไม่ขึ้นใน PDF (#167)'
+          ') — ตรวจสอบไฟล์ใน Company Config'
       });
-      return value;
+      // Setup can inspect the original value; an optional broken logo is omitted on render.
+      return forRender ? '' : value;
     }
   }
 
-  function toInfo(resultRow) {
+  function toInfo(resultRow, forRender) {
     var info = {};
     Object.keys(CFG_FIELD_MAP).forEach(function (alias) {
       var raw = resultRow.getValue(CFG_FIELD_MAP[alias]) || '';
-      info[alias] = FILE_URL_ALIASES[alias] ? resolveFileUrl(raw, alias) : raw;
+      info[alias] = FILE_URL_ALIASES[alias] ? resolveFileUrl(raw, alias, forRender) : raw;
     });
     return info;
   }
@@ -107,16 +122,20 @@ define(['N/search', 'N/file', 'N/log'], function (search, file, log) {
    * @param {string|number} [subsidiaryId] - subsidiary internal id ของ transaction
    *   ที่กำลัง render; ไม่ระบุ (undefined) = ไม่มี record context (เช่น sample/preview)
    *   → ใช้ global fallback แล้วตกไปที่ record แรกสุด
-   * ไม่มี config ที่ match เลย → คืนค่าว่างทุก key (binding null-safe ทำให้ render ต่อได้)
-   * พร้อม audit log บอกสาเหตุ — ไม่ silent
+   * @param {Object} [options] - { forRender: true } enforces config and Thai fonts
+   *   even in single-subsidiary accounts without a subsidiary field. A supplied
+   *   subsidiary always enforces these requirements. load(undefined) is setup inspection.
    */
-  function load(subsidiaryId) {
+  function load(subsidiaryId, options) {
+    var hasSubsidiary = subsidiaryId !== undefined && subsidiaryId !== null && subsidiaryId !== '';
+    var forRender = hasSubsidiary || !!(options && options.forRender);
     var info = {};
     Object.keys(CFG_FIELD_MAP).forEach(function (alias) { info[alias] = ''; });
 
     var results = loadAllActive();
 
     if (results.length === 0) {
+      if (forRender) throw configError('PLD_COMPANY_CONFIG_MISSING', 'ไม่พบ Company Config ที่ใช้งานอยู่ / Create an active Company Config before printing.');
       log.audit({
         title: 'PLD company config missing',
         details: 'No active ' + CFG_RECORD_TYPE + ' record — all ${company.*} values render empty. Create one per DEPLOYMENT.md §Company Config.'
@@ -126,7 +145,7 @@ define(['N/search', 'N/file', 'N/log'], function (search, file, log) {
 
     var matched = null;
 
-    if (subsidiaryId !== undefined && subsidiaryId !== null && subsidiaryId !== '') {
+    if (hasSubsidiary) {
       for (var i = 0; i < results.length; i++) {
         var rowSubsidiary = results[i].getValue(SUBSIDIARY_FIELD);
         if (rowSubsidiary && String(rowSubsidiary) === String(subsidiaryId)) {
@@ -147,10 +166,11 @@ define(['N/search', 'N/file', 'N/log'], function (search, file, log) {
     }
 
     if (!matched) {
+      if (hasSubsidiary) throw configError('PLD_COMPANY_CONFIG_MISSING', 'ไม่พบ Company Config สำหรับ subsidiary ' + subsidiaryId + ' / Configure this subsidiary or an explicit global default before printing.');
       matched = results[0];
     }
 
-    return toInfo(matched);
+    return toInfo(matched, forRender);
   }
 
   return { load: load };

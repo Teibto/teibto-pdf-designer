@@ -76,7 +76,7 @@ scripts/deploy.sh --dryrun           # preview ก่อน ไม่ deploy จ
 scripts/deploy.sh acc1-sb1 acc2-sb1  # เจาะจง authid (แทน targets file)
 ```
 
-`deploy.sh` วนทีละ account: stamp version → เขียน `defaultAuthId` ใหม่ → `suitecloud project:deploy`
+`deploy.sh` build และตรวจ manifest ก่อน stage/stamp แล้ววนทีละ account: เขียน `defaultAuthId` ใหม่ → `suitecloud project:deploy`
 → สรุปผล PASS/FAIL ต่อ account (account ที่พังไม่ทำให้ตัวอื่นหยุด) → คืน `project.json` เป็นค่าเดิมเสมอ
 
 > `project:deploy` ไม่มี flag `--authid` — มันอ่าน `defaultAuthId` จาก `project.json` เท่านั้น
@@ -87,6 +87,19 @@ scripts/deploy.sh acc1-sb1 acc2-sb1  # เจาะจง authid (แทน targ
 `engine/VERSION` เป็น source of truth. ทุกครั้งที่ `deploy.sh` รัน มัน stamp
 `version + git short sha (+dirty ถ้า working tree ไม่ clean) + UTC` ลงไฟล์
 `pld_version.txt` ใน File Cabinet (ไฟล์นี้เป็น build artifact — gitignore ไว้ generate ใหม่ทุก deploy)
+
+Candidate #199 adds `bundleBuilt`, `bundleSha256` and `enginePayload` (sorted file hashes and
+aggregate hash for engine JavaScript, Objects XML, VERSION, SDF manifest and SuiteCloud config).
+The engine hash excludes fonts, account metadata and generated deploy scope/stamp; SPA assets
+have their own manifest digest. `+dirty` includes staged and untracked changes.
+
+`npm run build:netsuite` writes `designer/dist-netsuite/pld-build-manifest.json`. Deployment
+verifies source/config/lockfile/environment and every asset before staging and again before
+stamping. `--no-build` now rejects missing, stale or altered bundles; rebuild to recover.
+Environment values are hashed, not stored as plaintext. This is consistency evidence, not a
+signature or proof that an account has the same files. Compare the deployed stamp and actual
+assets during sandbox acceptance. `--dryrun` still invokes SuiteCloud against the named account;
+it is not an offline test. Project metadata and deploy scope are restored byte-for-byte on exit.
 
 ตรวจ version ที่ deploy ไปบน account:
 ```
@@ -210,10 +223,60 @@ SuiteScripts/
 
 ## Company Config (customrecord_pld_config) — จุดตั้งค่า per-account จุดเดียว
 
+### Permission migration for #199
+
+Drain existing batch tasks before deploying schema v5. Old jobs without authenticated identity are
+rejected with resubmission guidance; do not mix old/new worker files while tasks run. Queue jobs
+now retain the server-resolved XML and copies at enqueue. No edits to the template or default
+after submission change that job. Per-job private folders and authenticated snapshots are implemented,
+but secret restrictions, native historical access and role-revocation behavior require sandbox evidence under
+`docs/PRODUCTION-READINESS.md`.
+Limits are 500 documents per job, 1,000,000 XML characters per snapshot, 8 MiB serialized job,
+8 MiB framed XML per merge chunk (at most 25 documents), and 20 render copies per document across immediate/queued/sample
+paths. These limits do not establish live capacity; test governance/latency before rollout.
+
+If save reports that content was saved but default reconciliation failed, keep the returned
+template ID/version and repair permissions/default selection before printing. Multiple active
+defaults for the same record type now cause an explicit error; the renderer does not pick one
+arbitrarily. The new content and version remain available even if changing another record fails.
+
+The candidate emits empty `runasrole` on packaged deployments and sets Suitelets `isonline=F`.
+For user-facing scripts, verify that upgrading clears the old Administrator override and preserves
+the caller's record/employee/subsidiary restrictions. Do not restore elevation for missing permissions.
+For Map/Reduce, role inheritance comes from **programmatic submission by the caller**, not from
+interpreting an empty XML field as a selectable Current Role deployment setting. Oracle documents
+the MR deployment UI's Execute As Role as fixed Administrator, while script-submitted executions
+inherit their caller. UI/scheduled execution is not an approved batch path.
+[MR deployment fields](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1509578980.html),
+[script submission](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
+Empty MR `runasrole` is present in Oracle's
+[SDF example](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157185630390.html).
+Local XML tests verify packaging only; SDF readback and restricted-role executions remain mandatory.
+
+Prepare a minimum-permission role matrix per account: transaction View for required document
+types; View for template/company config and font files; editor roles additionally need template
+and version write permissions plus the configured editor allowlist. Restrict config changes to
+administrators. Batch submitters need SuiteScript and SuiteScript Scheduling, and appropriate
+private batch folder permissions; test direct file access separately from Suitelet access.
+
+On-demand Map/Reduce runs with the calling script's identity and permissions according to
+[Oracle's submission documentation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
+Manual UI submission runs as System with administrator permissions, so production jobs must be
+submitted through the authorized batch flow. Required scheduling permissions are documented by
+[MapReduceScriptTask.submit](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_453639770507.html).
+
+Before sign-off, read back all deployment settings and test two restricted users in different
+subsidiaries: render, preview-live, load-record, list/search, batch queue and file download. A
+known forbidden record ID must remain forbidden on every route. Test template read-only versus
+editor roles and administrator setup. File ownership/isolation remains a separate release blocker;
+clearing role elevation does not establish per-requester batch privacy.
+
 ค่าที่ template กลางอ้างผ่าน `${company.*}` ทั้งหมดมาจาก custom record **PDF Layout Config**
 (SDF deploy ให้อัตโนมัติ) — สร้าง 1 record ต่อ account แล้ว template ทุกใบใช้ได้ทันที
-โดยไม่ต้องแก้ template XML (#9) · Suitelet ใช้ record แรกที่ active; ถ้าไม่มี render ยังทำงาน
-(binding null-safe) แต่ค่า company ว่างทั้งหมด และมี audit log บอกไว้
+โดยไม่ต้องแก้ template XML (#9). เมื่อพิมพ์ transaction ระบบเลือก config ของ subsidiary นั้น
+หรือ global config ที่เว้น subsidiary ว่างเท่านั้น; ไม่ใช้ข้อมูลของ subsidiary อื่นแทน.
+ไม่มี config หรือ File Cabinet font Regular/Bold ที่โหลดได้จะหยุดพร้อม error และวิธีแก้ (#199).
+หน้า setup ที่ไม่มี transaction context ยังเปิดตรวจค่าที่ตั้งไว้ได้.
 
 | Field | alias ใน template | หมายเหตุ |
 |-------|-------------------|----------|
@@ -251,7 +314,7 @@ SuiteScripts/
 
 ## Template Governance — ใครแก้เทมเพลตได้ (#189)
 
-Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Administrator` เพราะ **การพิมพ์** ต้องอ่าน transaction / ฟอนต์ / config ข้าม subsidiary ได้ ผลข้างเคียงคือสิทธิ์ระดับ record ของ NetSuite ไม่ได้กันการเขียนเทมเพลตไว้เลย engine จึงตรวจสิทธิ์เอง ก่อนทุก action ที่เปลี่ยนเทมเพลต (`save` / `delete` / `rollback`).
+รุ่นเก่าใช้ `All Roles` + `Execute as Administrator`; candidate นี้ต้องยกเลิกการยกระดับของ Suitelet และพิสูจน์สิทธิ์ผู้เรียกตามขั้นตอนด้านบน การพิมพ์ต้องเคารพสิทธิ์ record/subsidiary ของผู้ใช้ ส่วน action เปลี่ยนเทมเพลต (`save` / `delete` / `rollback`) ตรวจ editor allowlist เพิ่มจากสิทธิ์ NetSuite.
 
 **ตั้งค่า:** ช่อง **Template Editor Roles** (`custrecord_pld_cfg_editor_roles`) บน config record — ใส่ internal id ของ role คั่นด้วย comma เช่น `1017,1042` (ดู id ที่ Setup > Users/Roles > Manage Roles คอลัมน์ Internal ID)
 
@@ -325,7 +388,7 @@ Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Admini
 | Name | PLD - Batch Print (Map/Reduce) |
 | ID | `customscript_pld_batch_mr` |
 | Script File | `pld_mr_batch_print.js` |
-| Parameter | `custscript_pld_mr_job` — File Cabinet id ของ job spec (หน้าจอเขียนให้เอง) |
+| Parameter | `custscript_pld_mr_job` — ID ของ `customrecord_pld_batch_job` (schema v5; หน้าจอเขียนให้เอง) |
 
 **Deploy:**
 
@@ -335,9 +398,155 @@ Suitelet ทั้งชุด deploy แบบ `All Roles` + `Execute as Admini
 | ID | `customdeploy_pld_batch_mr` |
 | Status | Not Scheduled (สั่งงานผ่าน `N/task` จากหน้าจอเท่านั้น) |
 
-ไม่ต้องตั้งค่าอะไรต่อ account: หน้าจอสร้างโฟลเดอร์ `pld-batch` ใต้โฟลเดอร์ของ engine เองในครั้งแรกที่ใช้
-(หาจากไฟล์ `pld_version.txt` ที่ `deploy.sh` stamp ไว้) · ไฟล์รวมเก็บที่โฟลเดอร์นั้น และดูย้อนหลังได้จาก
-หน้าจอ batch print → `?action=files`
+Candidate #199 requires `customrecord_pld_batch_job` and `customrecord_pld_batch_artifact`. Their `USEPERMISSIONLIST` starts with no
+account-specific grants. Configure selected caller roles with EDIT and VIEWANDEDIT restrictions
+on the record/role permission lists, plus the minimum File Cabinet and scheduling permissions.
+Native VIEWANDEDIT includes creator/subordinates; application checks also require exact job
+owner, requester and role. UI access and UI owner changes are disabled. Custom fields retain
+native write access needed by the worker; do not assume this makes snapshots tamper-proof.
+
+Each request creates a private `pld-job-<job ID>` folder under the engine folder found via
+`pld_version.txt`. Owner, parent and `isprivate` are read back before sensitive files are written.
+The file list now lists the caller's jobs. Status/download routes accept `job=<ID>` and recheck
+ownership; download requires a committed result in that private folder, with `isOnline=false`.
+Notifications link to authenticated Suitelet routes, not raw File Cabinet URLs.
+
+Drain existing tasks before deploying schema v5; the parameter requires an authenticated job record ID.
+Test two users, supervisors, subsidiaries, a weaker role of the same user, direct Cabinet/native
+API access and Company-Wide Usage before enabling callers. Folder owners/admins retain native
+access; same-user role revocation and snapshot integrity are not established by route checks.
+Failed merge/commit retains private inputs for recovery. Bounded orphan adoption, native deployment
+selection and chunked outputs are implemented locally. Age-based retention and native account QA
+remain pending; this remains a sandbox candidate, not a validated production queue.
+
+#### Required batch signing secret (schema v5)
+
+Before enabling queue access, an authorized account administrator must provision the account-local
+API secret `custsecret_pld_batch_v1` with a new independent high-entropy value. No value belongs in
+source control, script parameters, logs or deployment artifacts. Configure approved employees and
+restrict script use to `customscript_pld_batch`, `customscript_pld_batch_mr` and
+`customscript_pld_batch_merge`; do not allow all
+scripts. Protect those scripts and their libraries from caller edits. Keep management access with
+trusted administrators. Restrict domains for crypto-only use according to Oracle's setup guidance.
+[Secret access](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_160337298977.html),
+[Secret creation](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_160216498405.html).
+
+The new `custrecord_pld_job_auth` and `custrecord_pld_job_resultseal` fields hold authenticated
+envelopes, not secret values. Job writes use optimistic record saves and bounded conflict retries.
+Snapshots, part XML and result metadata are authenticated against account/environment and domain;
+downloads verify PDF bytes and stream an unsaved copy of the verified contents. The final PDF must
+fit the 10 MiB authenticated read limit per chunk; larger individual output fails explicitly.
+
+V4 jobs and earlier outputs do not have the schema v5 ledger/state contract. Preserve
+their private artifacts under the approved retention policy and finish/drain them with the prior
+deployment before migration; never add an unsigned fallback or sign arbitrary old native fields.
+An unsigned inert row can remain if initial secret access fails. Operators must reconcile such
+rows; the current list fails closed on invalid records. Validate the new deployment with synthetic
+jobs before granting callers access. Missing/denied secrets display an integrity error.
+
+Test unauthorized scripts/employees, swapped account/role/job identity, altered XML/part/PDF bytes,
+and concurrent status/task-ID writes. Retain the prior deployment for rollback while draining the
+matching schema. Signing detects forgery but does not revoke native owner access or stop replay of
+old valid signed state; exactly-once publication and historical-access policy remain release gates.
+
+#### Merge deployment and recovery (schema v5)
+
+Deploy `pld_mr_batch_merge.js` as `customscript_pld_batch_merge` with
+`customdeploy_pld_batch_merge` and `customdeploy_pld_batch_merge_2`, Not Scheduled, submitted
+programmatically with the caller's role. Parameter
+`custscript_pld_merge_job` contains the authenticated job record ID. Render workers publish PART
+records before MR output; merge reduce publishes one CHUNK record per bounded invocation.
+Exact `(job, snapshot digest, kind, ordinal)` external IDs provide logical uniqueness, which must
+be verified under concurrent native saves in sandbox. No unsigned intermediate ledger row is used.
+
+Workers now reserve authenticated WRITING rows before saving PART/CHUNK files. Retried keys search
+only their private folder and exact full-hash filename, verify at most three candidate files, and
+commit the same row with a revision-bound token. Overflow or corrupt/unreadable candidates stop
+visibly. Signed CHUNK reservations also bind the current plan. Existing committed rows remain
+readable, but older workers reject WRITING rows and hashed PART names: drain tasks before this
+rollout or rollback. Do not downgrade while new reservations remain recoverable. No new SDF field
+is required; the existing state/payload fields carry the reservation. Unreserved old orphan files
+are not adopted. Validate native file search visibility, file types, save interruption, optimistic
+conflicts, both worker stages and restricted-role governance with synthetic data in sandbox.
+
+The signed plan accounts for every selected sequence, including failed documents. Finalization
+checks ledger metadata and publishes one signed ordered manifest; each download separately
+rechecks the actual PDF bytes. Tests do not prove that unchanged File Cabinet content is available
+at publication time. A modified/deleted result fails guarded download and needs operator review.
+
+The caller can POST `action=recover&job=<ID>` only for MERGE_FAILED jobs with a stored merge task
+that `task.checkStatus` reports COMPLETE or FAILED. An optimistic claim prevents concurrent
+requests from both submitting. The old task ID is cleared before submission. Missing/unknown
+submission outcomes remain MERGE_SUBMIT_UNKNOWN for operator reconciliation; timestamps never
+authorize a blind resubmit. [Task status API](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_4345805891.html).
+
+Worker summarize phases retain inputs. The status page offers an explicit owner-triggered cleanup
+of committed XML parts already referenced by published PDFs. Both worker task IDs must be known
+and terminal. Signed POST continuations examine at most three sequence positions, reserve 250 units,
+and stop cooperatively after 20 seconds. Each affected PDF and each deletable part is verified before
+deletion; snapshot, ledger, unpublished inputs, orphan files and PDFs are retained. Missing files are
+reported as unavailable; permission/integrity failures stop the sweep. Verify File Cabinet search,
+PLAINTEXT metadata, delete permission and concurrent cleanup under the intended caller role in
+sandbox. [N/file deletion and governance](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_157072844224.html)
+is part of this budget; native check/delete is not atomic. No scheduled cleanup or retention age is
+enabled by this change.
+
+Pre-plan render recovery is available only for FAILED/DONE jobs with a known render task and no
+plan, output or merge task. Both render and merge recovery require a signed action token from the
+current status page. The caller must retain the original role; render recovery verifies snapshot
+identity/digest, checks the old task is terminal and atomically clears its identity before submitting.
+Unknown outcomes remain RENDER_SUBMIT_UNKNOWN and require operator reconciliation. Never fill task
+IDs by editing native fields: authenticated job state must not be bypassed. Verify concurrent claims,
+worker reuse, expired/unavailable task status and accepted-task metadata failures in sandbox.
+
+Initial queue submission also treats a thrown or missing task-ID response as uncertain once
+`submit()` was called. It retains the private snapshot and exposes the job/error reference; a
+guarded RENDER_SUBMIT_UNKNOWN marker cannot overwrite a worker that already advanced. Only
+preparation failures before the call may mark the job failed and remove its snapshot. Unknown
+submissions have no automatic retry.
+
+#### Native deployment pool (schema v5)
+
+The package retains the original render/merge deployment IDs and adds `customdeploy_pld_batch_mr_2`
+and `customdeploy_pld_batch_merge_2`. All four use Not Scheduled, concurrency 1, buffer size 1 and
+Audit logs. Submitters specify only the fixed stage script and job parameter. NetSuite selects an
+available deployed instance for that script; account-added eligible deployments participate too.
+Inventory them before rollout and verify script parameters/settings and caller-role inheritance.
+Do not use UI/scheduled execution. Pool size is not a processor or throughput guarantee.
+[Native selection](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_1508887826.html).
+
+Only the exact native `FAILED_TO_SUBMIT_JOB_REQUEST_1` name/code records definite nonacceptance.
+A guarded RENDER_WAITING or MERGE_WAITING state permits a current signed manual retry with the
+same job and snapshot/plan. Repeated rejection keeps the work deferred; other exceptions and empty
+task IDs stay unknown without automatic retry. Do not classify rejection by translated message text.
+[Submit error contract](https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/section_453639770507.html).
+Test two occupied slots, a deferred third job, release of one slot, explicit retry, mixed restricted
+users/roles and unrelated account workloads. Before rolling back to pinned deployment code, stop
+new submissions, finish/reconcile jobs using both secondary slots and disable the secondary
+deployments; do not remove an active deployment or its inputs.
+
+Age-based retention and
+pool saturation/capacity QA remain pending. Size limits are safety bounds; measure actual BFO usage, output
+size and Thai layout before setting release capacity.
+
+#### Linked retries and reserved creation
+
+`action=retry_failed` requires a source-bound signed POST and creates one child for the original
+failed sequence set. Original jobs/PDFs remain unchanged. Child JSON retains original XML/copies
+and lineage, while transaction data is read at the new render time. Repeated POSTs find the same
+child. Existing failed-worker recovery and WAITING/UNKNOWN handling still apply to that child.
+
+Drain older workers before this update: normal job seals now bind native `externalid`; new
+`job-init` initialization seals and `retry` action tokens require the updated libraries. Older
+empty-key job seals remain readable only when the actual external ID is empty. No new SDF field
+or script deployment is added. Do not roll back while initialization/provisioning rows or new
+normal seals require the updated reader. Preserve reservations, private folders and snapshots.
+
+Validate native external-ID uniqueness and search visibility, concurrent creation/promotion,
+private folder-name ambiguity, lost folder/snapshot acknowledgements, duplicate POSTs and both
+worker stages under restricted roles. A crash between the submission claim and external submit
+remains an operator reconciliation case; do not clear its key or resubmit based on elapsed time.
+Local tests do not establish native uniqueness, governance limits or caller identity.
 
 ---
 

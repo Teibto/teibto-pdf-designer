@@ -41,6 +41,12 @@ export interface ClipboardEntry {
 }
 
 export interface AppState {
+  /** Editing surface for the current document. XML mode preserves canonical
+   * BFO/FreeMarker source without attempting a lossy reverse conversion. */
+  editorMode: 'visual' | 'xml';
+  /** Canonical source used verbatim when editorMode is `xml`. */
+  rawXml: string;
+
   // ─── Canvas ───
   elements: CanvasElement[];
   /** Band-mode layout (#13/#47). Regenerated from `elements` on band-mode entry;
@@ -72,6 +78,7 @@ export interface AppState {
     id: string | null;
     name: string;
     isDirty: boolean;
+    nsMetadata?: { rectype: string; isDefault: boolean };
   };
 
   // ─── UI State ───

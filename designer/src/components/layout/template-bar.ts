@@ -17,81 +17,106 @@ export class PldTemplateBar extends LitElement {
 
   @state() private name = 'Untitled Template';
   @state() private isDirty = false;
+  @state() private templateId: string | null = null;
+
+  private readonly _onStateChanged = (event: Event) => {
+    const state = (event as StateChangedEvent).state;
+    this.name = state.template.name;
+    this.isDirty = state.template.isDirty;
+    this.templateId = state.template.id;
+  };
 
   static styles = css`
     :host {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      background: var(--color-bg-card);
-      border-bottom: 1px solid var(--color-border);
+      gap: var(--s-2);
+      min-height: 40px;
+      padding: 0 var(--s-4);
+      background: var(--c-surface-2);
+      border-bottom: 1px solid var(--c-border);
+      color: var(--c-text);
     }
 
     .label {
-      font-size: 10px;
-      color: var(--color-text-muted);
+      font-size: var(--t-xs);
+      color: var(--c-text-muted);
+      white-space: nowrap;
     }
 
     input {
       flex: 1;
+      min-width: 80px;
+      height: var(--btn-h);
       background: transparent;
       border: 1px solid transparent;
-      color: var(--color-text);
-      font-size: 13px;
-      font-weight: 500;
-      padding: 4px 8px;
-      border-radius: var(--radius-sm);
+      color: var(--c-text);
+      font-size: var(--t-sm);
+      font-weight: var(--w-semibold);
+      padding: 0 var(--s-2);
+      border-radius: var(--r-md);
       outline: none;
       font-family: inherit;
     }
 
     input:hover {
-      border-color: var(--color-border);
+      border-color: var(--c-border-control);
     }
 
     input:focus {
-      border-color: var(--color-accent);
-      background: var(--color-bg-deep);
+      border-color: var(--c-brand);
+      background: var(--c-surface);
+      box-shadow: var(--focus-ring);
     }
 
     .badge {
-      font-size: 10px;
-      padding: 2px 8px;
-      background: var(--color-bg-panel);
-      border: 1px solid var(--color-border);
-      border-radius: 4px;
-      color: var(--color-text-dim);
-      font-family: var(--font-mono);
+      font-size: var(--t-xs);
+      padding: var(--s-1) var(--s-2);
+      background: var(--c-surface);
+      border: 1px solid var(--c-border);
+      border-radius: var(--r-pill);
+      color: var(--c-text-subtle);
     }
 
     .badge.dirty {
-      color: var(--color-accent3);
-      border-color: var(--color-accent3);
-      background: rgba(245, 158, 66, 0.08);
+      color: var(--c-warning);
+      border-color: var(--c-warning);
+      background: var(--c-warning-soft);
     }
-  `;
+
+    @media (max-width: 520px) {
+      :host { padding-inline: var(--s-2); }
+      .label { display: none; }
+    }
+
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--c-text); outline-offset: 2px; }
+`;
 
   connectedCallback() {
     super.connectedCallback();
-    this.store.addEventListener('state-changed', (e: Event) => {
-      const s = (e as StateChangedEvent).state;
-      this.name = s.template.name;
-      this.isDirty = s.template.isDirty;
-    });
+    this.name = this.store.state.template.name;
+    this.isDirty = this.store.state.template.isDirty;
+    this.templateId = this.store.state.template.id;
+    this.store.addEventListener('state-changed', this._onStateChanged);
+  }
+
+  disconnectedCallback() {
+    this.store.removeEventListener('state-changed', this._onStateChanged);
+    super.disconnectedCallback();
   }
 
   render() {
     return html`
-      <span class="label">Template:</span>
+      <span class="label">เทมเพลต · Template</span>
       <input
         type="text"
+        aria-label="ชื่อเทมเพลต"
         .value=${this.name}
         @change=${(e: Event) =>
           setTemplateName(this.store, (e.target as HTMLInputElement).value)}
       />
-      <span class="badge ${this.isDirty ? 'dirty' : ''}">
-        ${this.isDirty ? 'Unsaved' : 'Saved'}
+      <span class="badge ${this.isDirty || !this.templateId ? 'dirty' : ''}" role="status">
+        ${this.isDirty ? 'ยังไม่บันทึก · Unsaved' : this.templateId ? 'บันทึกแล้ว · Saved' : 'ยังไม่เคยบันทึก · New'}
       </span>
     `;
   }

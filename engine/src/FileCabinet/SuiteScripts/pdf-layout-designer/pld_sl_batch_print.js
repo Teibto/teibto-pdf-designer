@@ -31,9 +31,10 @@ define([
   'N/file',
   'N/record',
   'N/task',
+  'N/url',
   './pld_lib_render',
-  './pld_lib_invoice_data'
-], function (search, runtime, log, xml, format, file, record, task, pldRender, invoiceData) {
+  './pld_lib_invoice_data', './pld_lib_batch_jobs', './pld_lib_batch_integrity', './pld_lib_batch_cleanup', './pld_lib_batch_selection', './pld_lib_batch_retry'
+], function (search, runtime, log, xml, format, file, record, task, url, pldRender, invoiceData, jobs, integrity, cleanup, selection, retry) {
 
   /** หน่วย governance ที่กันไว้ให้ขั้นตอนรวมไฟล์ + ส่ง response ตอนท้าย */
   var RESERVE_UNITS = 100;
@@ -43,6 +44,9 @@ define([
 
   /** จำนวนรายการสูงสุดที่ดึงมาแสดงในหน้าจอ (ไม่ใช่จำนวนที่พิมพ์ได้) */
   var LIST_LIMIT = 300;
+
+  /** BFO input ceiling shared with the durable batch pipeline. */
+  var MAX_RENDERED_XML_BYTES = 8 * 1024 * 1024;
 
   /**
    * ประเภทเอกสารที่ยอดรวมมีความหมาย — คอลัมน์ `total` ของ transaction search
@@ -56,6 +60,42 @@ define([
     returnauthorization: true, customerpayment: true
   };
 
+  /** Resolve this deployed Suitelet instead of relying on the browser's current
+   * URL. GET form submission replaces the query string, so its script/deploy
+   * routing fields are also emitted as hidden inputs below. */
+  function selfRoute() {
+    var current = runtime.getCurrentScript();
+    return url.resolveScript({
+      scriptId: current.id,
+      deploymentId: current.deploymentId,
+      returnExternalUrl: false
+    });
+  }
+
+  function decodedQueryParam(route, wanted) {
+    var query = String(route || '').split('?')[1] || '';
+    query = query.split('#')[0];
+    var pairs = query.split('&');
+    for (var i = 0; i < pairs.length; i++) {
+      var at = pairs[i].indexOf('=');
+      var rawName = at < 0 ? pairs[i] : pairs[i].slice(0, at);
+      var rawValue = at < 0 ? '' : pairs[i].slice(at + 1);
+      try {
+        if (decodeURIComponent(rawName.replace(/\+/g, ' ')) === wanted) {
+          return decodeURIComponent(rawValue.replace(/\+/g, ' '));
+        }
+      } catch (e) {
+        throw new Error('Resolved batch Suitelet URL has invalid routing encoding');
+      }
+    }
+    throw new Error('Resolved batch Suitelet URL is missing required ' + wanted + ' routing parameter');
+  }
+
+  function getRoutingInputs(route) {
+    return '<input type="hidden" name="script" value="' + esc(decodedQueryParam(route, 'script')) + '" />' +
+      '<input type="hidden" name="deploy" value="' + esc(decodedQueryParam(route, 'deploy')) + '" />';
+  }
+
   function onRequest(context) {
     var request = context.request;
     var tel = newTelemetry(request);
@@ -67,12 +107,30 @@ define([
       if (request.method === 'POST' && request.parameters.action === 'queue') {
         return queueBatch(context, tel);
       }
+      if (request.parameters.action === 'recover') {
+        if (request.method !== 'POST') throw new Error('Recovery requires POST');
+        return recoverJob(context, tel);
+      }
+      if (request.parameters.action === 'retry_failed') {
+        if (request.method !== 'POST') throw new Error('Linked retry requires POST');
+        return retryFailed(context);
+      }
+      if (request.parameters.action === 'cleanup') {
+        if (request.method !== 'POST') throw new Error('Cleanup requires POST');
+        return cleanJobInputs(context, tel);
+      }
+      if (request.parameters.action === 'download') return context.response.writeFile({ file: jobs.download(request.parameters.job, request.parameters.chunk), isInline: false });
+      if (request.parameters.action === 'status') return writeJobStatus(context);
+      if (request.parameters.action === 'failures') return writeFailureDetails(context);
       if (request.parameters.action === 'files') {
         return writeFilesPage(context, tel);
       }
       return writeFormPage(context, tel);
     } catch (e) {
       logBatchError(tel, e);
+      if (request.parameters.action === 'cleanup') return writeCleanupError(context, tel, e);
+      if (request.parameters.action === 'recover') return writeRecoveryError(context, tel, e);
+      if (request.parameters.action === 'retry_failed') return writeRecoveryError(context, tel, e);
       writeErrorPage(context.response, tel, e);
     }
   }
@@ -97,6 +155,10 @@ define([
 
     if (!recType) throw new Error('ไม่ได้ระบุประเภทเอกสาร');
     if (ids.length === 0) throw new Error('ยังไม่ได้เลือกเอกสารที่จะพิมพ์');
+    if (ids.length > LIST_LIMIT) {
+      throw new Error('พิมพ์สดได้ครั้งละไม่เกิน ' + LIST_LIMIT + ' ใบ (เลือกไว้ ' +
+        ids.length + ' ใบ) — แบ่งพิมพ์เป็นหลายชุดหรือส่งเข้าคิว');
+    }
 
     tel.rectype = recType;
     tel.tplid = tplId;
@@ -118,6 +180,9 @@ define([
     }
 
     tel.stage = 'combine';
+    if (result.xmlBytes > MAX_RENDERED_XML_BYTES || pdfsetUtf8Bytes(result.docs) > MAX_RENDERED_XML_BYTES) {
+      throw new Error('XML ของชุดเกิน 8 MiB UTF-8 — ลดจำนวนเอกสารหรือสำเนาแล้วส่งใหม่');
+    }
     var pdfFile = pldRender.combinePdfDocs(result.docs);
     pdfFile.name = 'batch_' + recType + '_' + result.printed.length + '.pdf';
 
@@ -151,6 +216,7 @@ define([
     var printed = [];
     var failed = [];
     var worstCost = 0;
+    var xmlBytes = pdfsetUtf8Bytes([]);
 
     for (var i = 0; i < ids.length; i++) {
       var remaining = script.getRemainingUsage();
@@ -168,7 +234,22 @@ define([
       try {
         var out = pldRender.renderDocumentXml(tplXml, recType, ids[i], copies, tel);
         assertParsable(out.docs);
+        var nextBytes = xmlBytes;
+        var nextCount = docs.length;
+        for (var b = 0; b < out.docs.length; b++) {
+          if (nextCount > 0) nextBytes += 1; // docs.join('\n') framing
+          nextBytes += utf8Bytes(out.docs[b]);
+          nextCount++;
+        }
+        if (nextBytes > MAX_RENDERED_XML_BYTES) {
+          return {
+            docs: docs, printed: printed, failed: failed,
+            pending: ids.slice(i), worstCost: worstCost,
+            stopReason: 'size', xmlBytes: xmlBytes
+          };
+        }
         for (var d = 0; d < out.docs.length; d++) docs.push(out.docs[d]);
+        xmlBytes = nextBytes;
         printed.push({ id: ids[i], tranId: out.tranId || ids[i] });
       } catch (e) {
         // ใบเดียวพังต้องไม่ทำให้ทั้งชุดล่ม — เก็บไว้รายงาน พร้อม errorId ของใบนั้นเอง
@@ -190,7 +271,7 @@ define([
 
     return {
       docs: docs, printed: printed, failed: failed,
-      pending: [], worstCost: worstCost, stopReason: ''
+      pending: [], worstCost: worstCost, stopReason: '', xmlBytes: xmlBytes
     };
   }
 
@@ -201,17 +282,11 @@ define([
   /** เพดานต่อหนึ่ง job — ใหญ่กว่านี้ให้แบ่งส่ง ไม่ใช่ปล่อยให้ไฟล์รวมใหญ่จนเปิดไม่ไหว */
   var MAX_QUEUE_DOCS = 500;
 
-  /** โฟลเดอร์ปลายทางของไฟล์รวม + ไฟล์ชั่วคราวของ job */
-  var OUTPUT_FOLDER_NAME = 'pld-batch';
-
-  /** ไฟล์ stamp ที่ deploy.sh เขียนไว้ทุกครั้ง — ใช้หาโฟลเดอร์ของ engine บน account */
-  var VERSION_FILE_PATH = '/SuiteScripts/pdf-layout-designer/pld_version.txt';
-
   /**
    * ส่งชุดใหญ่ให้ Map/Reduce ทำแทน
    *
    * Suitelet มี 1,000 units ต่อครั้ง (ราว 6 ใบตามที่วัดได้จริงบน SB2) ส่วน map
-   * ได้ 1,000 units **ต่อหนึ่งเอกสาร** ชุดใหญ่จึงไม่ชนโควตาเลย · หน้าจอไม่รอผล
+   * ได้ 1,000 units **ต่อหนึ่งเอกสาร** ต้องตรวจขีดจำกัดเอกสารและขั้นตอนรวมไฟล์ด้วย · หน้าจอไม่รอผล
    * แต่บอกเลข task ไว้ตามงานได้ แล้ว engine อีเมลลิงก์ไฟล์ให้เมื่อเสร็จ
    *
    * รายการเอกสารไปทาง **ไฟล์ job spec** ไม่ใช่ script parameter — ชุด 300 ใบยาว
@@ -236,125 +311,384 @@ define([
 
     // ล้มตั้งแต่ตอนนี้ถ้า template ใช้ไม่ได้ — ดีกว่าปล่อยให้ทุก map พังทีละใบ
     tel.stage = 'load-template';
-    pldRender.resolveTemplate(tplId, recType);
+    var resolved = pldRender.resolveTemplate(tplId, recType);
+    var snapshot = { xml: resolved.xml, copies: pldRender.resolveCopies(resolved.copies, recType) };
+    // Bound the persisted snapshot, independent of transaction count.
+    if (typeof snapshot.xml !== 'string' || !snapshot.xml.trim() || snapshot.xml.length > 1000000 ||
+      !Array.isArray(snapshot.copies) || !snapshot.copies.length ||
+      snapshot.copies.some(function (c) {
+        return !c || (c.th !== undefined && typeof c.th !== 'string') || (c.en !== undefined && typeof c.en !== 'string') ||
+          (!c.th && !c.en);
+      })) throw new Error('Template snapshot ไม่ถูกต้อง: XML ไม่เกิน 1000000 ตัวอักษรและป้ายสำเนาต้องมีอย่างน้อยหนึ่งภาษา');
 
     tel.stage = 'queue';
     var user = runtime.getCurrentUser();
-    var jobId = tel.errorId.replace(/^PLD-/, '');
-    var folder = outputFolderId();
-    var jobFileId = file.create({
-      name: 'pld_job_' + jobId + '.json',
-      fileType: file.Type.JSON,
-      contents: JSON.stringify({
-        jobId: jobId,
-        rectype: recType,
-        tplid: tplId,
-        ids: ids,
-        folder: folder,
-        requester: { id: user.id, name: user.name, email: user.email }
-      }),
-      encoding: file.Encoding.UTF8,
-      folder: folder,
-      isOnline: false
-    }).save();
-
-    var taskId = task.create({
-      taskType: task.TaskType.MAP_REDUCE,
-      scriptId: 'customscript_pld_batch_mr',
-      deploymentId: 'customdeploy_pld_batch_mr',
-      params: { custscript_pld_mr_job: jobFileId }
-    }).submit();
-
-    logBatchOk(tel, { queued: ids.length, taskId: taskId, jobFileId: jobFileId });
-    writeQueuedPage(context, tel, recType, ids.length, taskId);
-  }
-
-  /**
-   * โฟลเดอร์ `pld-batch` ใต้โฟลเดอร์ของ engine — หาให้เจอจากไฟล์ stamp ที่ deploy
-   * เขียนไว้เสมอ จึงไม่ต้องตั้งค่า folder id ต่อ account · ไม่มี stamp = ยังไม่ได้
-   * deploy ครบ ต้องดังให้เห็น ไม่ใช่ไปโยนไฟล์ไว้ที่ root เงียบ ๆ (R4)
-   */
-  function outputFolderId() {
-    var parent;
+    var durable = jobs.create(ids.length);
+    var jobId = durable.id;
+    var folder = durable.folder;
+    var jobFileId;
+    var taskId;
+    var submissionAttempted = false;
     try {
-      parent = file.load({ id: VERSION_FILE_PATH }).folder;
+      var jobContents = integrity.seal('snapshot', {
+        schemaVersion: 5, templateSnapshot: snapshot, jobId: jobId,
+        rectype: recType, tplid: tplId, ids: ids, folder: folder,
+        requester: { id: user.id, role: user.role }
+      });
+      if (utf8Bytes(jobContents) > 8 * 1024 * 1024) throw new Error('Batch job file exceeds 8 MiB');
+      var snapshotFile = file.create({
+        name: 'pld_job_' + jobId + '.json', fileType: file.Type.JSON,
+        contents: jobContents, encoding: file.Encoding.UTF8, folder: folder, isOnline: false
+      });
+      var currentJob = jobs.load(jobId);
+      if (String(currentJob.folder) !== String(durable.folder) || String(currentJob.parent) !== String(durable.parent)) {
+        throw new Error('Batch storage identity changed before snapshot save');
+      }
+      jobs.assertFolder(currentJob);
+      jobFileId = snapshotFile.save();
+      jobs.loadFile(jobs.load(jobId), jobFileId);
+      jobs.update(jobId, { snapshot: jobFileId, snapshotdigest: integrity.digest(jobContents), status: 'QUEUED', phase: 'RENDER_QUEUED' });
+      // Native selection chooses an available deployment for this fixed script.
+      var pending = task.create({
+        taskType: task.TaskType.MAP_REDUCE,
+        scriptId: 'customscript_pld_batch_mr',
+        params: { custscript_pld_mr_job: jobId }
+      });
+      if (!pending || typeof pending.submit !== 'function') throw new Error('Render task preparation failed');
+      tel.stage = 'queue-submit';
+      submissionAttempted = true;
+      taskId = pending.submit();
+      if (typeof taskId !== 'string' || !taskId.trim()) throw new Error('Render task submission returned no task ID');
     } catch (e) {
-      throw new Error('หาโฟลเดอร์ของ engine ไม่เจอ (' + VERSION_FILE_PATH + ') — ' +
-        'deploy engine ให้ครบก่อนใช้การส่งเข้าคิว');
+      if (submissionAttempted) {
+        // Submission may have been accepted before an exception/empty reply.
+        // Keep its input and never downgrade a worker which already advanced.
+        var rejected = definiteSubmissionRejection(e);
+        try { jobs.update(jobId, { phase: rejected ? 'RENDER_WAITING' : 'RENDER_SUBMIT_UNKNOWN' }, {
+          status: 'QUEUED', phase: 'RENDER_QUEUED', task: '', snapshot: String(jobFileId),
+          snapshotdigest: integrity.digest(jobContents), plan: '', outputs: '', mergetask: ''
+        }); } catch (outcomeError) {
+          log.error({ title: 'PLD initial queue outcome persistence failed', details: { jobId: jobId, message: outcomeError.message } });
+        }
+        logBatchError(tel, e);
+        return rejected ? writeSubmissionWaiting(context, tel, jobId) : writeQueueUnknown(context, tel, jobId);
+      }
+      // Preparation failed before submit was called. Cleanup is safe; preserve
+      // the initiating error when secondary state/cleanup operations also fail.
+      try { jobs.update(jobId, { status: 'FAILED', failed: ids.length }); }
+      catch (stateError) {
+        log.error({ title: 'PLD queue failure state unavailable', details: { jobId: jobId, message: stateError.message } });
+      }
+      if (jobFileId) {
+        try {
+          var ownFile = jobs.loadFile(jobs.load(jobId), jobFileId);
+          if (ownFile.name !== 'pld_job_' + jobId + '.json') throw new Error('Batch cleanup file name mismatch');
+          file.delete({ id: jobFileId });
+        } catch (cleanupError) {
+          log.error({ title: 'PLD queue job cleanup failed', details: { jobId: jobId, message: cleanupError.message } });
+        }
+      }
+      throw e;
+    }
+    var taskWarning = '';
+    try { jobs.update(jobId, { task: taskId }); }
+    catch (taskStateError) {
+      // NetSuite accepted the task: deleting its input or marking FAILED here
+      // would race the worker and invite duplicate submissions.
+      log.error({ title: 'PLD accepted task identity persistence failed', details: { jobId: jobId, taskId: taskId, message: taskStateError.message } });
+      taskWarning = 'ระบบรับงานแล้ว แต่บันทึกหมายเลขประมวลผลไม่สำเร็จ กรุณาติดตามงานเดิม ไม่ต้องส่งซ้ำ';
     }
 
-    var found = '';
-    search.create({
-      type: 'folder',
-      filters: [['name', 'is', OUTPUT_FOLDER_NAME], 'AND', ['parent', 'anyof', parent]],
-      columns: ['internalid']
-    }).run().each(function (row) { found = row.id; return false; });
-    if (found) return found;
-
-    var rec = record.create({ type: 'folder' });
-    rec.setValue({ fieldId: 'name', value: OUTPUT_FOLDER_NAME });
-    rec.setValue({ fieldId: 'parent', value: parent });
-    return rec.save();
+    logBatchOk(tel, { queued: ids.length, taskId: taskId, jobFileId: jobFileId });
+    writeQueuedPage(context, tel, recType, ids.length, jobId, taskWarning);
   }
 
-  /**
-   * ไฟล์ชุดที่สร้างไว้แล้ว — ผู้ใช้ที่ปิดอีเมลทิ้งหรือลบเมลไปแล้วยังหาไฟล์เจอ
-   * และเป็นวิธีตรวจว่างานที่ส่งเข้าคิวไปได้ผลจริงโดยไม่ต้องขุด File Cabinet
-   */
+  function utf8Bytes(text) {
+    var bytes = 0;
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      if (c < 128) bytes++;
+      else if (c < 2048) bytes += 2;
+      else if (c >= 0xD800 && c <= 0xDBFF && i + 1 < text.length &&
+        text.charCodeAt(i + 1) >= 0xDC00 && text.charCodeAt(i + 1) <= 0xDFFF) { bytes += 4; i++; }
+      else bytes += 3;
+    }
+    return bytes;
+  }
+
+  function definiteSubmissionRejection(error) {
+    return !!error && (error.name === 'FAILED_TO_SUBMIT_JOB_REQUEST_1' || error.code === 'FAILED_TO_SUBMIT_JOB_REQUEST_1');
+  }
+  function isWaiting(job, kind) {
+    return (kind === 'RENDER' && job.status === 'QUEUED' && job.phase === 'RENDER_WAITING') ||
+      (kind === 'MERGE' && job.status === 'RUNNING' && job.phase === 'MERGE_WAITING');
+  }
+  function recoveryKind(job) {
+    if (job.outputs || job.result) return '';
+    if (isWaiting(job, 'RENDER') && !job.task && !job.plan && !job.mergetask && job.snapshot && job.snapshotdigest) return 'RENDER';
+    if (isWaiting(job, 'MERGE') && !job.mergetask && job.plan && job.snapshot && job.snapshotdigest) return 'MERGE';
+    if (job.status !== 'FAILED') return '';
+    if (job.phase === 'MERGE_FAILED' && job.mergetask && job.plan) return 'MERGE';
+    if (job.phase === 'DONE' && !job.plan && !job.mergetask && job.snapshot && job.snapshotdigest && job.task) return 'RENDER';
+    return '';
+  }
+  function recoveryBinding(job, kind) {
+    return { action: 'recover', jobId: job.id, requester: job.requester, role: job.role, kind: kind,
+      stateDigest: integrity.digest(JSON.stringify(job)) };
+  }
+  function validateRecoverySnapshot(job) {
+    var stored = jobs.loadFile(job, job.snapshot);
+    if (stored.name !== 'pld_job_' + job.id + '.json' || !Number.isSafeInteger(Number(stored.size)) ||
+      Number(stored.size) < 1 || Number(stored.size) > 8 * 1024 * 1024) throw new Error('Invalid recovery snapshot file');
+    var text = stored.getContents();
+    if (typeof text !== 'string' || utf8Bytes(text) > 8 * 1024 * 1024 || integrity.digest(text) !== job.snapshotdigest) throw new Error('Recovery snapshot digest mismatch');
+    var spec = integrity.open('snapshot', text);
+    if (!spec || spec.schemaVersion !== 5 || String(spec.jobId) !== job.id || String(spec.folder) !== job.folder ||
+      !spec.requester || String(spec.requester.id) !== job.requester || String(spec.requester.role) !== job.role ||
+      !Array.isArray(spec.ids) || !spec.ids.length || spec.ids.length > MAX_QUEUE_DOCS || spec.ids.length !== Number(job.requested) ||
+      spec.ids.some(function (id) { return !/^[1-9][0-9]*$/.test(String(id)); })) throw new Error('Recovery snapshot identity mismatch');
+  }
+  function recoverJob(context, tel) {
+    var job = jobs.load(context.request.parameters.job);
+    var kind = recoveryKind(job);
+    if (!kind) throw new Error('งานนี้ยังไม่พร้อมให้ทำต่อ — กรุณาตรวจสอบกับผู้ดูแล');
+    var token = context.request.parameters.token;
+    if (typeof token !== 'string' || token.length > 4096) throw new Error('Invalid recovery token');
+    var binding = integrity.open('recovery', token);
+    var expected = recoveryBinding(job, kind);
+    if (!binding || Object.keys(binding).length !== Object.keys(expected).length ||
+      Object.keys(expected).some(function (key) { return binding[key] !== expected[key]; })) throw new Error('Recovery token identity mismatch');
+    if (kind === 'MERGE') {
+      var plan = integrity.open('plan', job.plan);
+      if (!plan || plan.jobId !== job.id || plan.snapshotDigest !== job.snapshotdigest || !Array.isArray(plan.chunks) || !plan.chunks.length) {
+        throw new Error('Invalid authenticated recovery plan');
+      }
+    } else validateRecoverySnapshot(job);
+    var taskField = kind === 'MERGE' ? 'mergetask' : 'task';
+    if (!isWaiting(job, kind)) {
+      var checked = task.checkStatus({ taskId: job[taskField] });
+      if (!checked || (checked.status !== task.TaskStatus.COMPLETE && checked.status !== task.TaskStatus.FAILED)) {
+        throw new Error('งานประมวลผลเดิมยังไม่สิ้นสุดหรือยังตรวจสอบไม่ได้ — ไม่ต้องส่งซ้ำ');
+      }
+    }
+    var claim = { status: 'RUNNING', phase: kind + '_SUBMITTING' };
+    claim[taskField] = '';
+    // Compare the complete authenticated state, including snapshot/plan/results,
+    // before clearing the old task. A competing claim cannot share this token.
+    jobs.update(job.id, claim, job);
+    var taskId;
+    try {
+      var params = {};
+      params[kind === 'MERGE' ? 'custscript_pld_merge_job' : 'custscript_pld_mr_job'] = job.id;
+      taskId = task.create({ taskType: task.TaskType.MAP_REDUCE,
+        scriptId: kind === 'MERGE' ? 'customscript_pld_batch_merge' : 'customscript_pld_batch_mr',
+        params: params }).submit();
+      if (typeof taskId !== 'string' || !taskId.trim()) throw new Error('Missing recovery task identity');
+    } catch (submitError) {
+      var submitting = { status: 'RUNNING', phase: kind + '_SUBMITTING', snapshot: job.snapshot, snapshotdigest: job.snapshotdigest, plan: job.plan, outputs: '', result: '' }; submitting[taskField] = '';
+      var rejected = definiteSubmissionRejection(submitError);
+      var outcome = rejected ? { status: kind === 'RENDER' ? 'QUEUED' : 'RUNNING', phase: kind + '_WAITING' } : { phase: kind + '_SUBMIT_UNKNOWN' };
+      try { jobs.update(job.id, outcome, submitting); } catch (stateError) {
+        log.error({ title: 'PLD recovery outcome persistence failed', details: { jobId: job.id, message: stateError.message } });
+      }
+      log.error({ title: rejected ? 'PLD recovery submission rejected' : 'PLD recovery submission unknown', details: { jobId: job.id, message: submitError.message } });
+      if (rejected) return writeSubmissionWaiting(context, tel, job.id);
+      throw new Error('ยังยืนยันผลการส่งงานไม่ได้ — แจ้งผู้ดูแลพร้อมหมายเลขงาน ' + job.id + ' และไม่ต้องส่งซ้ำ');
+    }
+    var warning = '';
+    var accepted = {}, expectedEmptyTask = {}; accepted[taskField] = taskId; expectedEmptyTask[taskField] = '';
+    try { jobs.update(job.id, accepted, expectedEmptyTask); }
+    catch (stateError) {
+      log.error({ title: 'PLD accepted recovery task persistence failed', details: { jobId: job.id, taskId: taskId, message: stateError.message } });
+      warning = 'ระบบรับงานแล้ว แต่บันทึกหมายเลขประมวลผลไม่สำเร็จ กรุณาติดตามงานเดิม ไม่ต้องส่งซ้ำ';
+    }
+    writeQueuedPage(context, tel, '', Number(job.requested), job.id, warning);
+  }
+
+  function jobSummary(job) {
+    var statuses = { PREPARING: 'เตรียมงาน', QUEUED: 'รอประมวลผล', RUNNING: 'กำลังประมวลผล',
+      COMPLETE: 'สำเร็จครบ', PARTIAL: 'สำเร็จบางส่วน', FAILED: 'ไม่สำเร็จ' };
+    var displayStatus = isWaiting(job, 'RENDER') ? 'รอส่งขั้นสร้างเอกสาร' : (isWaiting(job, 'MERGE') ? 'รอส่งขั้นรวมไฟล์' : (statuses[job.status] || job.status));
+    var text = '<p>งาน ' + esc(job.id) + ' · ' + esc(displayStatus) + '</p>' +
+      '<p>เลือก ' + esc(job.requested) + ' ใบ · สำเร็จ ' + esc(job.printed) + ' ใบ · ล้มเหลว ' + esc(job.failed) + ' ใบ</p>';
+    if (job.status === 'PARTIAL') text += '<p class="warn">ไฟล์นี้ไม่ครบทุกใบ กรุณาตรวจสอบรายการที่ล้มเหลวก่อนใช้งาน</p>';
+    var recovery = recoveryKind(job);
+    if (recovery) {
+      var recoveryToken = integrity.seal('recovery', recoveryBinding(job, recovery));
+      text += '<form method="POST" action="' + esc(jobs.route(job.id, 'recover')) + '">' +
+        '<input type="hidden" name="action" value="recover"><input type="hidden" name="job" value="' + esc(job.id) + '">' +
+        '<input type="hidden" name="token" value="' + esc(recoveryToken) + '">' +
+        '<button type="submit">' + (isWaiting(job, recovery) ? (recovery === 'MERGE' ? 'ลองส่งขั้นรวมไฟล์อีกครั้ง' : 'ลองส่งขั้นสร้างเอกสารอีกครั้ง') : (recovery === 'MERGE' ? 'ทำขั้นรวมไฟล์ต่อ' : 'ทำขั้นสร้างเอกสารต่อ')) + '</button>' +
+        '<p>ใช้ผลรายเอกสารและไฟล์ส่วนที่ตรวจสอบแล้ว ไม่สร้างงานพิมพ์ใหม่</p></form>';
+    }
+    if (job.phase === 'MERGE_SUBMIT_UNKNOWN' || job.phase === 'RENDER_SUBMIT_UNKNOWN') text += '<p class="warn">ยังยืนยันการส่งงานประมวลผลไม่ได้ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงานและไม่ต้องส่งซ้ำ</p>';
+    if ((job.phase === 'RENDER_SUBMITTING' && !job.task) || (job.phase === 'MERGE_SUBMITTING' && !job.mergetask)) {
+      text += '<p class="warn">กำลังรอยืนยันการส่งงาน ยังไม่ยืนยันว่าเริ่มประมวลผลแล้ว หากสถานะค้างให้แจ้งผู้ดูแลพร้อมหมายเลขงาน ไม่ต้องสร้างงานใหม่</p>';
+    }
+    if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.outputs) {
+      var outputs = jobs.results(job.id);
+      text += outputs.map(function (output) {
+        return '<p><a href="' + esc(jobs.route(job.id, 'download', output.ordinal)) + '">ไฟล์ ' +
+          (output.ordinal + 1) + ' จาก ' + outputs.length + '</a> · ลำดับเอกสาร ' +
+          output.sequences.map(function (seq) { return seq + 1; }).join(', ') + '</p>';
+      }).join('');
+      if (job.status === 'PARTIAL') text += '<p class="warn">ลำดับเอกสารที่ไม่สำเร็จ: ' +
+        jobs.failedSequences(job.id).map(function (seq) { return seq + 1; }).join(', ') + '</p>';
+    } else if ((job.status === 'COMPLETE' || job.status === 'PARTIAL') && job.result) text += '<a href="' + esc(jobs.route(job.id, 'download')) + '">ดาวน์โหลด PDF</a>';
+    if ((job.status === 'PARTIAL' || (job.status === 'FAILED' && job.phase === 'DONE')) && job.plan) {
+      text += '<p><a href="' + esc(jobs.route(job.id, 'failures')) + '">ดูรายละเอียดรายการที่ไม่สำเร็จ</a></p>';
+    }
+    return text;
+  }
+  function writeFailureDetails(context) {
+    var source = selection.read(context.request.parameters.job);
+    var reasons = {
+      RENDER_FAILED: 'สร้างเอกสารไม่สำเร็จ',
+      NO_COMMITTED_PART: 'ยังไม่มีไฟล์เอกสารที่ยืนยันผลสำเร็จ',
+    };
+    var rows = source.failures.map(function (failure) {
+      return '<tr><td>' + (failure.seq + 1) + '</td><td>' + esc(failure.recid) + '</td><td>' + esc(reasons[failure.code]) + '</td></tr>';
+    }).join('');
+    var html = '<h1>รายการที่ไม่สำเร็จ</h1><p>งาน ' + esc(source.job.id) + ' · ไม่สำเร็จ ' + source.failures.length +
+      ' จาก ' + esc(source.job.requested) + ' ใบ</p>' +
+      '<p>ลำดับอ้างอิงรายการที่เลือกในงานเดิม รายการเดียวกันที่เลือกหลายครั้งจะแสดงแยกตามลำดับ</p>' +
+      '<table><caption>เอกสารที่ยังไม่มีในผลพิมพ์ของงานนี้</caption><thead><tr><th scope="col">ลำดับในงานเดิม</th>' +
+      '<th scope="col">รหัสรายการ (Internal ID)</th><th scope="col">ผลการสร้างเอกสาร</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<p>แจ้งผู้ดูแลพร้อมหมายเลขงานและลำดับที่ไม่สำเร็จเพื่อตรวจสอบสาเหตุ</p>' +
+      '<form method="POST" action="' + esc(jobs.route(source.job.id, 'retry_failed')) + '">' +
+      '<input type="hidden" name="action" value="retry_failed"><input type="hidden" name="job" value="' + esc(source.job.id) + '">' +
+      '<input type="hidden" name="token" value="' + esc(retry.token(source.job.id)) + '">' +
+      '<button type="submit">พิมพ์ใหม่เฉพาะรายการที่ไม่สำเร็จ</button></form>' +
+      '<p>สร้างงานลูกด้วยแบบฟอร์มและชุดสำเนาของงานเดิม แต่ใช้ข้อมูลรายการ ณ เวลาพิมพ์ใหม่ ' +
+      'ผลพิมพ์เดิมยังอยู่ กดซ้ำจะกลับไปงานลูกเดิม</p>' +
+      '<p><a href="' + esc(jobs.route(source.job.id)) + '">' +
+      (Number(source.job.printed) > 0 ? 'กลับไปดูสถานะงานและไฟล์ PDF ที่สร้างสำเร็จ' : 'กลับไปดูสถานะงาน') + '</a></p>';
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('รายการที่ไม่สำเร็จ', html));
+  }
+  function retryFailed(context) {
+    var result = retry.run(context.request.parameters.job, context.request.parameters.token);
+    var html = '<h1>งานพิมพ์เฉพาะรายการที่ไม่สำเร็จ</h1>' + jobSummary(result.job) +
+      (result.warning ? '<p class="warn">' + esc(result.warning) + '</p>' : '') +
+      '<p><a href="' + esc(jobs.route(result.job.id)) + '">ติดตามงานลูกนี้</a></p>' +
+      '<p><a href="' + esc(jobs.route(context.request.parameters.job)) + '">กลับไปดูงานต้นฉบับ</a></p>';
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('งานพิมพ์เฉพาะรายการที่ไม่สำเร็จ', html));
+  }
+  function writeJobStatus(context) {
+    var job = jobs.load(context.request.parameters.job);
+    var lineage = '';
+    try {
+      var origin = retry.origin(job.id);
+      if (origin) lineage = '<p>งานต้นฉบับ <a href="' + esc(jobs.route(origin.jobId)) + '">' + esc(origin.jobId) + '</a>' +
+        ' · ลำดับในงานต้นฉบับ: ' + origin.sequences.map(function (seq) { return seq + 1; }).join(', ') + '</p>';
+    } catch (originError) {
+      log.error({ title: 'PLD retry lineage unavailable', details: { jobId: job.id, message: originError.message } });
+      lineage = '<p class="warn">ยังแสดงข้อมูลเชื่อมโยงงานต้นฉบับไม่ได้ กรุณาแจ้งผู้ดูแลพร้อมหมายเลขงานนี้</p>';
+    }
+    var clean = '';
+    if (['COMPLETE', 'PARTIAL'].indexOf(job.status) >= 0 && job.outputs) {
+      clean = '<h2>จัดการไฟล์ชั่วคราว</h2><p>ล้างไฟล์ต้นทางของเอกสารที่รวมเป็น PDF สำเร็จแล้ว เพื่อลดพื้นที่จัดเก็บ ' +
+        'ไฟล์ PDF และรายละเอียดงานยังคงอยู่ เปิดหน้านี้ไว้จนล้างเสร็จ</p>' + cleanupForm(job.id, cleanup.token(job.id), 'ล้างไฟล์ชั่วคราว');
+    }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('สถานะงานพิมพ์', '<h1>สถานะงานพิมพ์</h1>' + lineage + jobSummary(job) + clean));
+  }
+  function cleanupForm(jobId, token, label) {
+    return '<form id="pld-cleanup" method="POST" action="' + esc(jobs.route(jobId, 'cleanup')) + '">' +
+      '<input type="hidden" name="action" value="cleanup"><input type="hidden" name="job" value="' + esc(jobId) + '">' +
+      '<input type="hidden" name="token" value="' + esc(token) + '"><button type="submit">' + esc(label) + '</button></form>';
+  }
+  function cleanJobInputs(context, tel) {
+    tel.stage = 'cleanup';
+    var jobId = context.request.parameters.job;
+    var result = cleanup.run(jobId, context.request.parameters.token);
+    var html = '<h1>' + (result.token ? 'กำลังล้างไฟล์ชั่วคราว' : 'ตรวจล้างไฟล์ชั่วคราวครบแล้ว') + '</h1>' +
+      '<p>ตรวจแล้ว ' + result.next + ' จาก ' + result.total + ' ลำดับเอกสาร</p>' +
+      '<p>รอบนี้ลบ ' + result.deleted + ' ไฟล์ · ไม่พบหรือเข้าถึงไม่ได้ ' + result.unavailable +
+      ' ไฟล์ · เก็บต้นทางของเอกสารที่ไม่มี PDF สำเร็จไว้ ' + result.retained + ' ลำดับ</p>';
+    if (result.token) html += cleanupForm(jobId, result.token, 'ทำส่วนถัดไป') +
+      '<p>ระบบจะทำส่วนถัดไปอัตโนมัติ หากหยุดไว้สามารถกลับมาเริ่มตรวจล้างใหม่ได้</p>' +
+      '<script>setTimeout(function(){document.getElementById("pld-cleanup").submit();},1000);</script>';
+    html += '<p><a href="' + esc(jobs.route(jobId)) + '">' + (result.token ? 'หยุดและกลับไปดูงาน' : 'กลับไปดูงานและดาวน์โหลด PDF') + '</a></p>';
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ล้างไฟล์ชั่วคราว', html));
+  }
+  function writeRecoveryError(context, tel, error) {
+    var back = '<button type="button" onclick="history.back()">กลับหน้าก่อนหน้า</button>';
+    try {
+      var job = jobs.load(context.request.parameters.job);
+      back = '<a href="' + esc(jobs.route(job.id)) + '">กลับไปตรวจสถานะงาน</a>';
+    } catch (unavailable) { /* Never expose a job outside the authenticated caller's scope. */ }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ยังยืนยันการทำงานต่อไม่ได้', '<h1>ยังยืนยันการทำงานต่อไม่ได้</h1>' +
+      '<p>กรุณาตรวจสถานะงานก่อนดำเนินการต่อ หากยังยืนยันการส่งงานไม่ได้ ไม่ต้องส่งซ้ำและแจ้งผู้ดูแลพร้อมรหัสอ้างอิง</p>' +
+      '<p>' + esc(error.message || String(error)) + '</p><p>รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p><p>' + back + '</p>'));
+  }
+  function writeCleanupError(context, tel, error) {
+    var back = '<button type="button" onclick="history.back()">กลับหน้าก่อนหน้า</button>';
+    try {
+      var job = jobs.load(context.request.parameters.job);
+      back = '<a href="' + esc(jobs.route(job.id)) + '">กลับไปดูสถานะงานและดาวน์โหลด PDF</a>';
+    } catch (unavailable) { /* Do not expose a job outside the caller's scope. */ }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('หยุดล้างไฟล์ชั่วคราว', '<h1>หยุดล้างไฟล์ชั่วคราว</h1>' +
+      '<p>การล้างยังไม่ครบ กรุณาตรวจสถานะงานแล้วเริ่มตรวจล้างใหม่ได้ ระบบจะตรวจไฟล์ที่เหลืออีกครั้ง</p>' +
+      '<p>' + esc(error.message || String(error)) + '</p><p>รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p><p>' + back + '</p>'));
+  }
   function writeFilesPage(context, tel) {
     tel.stage = 'files';
-    var folder = outputFolderId();
-    var rows = [];
-    search.create({
-      type: 'file',
-      filters: [['folder', 'anyof', folder]],
-      columns: [
-        search.createColumn({ name: 'name' }),
-        search.createColumn({ name: 'created', sort: search.Sort.DESC }),
-        search.createColumn({ name: 'documentsize' }),
-        search.createColumn({ name: 'url' })
-      ]
-    }).run().getRange({ start: 0, end: 40 }).forEach(function (r) {
-      rows.push({
-        name: r.getValue('name'),
-        created: r.getValue('created'),
-        kb: r.getValue('documentsize'),
-        url: r.getValue('url')
-      });
-    });
-
-    var body = rows.length === 0
-      ? '<p class="warn">ยังไม่มีไฟล์ในโฟลเดอร์ <code>' + esc(OUTPUT_FOLDER_NAME) + '</code></p>'
-      : '<table class="docs"><thead><tr><th>ไฟล์</th><th>สร้างเมื่อ</th><th class="num">ขนาด (KB)</th></tr></thead><tbody>' +
-        rows.map(function (f) {
-          return '<tr><td><a href="' + esc(f.url) + '" target="_blank">' + esc(f.name) + '</a></td>' +
-            '<td>' + esc(f.created) + '</td><td class="num">' + esc(f.kb) + '</td></tr>';
-        }).join('') + '</tbody></table>';
-
+    var rows = jobs.list();
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
-    context.response.write(pageShell('ไฟล์ชุดที่สร้างไว้', [
-      '<h1>ไฟล์ชุดที่สร้างไว้</h1>',
-      '<p class="sub">ไฟล์รวมจากการส่งเข้าคิว เก็บไว้ใน File Cabinet โฟลเดอร์ <code>' +
-      esc(OUTPUT_FOLDER_NAME) + '</code> — ไฟล์ชั่วคราวระหว่างทางถูกลบทิ้งเมื่องานจบแล้ว</p>',
-      body,
-      '<p><button class="primary" onclick="history.back()">กลับ</button></p>'
-    ].join('\n')));
+    context.response.write(pageShell('งานพิมพ์ของฉัน', '<h1>งานพิมพ์ของฉัน</h1>' +
+      (rows.provisioningCount ? '<p class="warn">พบงานลูกที่ยังเตรียมข้อมูลไม่ครบ ' + rows.provisioningCount +
+        ' งานในรายการที่ตรวจ กลับไปหน้ารายการที่ไม่สำเร็จของงานต้นฉบับแล้วกดพิมพ์ใหม่เฉพาะรายการที่ไม่สำเร็จเพื่อทำการเตรียมงานเดิมต่อ</p>' : '') +
+      (rows.unavailableCount ? '<p class="warn">พบงานพิมพ์ที่ตรวจสอบความถูกต้องไม่ได้ ' + rows.unavailableCount +
+        ' งาน ระบบซ่อนงานเหล่านี้ไว้เพื่อความปลอดภัย กรุณาแจ้งผู้ดูแลระบบหากต้องการตรวจสอบ</p>' : '') +
+      (rows.length ? rows.map(function (job) {
+        return '<section><a href="' + esc(jobs.route(job.id)) + '">ดูสถานะงาน</a>' + jobSummary(job) + '</section>';
+      }).join('') : '<p>ยังไม่มีงานพิมพ์ในบทบาทนี้</p>')));
   }
 
-  function writeQueuedPage(context, tel, recType, count, taskId) {
+  function writeSubmissionWaiting(context, tel, jobId) {
+    var tracking = '';
+    try { var current = jobs.load(jobId); tracking = '<a href="' + esc(jobs.route(current.id)) + '">ตรวจสถานะงานและลองส่งอีกครั้ง</a>'; }
+    catch (unavailable) { /* The submission rejection remains known even if status readback fails. */ }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ระบบยังไม่รับงานรอบนี้', '<h1>ระบบยังไม่รับงานรอบนี้</h1>' +
+      '<p>หมายเลขงาน <code>' + esc(jobId) + '</code> ยังคงเก็บข้อมูลเดิมไว้ กรุณาตรวจสถานะงานแล้วกดลองส่งอีกครั้งเมื่อพร้อม</p>' +
+      '<p>รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p><p>' + tracking + '</p>'));
+  }
+
+  function writeQueueUnknown(context, tel, jobId) {
+    var tracking = '';
+    try {
+      var current = jobs.load(jobId);
+      tracking = '<a href="' + esc(jobs.route(current.id)) + '">ตรวจสถานะงานนี้</a>';
+    } catch (unavailable) { /* Keep the uncertainty visible even if status lookup fails. */ }
+    context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
+    context.response.write(pageShell('ยังยืนยันการส่งงานไม่ได้', '<h1>ยังยืนยันการส่งงานไม่ได้</h1>' +
+      '<p>หมายเลขงาน <code>' + esc(jobId) + '</code></p>' +
+      '<p>ระบบอาจเริ่มประมวลผลแล้ว กรุณาตรวจสถานะงานและแจ้งผู้ดูแลพร้อมรหัสอ้างอิง ไม่ต้องส่งซ้ำ</p>' +
+      '<p>รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p><p>' + tracking + '</p>'));
+  }
+
+  function writeQueuedPage(context, tel, recType, count, jobId, warning) {
+    var tracking = '';
+    try { tracking = '<a href="' + esc(jobs.route(jobId)) + '">ติดตามสถานะงานนี้</a>'; }
+    catch (routeError) {
+      log.error({ title: 'PLD accepted job tracking link unavailable', details: { jobId: jobId, message: routeError.message } });
+      tracking = 'ระบบรับงานแล้ว กรุณาเปิดหน้าพิมพ์เป็นชุดเพื่อดูงานของฉันด้วยหมายเลขงานด้านบน ไม่ต้องส่งซ้ำ';
+    }
     var html = pageShell('ส่งเข้าคิวแล้ว', [
       '<h1>ส่งเข้าคิวแล้ว</h1>',
-      '<p class="sub">ชุดนี้มี ' + count + ' ใบ ซึ่งมากกว่าที่พิมพ์สดได้ในครั้งเดียว ' +
-      'ระบบจึงทยอยสร้างให้เบื้องหลัง</p>',
-      '<p class="ref">เมื่อเสร็จ ระบบจะ<b>อีเมลลิงก์ไฟล์รวม</b>ไปที่อีเมลของคุณ ' +
-      'และเก็บไฟล์ไว้ใน File Cabinet โฟลเดอร์ <code>' + esc(OUTPUT_FOLDER_NAME) + '</code><br />' +
-      'หมายเลขงาน <code>' + esc(taskId) + '</code> · รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p>',
-      '<p class="hint">ติดตามสถานะได้ที่ Customization → Scripting → Map/Reduce Script Status ' +
-      '(ค้นด้วยหมายเลขงานด้านบน) · ใบที่สร้างไม่สำเร็จจะถูกระบุไว้ในอีเมลเป็นรายใบ</p>',
-      '<p><a href="?action=files">ดูไฟล์ชุดที่สร้างไว้แล้ว</a></p>',
+      '<p>เลือกไว้ ' + count + ' ใบ ระบบกำลังสร้างเอกสารเบื้องหลัง</p>',
+      '<p>หมายเลขงาน <code>' + esc(jobId) + '</code> · รหัสอ้างอิง <code>' + esc(tel.errorId) + '</code></p>',
+      '<p>เมื่อเสร็จ ระบบจะส่งอีเมลแจ้งผล คุณสามารถปิดหน้านี้และกลับมาติดตามงานด้วยผู้ใช้และบทบาทเดิม</p>',
+      warning ? '<p class="warn">' + esc(warning) + '</p>' : '',
+      '<p>' + tracking + '</p>',
       '<p><button class="primary" onclick="history.back()">กลับไปเลือกชุดถัดไป</button></p>'
     ].join('\n'));
-
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
     context.response.write(html);
   }
@@ -375,6 +709,19 @@ define([
           ') — มักเกิดจากข้อมูลที่มี & หรือ < ในช่องที่ template ยังไม่ผ่าน ?xml (#184)');
       }
     }
+  }
+
+  /** Exact byte count of the XML string pldRender.combinePdfDocs will hand to BFO. */
+  function pdfsetUtf8Bytes(docs) {
+    var wrapper = '<?xml version="1.0"?>\n' +
+      '<!DOCTYPE pdfset PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">\n' +
+      '<pdfset>\n\n</pdfset>';
+    var bytes = utf8Bytes(wrapper);
+    for (var i = 0; i < docs.length; i++) {
+      bytes += utf8Bytes(docs[i]);
+      if (i > 0) bytes += 1;
+    }
+    return bytes;
   }
 
   /** ยอดเงินในตารางเลือกเอกสาร — search คืนค่าดิบ (`53.261`) จึงจัดรูปให้อ่านออก */
@@ -411,6 +758,7 @@ define([
     var from = params.from || '';
     var to = params.to || '';
     var tplId = params.tplid || '';
+    var route = selfRoute();
 
     var rows = [];
     if (recType) {
@@ -422,15 +770,15 @@ define([
     var html = pageShell('พิมพ์เอกสารเป็นชุด', [
       '<h1>พิมพ์เอกสารเป็นชุด</h1>',
       '<p class="sub">เลือกประเภทเอกสารและช่วงวันที่ แล้วติ๊กใบที่ต้องการ — ระบบรวมทุกใบเป็น PDF ไฟล์เดียว</p>',
-      filterForm(recType, from, to, tplId),
-      recType ? documentList(recType, tplId, rows) : ''
+      filterForm(route, recType, from, to, tplId),
+      recType ? documentList(route, recType, tplId, rows) : ''
     ].join('\n'));
 
     context.response.setHeader({ name: 'Content-Type', value: 'text/html; charset=utf-8' });
     context.response.write(html);
   }
 
-  function filterForm(recType, from, to, tplId) {
+  function filterForm(route, recType, from, to, tplId) {
     var options = ['<option value="">— เลือกประเภทเอกสาร —</option>'];
     var titles = invoiceData.docTitles;
     Object.keys(titles).forEach(function (type) {
@@ -439,7 +787,8 @@ define([
     });
 
     return [
-      '<form method="GET" class="filters">',
+      '<form method="GET" action="' + esc(route) + '" class="filters">',
+      getRoutingInputs(route),
       '<label>ประเภทเอกสาร<select name="rectype" required>' + options.join('') + '</select></label>',
       '<label>วันที่ตั้งแต่<input type="date" name="from" value="' + esc(from) + '" /></label>',
       '<label>ถึงวันที่<input type="date" name="to" value="' + esc(to) + '" /></label>',
@@ -449,7 +798,7 @@ define([
     ].join('\n');
   }
 
-  function documentList(recType, tplId, rows) {
+  function documentList(route, recType, tplId, rows) {
     if (rows.length === 0) {
       return '<p class="warn">ไม่พบเอกสารที่ตรงเงื่อนไข — ลองขยายช่วงวันที่</p>';
     }
@@ -471,7 +820,7 @@ define([
     }).join('\n');
 
     return [
-      '<form method="POST" class="picker" id="pld-form">',
+      '<form method="POST" action="' + esc(route) + '" class="picker" id="pld-form">',
       // ปุ่มสองปุ่มใช้ hidden field ตัวนี้เลือกปลายทาง — ไม่ใช่ name="action" ที่ตัวปุ่ม
       // เพราะ field ชื่อซ้ำกันส่งถึง Suitelet แค่ค่าแรก (ดู parseIds)
       '<input type="hidden" name="action" id="pld-action" value="print" />',
@@ -550,16 +899,20 @@ define([
    */
   function writeSummaryPage(context, tel, recType, tplId, result) {
     var parts = ['<h1>พิมพ์เป็นชุดไม่ครบ</h1>'];
+    var route = selfRoute();
 
     parts.push('<p class="sub">เอกสารที่เลือกไว้ ' + (result.printed.length + result.failed.length + result.pending.length) +
       ' ใบ · สร้างสำเร็จ ' + result.printed.length + ' ใบ · ล้มเหลว ' + result.failed.length +
       ' ใบ · ยังไม่ได้พิมพ์ ' + result.pending.length + ' ใบ</p>');
 
     if (result.pending.length > 0) {
-      parts.push('<p class="ref">' + (result.stopReason === 'time'
+      var stopMessage = result.stopReason === 'time'
         ? 'หยุดเพราะใช้เวลานานเกินกำหนดของหนึ่งคำสั่งพิมพ์'
-        : 'หยุดเพราะโควตาสคริปต์ของ NetSuite (usage units) กำลังจะหมด — วัดได้ว่าเอกสารชุดนี้ใช้ประมาณ ' +
-          result.worstCost + ' units ต่อใบ') +
+        : result.stopReason === 'size'
+          ? 'หยุดก่อนไฟล์รวมเกินขีดจำกัด XML 8 MiB UTF-8 — ลดจำนวนเอกสารหรือสำเนาในชุดถัดไป'
+          : 'หยุดเพราะโควตาสคริปต์ของ NetSuite (usage units) กำลังจะหมด — วัดได้ว่าเอกสารชุดนี้ใช้ประมาณ ' +
+            result.worstCost + ' units ต่อใบ';
+      parts.push('<p class="ref">' + stopMessage +
         '<br />กดปุ่มด้านล่างเพื่อพิมพ์ส่วนที่เหลือเป็นชุดถัดไป</p>');
     }
 
@@ -573,14 +926,14 @@ define([
     }
 
     if (result.printed.length > 0) {
-      parts.push(reprintForm(recType, tplId, result.printed.map(function (p) { return p.id; }),
+      parts.push(reprintForm(route, recType, tplId, result.printed.map(function (p) { return p.id; }),
         'พิมพ์ ' + result.printed.length + ' ใบที่สร้างสำเร็จ'));
     }
     if (result.pending.length > 0) {
-      parts.push(reprintForm(recType, tplId, result.pending,
+      parts.push(reprintForm(route, recType, tplId, result.pending,
         'พิมพ์ ' + result.pending.length + ' ใบที่เหลือ'));
       // ทางลัดที่จบในคลิกเดียวเมื่อส่วนที่เหลือยังใหญ่กว่าโควตาอยู่ดี
-      parts.push(reprintForm(recType, tplId, result.pending,
+      parts.push(reprintForm(route, recType, tplId, result.pending,
         'ส่ง ' + result.pending.length + ' ใบที่เหลือเข้าคิว', 'queue'));
     }
     parts.push('<p class="hint">การกดปุ่มคือการสั่ง render ใหม่สำหรับใบในกลุ่มนั้น ' +
@@ -591,8 +944,8 @@ define([
     context.response.write(pageShell('พิมพ์เป็นชุดไม่ครบ', parts.join('\n')));
   }
 
-  function reprintForm(recType, tplId, ids, label, action) {
-    return '<form method="POST" class="again">' +
+  function reprintForm(route, recType, tplId, ids, label, action) {
+    return '<form method="POST" action="' + esc(route) + '" class="again">' +
       '<input type="hidden" name="action" value="' + esc(action || 'print') + '" />' +
       '<input type="hidden" name="rectype" value="' + esc(recType) + '" />' +
       (tplId ? '<input type="hidden" name="tplid" value="' + esc(tplId) + '" />' : '') +

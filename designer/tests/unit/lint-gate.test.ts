@@ -15,6 +15,7 @@ vi.mock('idb-keyval', () => {
   const mem = new Map<string, unknown>();
   return {
     get: async (k: string) => mem.get(k),
+    update: async (k: string, fn: (v: unknown) => unknown) => { mem.set(k, fn(mem.get(k))); },
     set: async (k: string, v: unknown) => { mem.set(k, v); },
     del: async (k: string) => { mem.delete(k); },
     keys: async () => [...mem.keys()],
@@ -25,7 +26,7 @@ vi.mock('idb-keyval', () => {
 const BROKEN_XML = '<pdf><body><p>${record.entity!""}</p></body></pdf>';
 let exported = BROKEN_XML;
 vi.mock('../../src/services/bfo-export.service', () => ({
-  exportBfoXml: () => exported,
+  getCurrentBfoXml: () => exported,
 }));
 
 import { AppStore } from '../../src/state/store';

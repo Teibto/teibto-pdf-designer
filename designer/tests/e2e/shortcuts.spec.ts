@@ -5,7 +5,7 @@
  * @since 2026-07-24
  */
 import { test, expect } from '@playwright/test';
-import { gotoApp } from './_helpers';
+import { gotoApp, headerBtn, openHeaderMore } from './_helpers';
 
 const sheet = (p: import('@playwright/test').Page) => p.locator('pld-shortcuts-modal');
 
@@ -33,9 +33,10 @@ test.describe('Shortcuts cheatsheet', () => {
     await expect(sheet(page).locator('.backdrop')).toHaveCount(0);
   });
 
-  test('the header ⌨ button opens the cheatsheet', async ({ page }) => {
+  test('the header overflow action opens the cheatsheet', async ({ page }) => {
     await gotoApp(page);
-    await page.locator('pld-header button[title*="คีย์ลัด"]').click();
+    await openHeaderMore(page);
+    await headerBtn(page, 'Shortcuts').click();
     await expect(sheet(page).locator('.card')).toBeVisible();
   });
 });

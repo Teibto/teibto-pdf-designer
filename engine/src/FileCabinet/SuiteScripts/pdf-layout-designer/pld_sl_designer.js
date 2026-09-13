@@ -149,13 +149,12 @@ define([
   function buildNsContext(context) {
     const user = runtime.getCurrentUser();
     const script = runtime.getCurrentScript();
-    // Font URLs for embedding Thai in exported BFO XML: prefer script params, else
-    // fall back to the company-config record (which stores them) so Thai renders
-    // without needing the deployment params set. No specific transaction is open
-    // here (this is app bootstrap, not a record's data), so scope by the current
-    // user's own subsidiary (OneWorld, #144) — the best available context.
+    // Use the exact company-config path actual rendering requires. Legacy script
+    // parameters must not mask a missing/broken config and suppress the SPA's Thai
+    // font warning. No transaction is open here, so scope by the current user's
+    // subsidiary (OneWorld, #144) — the best available bootstrap context.
     var cfg = {};
-    try { cfg = companyConfig.load(user.subsidiary); } catch (e) { cfg = {}; }
+    try { cfg = companyConfig.load(user.subsidiary, { forRender: true }); } catch (e) { cfg = {}; }
 
     const ctx = {
       userId: user.id,
@@ -172,8 +171,8 @@ define([
       recordId: context.request.parameters.recid || null,
       // File Cabinet URLs of THSarabunNew TTFs — designer embeds them as
       // <link type="font"> in exported BFO XML (server BFO has no Thai fonts)
-      fontRegularUrl: script.getParameter({ name: 'custscript_pld_font_regular' }) || cfg.fontRegular || null,
-      fontBoldUrl: script.getParameter({ name: 'custscript_pld_font_bold' }) || cfg.fontBold || null,
+      fontRegularUrl: cfg.fontRegular || null,
+      fontBoldUrl: cfg.fontBold || null,
       // #189: บอก SPA ตั้งแต่ตอนเปิดว่า role นี้บันทึกได้ไหม — ผู้ใช้ที่แก้ไม่ได้ควรเห็น
       // โหมดอ่านอย่างเดียวตั้งแต่แรก ไม่ใช่ออกแบบไปครึ่งชั่วโมงแล้วโดนปฏิเสธตอนกดบันทึก
       // (server ยังเป็นคนตัดสินจริงทุกครั้ง — ค่านี้ใช้แค่ทำให้ UI ซื่อสัตย์)

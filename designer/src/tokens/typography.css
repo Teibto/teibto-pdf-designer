@@ -1,43 +1,52 @@
-/* ═══════════════════════════════════════
-   TYPOGRAPHY TOKENS
-   ═══════════════════════════════════════ */
-
+/* Oracle Redwood typography scale with Thai-capable fallbacks.
+ * @author Wichit Wongta
+ * @since 2026-09-11
+ */
+/* Oracle Sans is host-provided when available; no Oracle font is bundled.
+ * PLD UI Sans embeds licensed Sarabun Latin/Thai subsets for portable UI coverage.
+ * Installed Thai families, including Windows Leelawadee UI, remain final fallbacks. */
 :root {
-  /* ─── Font Families ─── */
-  --font-sans:  'DM Sans', system-ui, -apple-system, sans-serif;
-  --font-mono:  'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-  --font-serif: 'Playfair Display', Georgia, serif;
-  --font-thai:  'Sarabun', 'Noto Sans Thai', sans-serif;
-
-  /* ─── Font Sizes ─── */
-  --text-2xs: 9px;
-  --text-xs:  10px;
-  --text-sm:  11.5px;
-  --text-base: 12.5px;
-  --text-md:  13px;
-  --text-lg:  14px;
-  --text-xl:  18px;
-  --text-2xl: 24px;
-
-  /* ─── Font Weights ─── */
-  --font-light:    300;
-  --font-normal:   400;
-  --font-medium:   500;
-  --font-semibold: 600;
-  --font-bold:     700;
-  --font-extrabold: 800;
-
-  /* ─── Line Heights ─── */
-  --leading-tight:  1.2;
-  --leading-snug:   1.4;
-  --leading-normal: 1.5;
+  --f-sans: "Oracle Sans", "PLD UI Sans", "Helvetica Neue", "IBM Plex Sans Thai", "Noto Sans Thai", Sarabun, "Leelawadee UI", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --f-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --t-xs: 11px;
+  --t-sm: 12px;
+  --t-base: 14px;
+  --t-md: 16px;
+  --t-lg: 18px;
+  --t-xl: 20px;
+  --t-2xl: 24px;
+  --w-regular: 400;
+  --w-medium: 400;
+  --w-semibold: 600;
+  --w-bold: 700;
+  --lh-tight: 1.25;
+  --lh-normal: 1.5;
+  --font-sans: var(--f-sans);
+  --font-mono: var(--f-mono);
+  --font-serif: var(--f-sans);
+  --font-thai: var(--f-sans);
+  --text-2xs: var(--t-xs);
+  --text-xs: var(--t-xs);
+  --text-sm: var(--t-sm);
+  --text-base: var(--t-base);
+  --text-md: var(--t-base);
+  --text-lg: var(--t-md);
+  --text-xl: var(--t-xl);
+  --text-2xl: var(--t-2xl);
+  --font-light: var(--w-regular);
+  --font-normal: var(--w-regular);
+  --font-medium: var(--w-medium);
+  --font-semibold: var(--w-semibold);
+  --font-bold: var(--w-bold);
+  --font-extrabold: var(--w-bold);
+  --leading-tight: var(--lh-tight);
+  --leading-snug: 1.4;
+  --leading-normal: var(--lh-normal);
   --leading-relaxed: 1.6;
-  --leading-loose:  1.7;
-
-  /* ─── Letter Spacing ─── */
-  --tracking-tight:  -0.5px;
+  --leading-loose: 1.7;
+  --tracking-tight: -0.25px;
   --tracking-normal: 0;
-  --tracking-wide:   0.5px;
-  --tracking-wider:  0.8px;
-  --tracking-widest: 1.2px;
+  --tracking-wide: 0.25px;
+  --tracking-wider: 0.5px;
+  --tracking-widest: 0.75px;
 }

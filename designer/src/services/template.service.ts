@@ -5,7 +5,7 @@
  *
  * @author Wichit Wongta
  */
-import { get, set, del, keys } from 'idb-keyval';
+import { get, set, del, keys, update } from 'idb-keyval';
 import { nanoid } from 'nanoid';
 import type { DocumentTemplate, TemplateCopy, PaginationConfig } from '../models/template';
 import type { AppStore } from '../state/store';
@@ -20,7 +20,7 @@ import { migrateTemplate, needsMigration, isFutureVersion, CURRENT_VERSION } fro
 import { clearPaginationCache } from './pagination.service';
 import { elementsToBands } from './band-layout.service';
 import { extractJsonKeys } from '../state/actions';
-import { exportBfoXml, type BfoExportOptions } from './bfo-export.service';
+import { getCurrentBfoXml, type BfoExportOptions } from './bfo-export.service';
 import { saveNsTemplate, getNsContext, getCachedBindingContract } from './netsuite-adapter.service';
 
 const TEMPLATE_PREFIX = 'pld-template-';
@@ -72,9 +72,44 @@ export async function listTemplates(): Promise<DocumentTemplate[]> {
 // SAVE
 // ═══════════════════════════════════════
 
+const pendingSaves = new WeakSet<AppStore>();
+
+async function withSaveLock<T>(store: AppStore, save: () => Promise<T>): Promise<T> {
+  if (pendingSaves.has(store)) throw new Error('กำลังบันทึกเทมเพลต กรุณารอให้เสร็จก่อน');
+  pendingSaves.add(store);
+  try { return await save(); }
+  finally { pendingSaves.delete(store); }
+}
+
+/** Attach the saved identity only to its editing session; preserve newer edits. */
+async function acknowledgeSave(store: AppStore, saved: AppStore['state'], session: number, id: string): Promise<void> {
+  const current = store.state;
+  if (store.documentSession !== session || current.template.id !== saved.template.id) return;
+  const unchanged = current.template.name === saved.template.name &&
+      current.editorMode === saved.editorMode && current.rawXml === saved.rawXml &&
+      current.elements === saved.elements && current.bands === saved.bands &&
+      current.page === saved.page && current.pagination === saved.pagination &&
+      current.copies === saved.copies && current.jsonData === saved.jsonData;
+  store.dispatch((d) => {
+    d.template.id = id;
+    d.template.isDirty = !unchanged;
+  });
+  if (unchanged) {
+    const owner = draftOwner(store, session);
+    try {
+      await update<TemplateDraft | undefined>(DRAFT_KEY, (draft) => draft?.owner === owner && store.documentSession === session && !store.state.template.isDirty ? undefined : draft);
+    } catch (err) { console.warn('Failed to clear saved draft:', err); }
+  }
+}
+
 /** Save current state as a template */
 export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
+  return withSaveLock(store, () => persistTemplate(store));
+}
+
+async function persistTemplate(store: AppStore): Promise<DocumentTemplate> {
   const state = store.state;
+  const session = store.documentSession;
   const now = new Date().toISOString();
 
   const template: DocumentTemplate = {
@@ -91,14 +126,13 @@ export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
     bands: state.bands.length ? structuredClone(state.bands) : undefined,
     copies: state.copies && state.copies.length ? structuredClone(state.copies) : undefined,
     jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
+    editorMode: state.editorMode,
+    rawXml: state.editorMode === 'xml' ? state.rawXml : undefined,
   };
 
   await set(`${TEMPLATE_PREFIX}${template.id}`, template);
 
-  store.dispatch((d) => {
-    d.template.id = template.id;
-    d.template.isDirty = false;
-  });
+  await acknowledgeSave(store, state, session, template.id);
 
   return template;
 }
@@ -117,12 +151,33 @@ export async function saveTemplate(store: AppStore): Promise<DocumentTemplate> {
  * dialog (#138) overrides it and may flag the template as the record type's print
  * default via opts.
  */
+export function needsNetSuiteRecordType(store: AppStore): boolean {
+  const { template } = store.state;
+  // Loaded metadata is authoritative even when an older template stored blank.
+  // A legacy ID with no metadata can still update without replacing server fields.
+  if (template.id) return template.nsMetadata !== undefined && !template.nsMetadata.rectype.trim();
+  return !(template.nsMetadata?.rectype.trim() || getNsContext()?.recordType?.trim());
+}
+
 export async function saveTemplateToNetSuite(
   store: AppStore,
   opts: { rectype?: string; isDefault?: boolean } = {},
-): Promise<{ id: string }> {
+): Promise<{ id: string; warning?: string }> {
+  return withSaveLock(store, () => persistTemplateToNetSuite(store, opts));
+}
+
+async function persistTemplateToNetSuite(
+  store: AppStore,
+  opts: { rectype?: string; isDefault?: boolean },
+): Promise<{ id: string; warning?: string }> {
   const state = store.state;
+  const session = store.documentSession;
   const ctx = getNsContext();
+  const explicitType = opts.rectype?.trim();
+  if ((opts.rectype !== undefined && !explicitType) || (opts.rectype === undefined && needsNetSuiteRecordType(store))) {
+    throw new Error('กรุณาเลือกประเภทเอกสารในกล่องบันทึกเข้า NetSuite ก่อนบันทึก');
+  }
+  const newRecordType = state.template.nsMetadata?.rectype.trim() || ctx?.recordType?.trim();
 
   const options: BfoExportOptions = {
     useBands: true,           // band layout is authoritative (#47 cutover)
@@ -132,16 +187,16 @@ export async function saveTemplateToNetSuite(
   // The Thai font is bound to the config record inside exportBfoXml (#156) — no
   // per-account URL is baked in here, so a saved template keeps working after the
   // font file is re-saved in the File Cabinet (its h= token changes).
-  const xml = exportBfoXml(state, options);
+  const xml = getCurrentBfoXml(state, options);
 
-  const designerJson = JSON.stringify({
-    elements: state.elements,
-    page: state.page,
-    pagination: state.pagination,
-    // Persist band edits so a re-edit restores them (#47 3b).
-    bands: state.bands.length ? state.bands : undefined,
-    copies: state.copies && state.copies.length ? state.copies : undefined,
-  });
+  const designerJson = state.editorMode === 'visual' ? JSON.stringify({
+      elements: state.elements,
+      page: state.page,
+      pagination: state.pagination,
+      // Persist band edits so a re-edit restores them (#47 3b).
+      bands: state.bands.length ? state.bands : undefined,
+      copies: state.copies && state.copies.length ? state.copies : undefined,
+    }) : undefined;
 
   // กับดัก BFO ที่พิสูจน์แล้วว่าทำให้เอกสารพิมพ์ไม่ออกหรือพิมพ์ว่าง ต้องตายตรงนี้ (#191).
   // ปล่อยผ่านไปแล้วมันจะไปโผล่ตอนผู้ใช้กด Print ที่หน้างาน ซึ่งไกลจากคนที่แก้ได้ที่สุด
@@ -159,24 +214,28 @@ export async function saveTemplateToNetSuite(
 
   // Fail before the POST with an actionable message, rather than let the server
   // reject an over-cap CLOBTEXT with an opaque error (#143).
-  assertClobSize('ข้อมูลเทมเพลต (Designer Data)', designerJson);
+  if (designerJson !== undefined) assertClobSize('ข้อมูลเทมเพลต (Designer Data)', designerJson);
   assertClobSize('BFO XML', xml);
 
   const result = await saveNsTemplate({
     id: state.template.id || undefined,
     name: state.template.name || 'Untitled Template',
-    data: designerJson,
+    ...(designerJson !== undefined ? { data: designerJson } : {}),
     xml,
-    rectype: opts.rectype ?? ctx?.recordType ?? undefined,
+    rectype: explicitType ?? (state.template.id ? undefined : newRecordType),
     isDefault: opts.isDefault,
   });
 
-  store.dispatch((d) => {
-    d.template.id = result.id;
-    d.template.isDirty = false;
-  });
+  await acknowledgeSave(store, state, session, result.id);
+  if (store.documentSession === session && store.state.template.id === result.id) {
+    const rectype = explicitType ?? state.template.nsMetadata?.rectype ?? (!state.template.id ? newRecordType : undefined);
+    const isDefault = opts.isDefault ?? state.template.nsMetadata?.isDefault;
+    if (rectype && isDefault !== undefined) store.dispatch((d) => {
+      d.template.nsMetadata = { rectype, isDefault };
+    });
+  }
 
-  return { id: result.id };
+  return { id: result.id, ...(result.warning ? { warning: result.warning } : {}) };
 }
 
 // ═══════════════════════════════════════
@@ -228,8 +287,11 @@ export async function loadTemplate(
 
   // Step 3: Apply to store
   clearPaginationCache();
+  store.beginDocumentSession();
   const template = data as unknown as DocumentTemplate;
   store.dispatch((d) => {
+    d.editorMode = template.editorMode === 'xml' ? 'xml' : 'visual';
+    d.rawXml = template.editorMode === 'xml' ? template.rawXml ?? '' : '';
     d.elements = template.elements;
     // Restore persisted bands; legacy element-only templates regenerate them from
     // elements so band mode always has a structure (#47 3b).
@@ -304,6 +366,8 @@ export function exportTemplateJson(store: AppStore): string {
     bands: state.bands.length ? structuredClone(state.bands) : undefined,
     copies: state.copies && state.copies.length ? structuredClone(state.copies) : undefined,
     jsonData: state.jsonData ? structuredClone(state.jsonData) : null,
+    editorMode: state.editorMode,
+    rawXml: state.editorMode === 'xml' ? state.rawXml : undefined,
   };
 
   return JSON.stringify(template, null, 2);
@@ -326,7 +390,7 @@ export function importTemplateJson(
   try {
     raw = JSON.parse(json);
   } catch (err) {
-    throw new Error(`Invalid JSON: ${(err as Error).message}`);
+    throw new Error(`Invalid JSON: ${(err as Error).message}`, { cause: err });
   }
 
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -366,8 +430,11 @@ export function importTemplateJson(
 
   // Step 3: Apply
   clearPaginationCache();
+  store.beginDocumentSession();
   const template = raw as unknown as DocumentTemplate;
   store.dispatch((d) => {
+    d.editorMode = template.editorMode === 'xml' ? 'xml' : 'visual';
+    d.rawXml = template.editorMode === 'xml' ? template.rawXml ?? '' : '';
     d.elements = template.elements || [];
     d.bands = template.bands ?? elementsToBands(template.elements || []);
     d.copies = template.copies ?? null;
@@ -375,9 +442,12 @@ export function importTemplateJson(
     d.pagination = { ...createDefaultPagination(), ...(template.pagination || {}) };
     d.jsonData = template.jsonData || null;
     d.jsonKeys = template.jsonData ? extractJsonKeys(template.jsonData) : [];
-    d.template.id = template.id;
+    // Imported IDs describe an external artifact, not a persisted save target in
+    // this account/browser. First Save must create a new, explicitly configured template.
+    d.template.id = null;
+    delete d.template.nsMetadata;
     d.template.name = template.name;
-    d.template.isDirty = false;
+    d.template.isDirty = true;
     d.selectedId = null;
     d.multiSelect = [];
     d.currentPage = 1;
@@ -397,8 +467,12 @@ export const DRAFT_KEY = 'pld-draft-current';
 /** Shape of an autosaved draft — enough to fully restore an in-progress edit
  *  after a crash, session timeout, or accidental tab close (#140). */
 export interface TemplateDraft {
+  owner?: string;
+  nsMetadata?: { rectype: string; isDefault: boolean };
   templateId: string | null;
   templateName: string;
+  editorMode?: 'visual' | 'xml';
+  rawXml?: string;
   page: PageConfig;
   pagination: PaginationConfig;
   elements: CanvasElement[];
@@ -417,12 +491,26 @@ export interface TemplateDraft {
  * new Date() inside this function) so saveDraft stays pure and deterministic
  * for unit tests.
  */
+const draftOwners = new WeakMap<AppStore, { session: number; owner: string }>();
+function draftOwner(store: AppStore, session: number): string {
+  let entry = draftOwners.get(store);
+  if (!entry || entry.session !== session) {
+    entry = { session, owner: nanoid() };
+    draftOwners.set(store, entry);
+  }
+  return entry.owner;
+}
+
 export async function saveDraft(store: AppStore, now: string): Promise<void> {
   const state = store.state;
 
   const draft: TemplateDraft = {
+    owner: draftOwner(store, store.documentSession),
+    nsMetadata: state.template.nsMetadata,
     templateId: state.template.id,
     templateName: state.template.name,
+    editorMode: state.editorMode,
+    rawXml: state.editorMode === 'xml' ? state.rawXml : undefined,
     page: structuredClone(state.page),
     pagination: structuredClone(state.pagination),
     elements: structuredClone(state.elements),
@@ -439,6 +527,21 @@ export async function saveDraft(store: AppStore, now: string): Promise<void> {
 export async function getDraft(): Promise<TemplateDraft | null> {
   const draft = await get<TemplateDraft>(DRAFT_KEY);
   return draft ?? null;
+}
+
+/** Claim restored recovery data without replacing a newer draft from another editor. */
+export async function claimDraft(store: AppStore, expected: TemplateDraft): Promise<void> {
+  const owner = draftOwner(store, store.documentSession);
+  const snapshot = JSON.stringify(expected);
+  await update<TemplateDraft | undefined>(DRAFT_KEY, (draft) =>
+    JSON.stringify(draft) === snapshot ? { ...expected, owner } : draft);
+}
+
+/** Discard only the recovery entry the user actually reviewed. */
+export async function dismissDraft(expected: TemplateDraft): Promise<void> {
+  const snapshot = JSON.stringify(expected);
+  await update<TemplateDraft | undefined>(DRAFT_KEY, (draft) =>
+    JSON.stringify(draft) === snapshot ? undefined : draft);
 }
 
 /** Delete the autosaved draft — call after a successful save, a restore, or a

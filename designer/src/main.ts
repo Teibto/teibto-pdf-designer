@@ -7,6 +7,7 @@
 
 // ─── Global Styles ───
 import './styles/tailwind.css';
+import './styles/fonts.css';
 
 // ─── Theme (#121) — apply saved Dark/Light before first render (กัน flash) ───
 import { initTheme } from './services/theme.service';
@@ -23,6 +24,6 @@ export { registerKeyboardShortcuts } from './services/keyboard.service';
 // ─── Console Banner ───
 console.log(
   '%c◇ PDF Layout Designer v2.0 %c Lit + Tailwind + TypeScript ',
-  'background: #4f6ef7; color: #fff; padding: 4px 8px; border-radius: 4px 0 0 4px; font-weight: bold;',
-  'background: #1a1b25; color: #8a8ca0; padding: 4px 8px; border-radius: 0 4px 4px 0;',
+  'background: #36677d; color: #fff; padding: 4px 8px; border-radius: 4px 0 0 4px; font-weight: bold;',
+  'background: #f1efed; color: #4f4b47; padding: 4px 8px; border-radius: 0 4px 4px 0;',
 );

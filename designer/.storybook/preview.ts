@@ -2,13 +2,13 @@
 const preview = {
   parameters: {
     backgrounds: {
-      default: 'dark',
-      values: [
-        { name: 'dark', value: '#12131d' },
-        { name: 'light', value: '#ffffff' },
-      ],
+      options: {
+        dark: { name: 'dark', value: '#12131d' },
+        light: { name: 'Oracle Redwood', value: '#f5f4f2' },
+      },
     },
   },
+  initialGlobals: { backgrounds: { value: 'light' } },
 };
 
 export default preview;

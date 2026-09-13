@@ -44,19 +44,24 @@ import {
 
 const INPUT_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
-function isInputFocused(e: KeyboardEvent): boolean {
-  const target = e.target as HTMLElement;
-  if (INPUT_TAGS.has(target.tagName)) return true;
-  if (target.isContentEditable) return true;
-  // Check shadow DOM
-  const active = (target.shadowRoot?.activeElement ?? document.activeElement) as HTMLElement | null;
-  if (active && INPUT_TAGS.has(active.tagName)) return true;
+/** Shared by canvas shortcuts and app-shell undo/redo. */
+export function shouldIgnoreShortcut(e: KeyboardEvent): boolean {
+  if (e.defaultPrevented || e.isComposing || e.keyCode === 229) return true;
+  const isEditable = (target: EventTarget | null): boolean => target instanceof HTMLElement &&
+    (INPUT_TAGS.has(target.tagName) || target.isContentEditable ||
+      (target.hasAttribute('contenteditable') && target.getAttribute('contenteditable') !== 'false'));
+  if (e.composedPath().some(isEditable) || isEditable(e.target)) return true;
+  let active = document.activeElement;
+  while (active) {
+    if (isEditable(active)) return true;
+    active = active.shadowRoot?.activeElement ?? null;
+  }
   return false;
 }
 
 export function registerKeyboardShortcuts(store: AppStore): () => void {
   const handler = (e: KeyboardEvent) => {
-    if (isInputFocused(e)) return;
+    if (shouldIgnoreShortcut(e)) return;
 
     const isMod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();

@@ -64,6 +64,19 @@ function merge(...results: ValidationResult[]): ValidationResult {
 // ELEMENT VALIDATION
 // ═══════════════════════════════════════
 
+const VALID_BARCODE_TYPES = new Set(['code128', 'code39', 'ean13', 'qrcode']);
+
+function validateBarcodeType(value: unknown, path: string): ValidationResult {
+  if (typeof value !== 'string' || !VALID_BARCODE_TYPES.has(value)) {
+    return fail([{
+      path,
+      message: 'Barcode type must be code128, code39, ean13, or qrcode',
+      code: 'INVALID_BARCODE_TYPE',
+    }]);
+  }
+  return ok();
+}
+
 /** Validate a single element's properties */
 export function validateElement(el: unknown, index: number): ValidationResult {
   const prefix = `elements[${index}]`;
@@ -111,6 +124,9 @@ export function validateElement(el: unknown, index: number): ValidationResult {
   }
 
   // Type-specific validation
+  if (e.type === 'barcode') {
+    errors.push(...validateBarcodeType(e.barcodeType, `${prefix}.barcodeType`).errors);
+  }
   if (e.type === 'text' || e.type === 'header') {
     const te = e as Partial<TextElement>;
     if (typeof te.fontSize === 'number' && (te.fontSize < 1 || te.fontSize > 200)) {
@@ -302,6 +318,7 @@ export function validatePropertyUpdate(
   }
 
   // Type-specific value validation
+  if (key === 'barcodeType') return validateBarcodeType(value, key);
   if (key === 'fontSize' && (typeof value !== 'number' || value < 1 || value > 200)) {
     return fail([{ path: key, message: 'Font size must be 1-200', code: 'OUT_OF_RANGE' }]);
   }

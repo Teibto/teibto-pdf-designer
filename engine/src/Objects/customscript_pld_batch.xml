@@ -9,7 +9,8 @@
       <allroles>T</allroles>
       <isdeployed>T</isdeployed>
       <loglevel>DEBUG</loglevel>
-      <runasrole>ADMINISTRATOR</runasrole>
+      <isonline>F</isonline>
+      <runasrole></runasrole>
       <status>RELEASED</status>
       <title>PLD Batch Print</title>
     </scriptdeployment>

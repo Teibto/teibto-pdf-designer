@@ -19,7 +19,6 @@
  * @author Wichit Wongta
  */
 define([
-  'N/render',
   'N/record',
   'N/search',
   'N/file',
@@ -30,7 +29,7 @@ define([
   './pld_lib_auth',
   './pld_lib_tpl_audit',
   './pld_lib_invoice_data'
-], function (render, record, search, file, runtime, log, xml, pldRender, auth, tplAudit, invoiceData) {
+], function (record, search, file, runtime, log, xml, pldRender, auth, tplAudit, invoiceData) {
 
   // ─── Custom Record Config (owned by the render core, #181) ───
   const TPL_RECORD_TYPE   = pldRender.TPL.TYPE;
@@ -334,6 +333,25 @@ define([
   // LIVE PREVIEW — render unsaved designer XML against the real record (#12)
   // ═══════════════════════════════════════════════════
 
+  /** Same persisted-input bounds as the durable batch snapshot pipeline. */
+  var MAX_PREVIEW_XML_CHARS = 1000000;
+  var MAX_PREVIEW_PAYLOAD_BYTES = 8 * 1024 * 1024;
+
+  function utf8Bytes(text) {
+    var bytes = 0;
+    for (var i = 0; i < text.length; i++) {
+      var c = text.charCodeAt(i);
+      if (c < 128) bytes++;
+      else if (c < 2048) bytes += 2;
+      else if (c >= 0xd800 && c <= 0xdbff && i + 1 < text.length &&
+          text.charCodeAt(i + 1) >= 0xdc00 && text.charCodeAt(i + 1) <= 0xdfff) {
+        bytes += 4;
+        i++;
+      } else bytes += 3;
+    }
+    return bytes;
+  }
+
   /**
    * Preview the CURRENT (unsaved) designer XML with the same record + data
    * sources Print uses — guarantees "preview == print". POST body:
@@ -348,7 +366,22 @@ define([
     }
 
     tel.stage = 'parse-body';
-    var body = JSON.parse(context.request.body || '{}');
+    var rawBody = context.request.body || '{}';
+    if (typeof rawBody !== 'string') throw new Error('preview-live request body must be JSON text');
+    if (utf8Bytes(rawBody) > MAX_PREVIEW_PAYLOAD_BYTES) {
+      throw new Error('preview-live request body exceeds the 8 MiB UTF-8 payload limit');
+    }
+    var body = JSON.parse(rawBody);
+    if (typeof body.xml !== 'string') {
+      throw new Error('preview-live requires xml (export BFO from the designer)');
+    }
+    if (body.xml.length > MAX_PREVIEW_XML_CHARS) {
+      throw new Error('preview-live XML exceeds the 1000000 character limit');
+    }
+    var renderPayload = JSON.stringify({ xml: body.xml, data: body.data, copies: body.copies });
+    if (utf8Bytes(renderPayload) > MAX_PREVIEW_PAYLOAD_BYTES) {
+      throw new Error('preview-live XML/data/copies exceed the 8 MiB UTF-8 payload limit');
+    }
     if (!body.xml)     throw new Error('preview-live requires xml (export BFO from the designer)');
     if (!body.rectype) throw new Error('preview-live requires rectype');
     if (!body.recid && !body.data && body.sample !== true) {
@@ -375,8 +408,7 @@ define([
       out = pldRender.renderSampleDocument(body.xml, body.rectype, pvCopies, tel);
     } else if (body.data) {
       // synthetic-data preview (#75): caller supplies the bound object itself
-      out = { pdfFile: pldRender.makeRenderer(body.xml, body.data, null, tel, pvCopies[0]).renderAsPdf() };
-      copiesCount = 1;
+      out = pldRender.renderSampleDocument(body.xml, body.rectype, pvCopies, tel, body.data);
     } else {
       out = pldRender.renderDocument(body.xml, body.rectype, body.recid, pvCopies, tel);
     }
@@ -398,32 +430,27 @@ define([
     if (!tplId) throw new Error('Missing tplid for preview');
 
     tel.stage = 'load-template';
-    // .xml — loadTemplate returns { xml, copies } (#92). Reading the object itself
-    // used to land here and blow up on .replace() below, so ?action=preview has
-    // been dead since the copy set was added; the split made it visible (#181).
-    var tplXml = pldRender.loadTemplate(tplId).xml;
+    var tpl = pldRender.loadTemplate(tplId);
+    var recType = tpl.rectype;
+    tel.rectype = recType || '';
+    if (!recType) {
+      throw new Error('Template ' + tplId + ' has no record type. Re-save it from the designer before previewing.');
+    }
+    var copies = pldRender.resolveCopies(tpl.copies, recType);
 
-    // Replace FreeMarker expressions with placeholder text for preview.
-    // The preview renderer has no data sources bound, so ANY ${...} left in
-    // the template (record, line, company, context, ...) is a render error —
-    // strip every interpolation and every <#...> directive, not just record.*.
-    var previewXml = tplXml
-      .replace(/\$\{[^}]*\}/g, '[Sample Data]')
-      .replace(/<#[^>]*>/g, '')
-      .replace(/<\/#[^>]*>/g, '');
-
+    // A saved-template preview is a real render against the engine-owned sample
+    // contract. Never strip FreeMarker or invoke N/render here: doing either
+    // creates a second renderer that can report success for XML Print will reject.
+    // pld_lib_render owns the complete binding/font/copy-set pipeline (#181/#191).
     tel.stage = 'render';
-    var renderer = render.create();
-    renderer.templateContent = previewXml;
+    var out = pldRender.renderSampleDocument(tpl.xml, recType, copies, tel);
+    out.pdfFile.name = 'preview.pdf';
 
-    var pdfFile = renderer.renderAsPdf();
-    pdfFile.name = 'preview.pdf';
-
-    logRenderOk(tel, { copies: 1 });
+    logRenderOk(tel, { copies: copies.length });
     tel.stage = 'write';
     context.response.setHeader({ name: 'Content-Type', value: 'application/pdf' });
     context.response.setHeader({ name: 'Content-Disposition', value: 'inline; filename="preview.pdf"' });
-    context.response.writeFile({ file: pdfFile, isInline: true });
+    context.response.writeFile({ file: out.pdfFile, isInline: true });
   }
 
   // ═══════════════════════════════════════════════════
@@ -553,6 +580,13 @@ define([
     }
 
     var body = JSON.parse(context.request.body);
+    if (Object.prototype.hasOwnProperty.call(body, 'isDefault') && typeof body.isDefault !== 'boolean') {
+      throw new Error('isDefault must be a boolean when supplied');
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'rectype') &&
+        (typeof body.rectype !== 'string' || !body.rectype.trim())) {
+      throw new Error('rectype must be a non-empty record type when supplied');
+    }
 
     // XML is mandatory on every save — the engine has no generator of its own,
     // so a template without XML can never render (#6, R4: no silent fallback).
@@ -572,8 +606,13 @@ define([
 
     // Built-in name is mandatory (custom record includeName=T) — set it too,
     // not only the custom label field, or save fails with "Please enter value(s) for: Name".
-    rec.setValue({ fieldId: 'name', value: body.name || 'Untitled' });
-    rec.setValue({ fieldId: TPL_FLD_NAME, value: body.name || 'Untitled' });
+    var name = body.name || rec.getValue({ fieldId: TPL_FLD_NAME }) || 'Untitled';
+    var recType = body.rectype || rec.getValue({ fieldId: TPL_FLD_REC_TYPE }) || '';
+    var isDefault = typeof body.isDefault === 'boolean' ? body.isDefault :
+      rec.getValue({ fieldId: TPL_FLD_IS_DEFAULT }) === true;
+    if (isDefault && !recType) throw new Error('A default template requires a record type');
+    rec.setValue({ fieldId: 'name', value: name });
+    rec.setValue({ fieldId: TPL_FLD_NAME, value: name });
 
     if (body.data) {
       rec.setValue({ fieldId: TPL_FLD_DATA, value: body.data });
@@ -582,33 +621,45 @@ define([
     if (body.rectype) {
       rec.setValue({ fieldId: TPL_FLD_REC_TYPE, value: body.rectype });
     }
-    if (body.isDefault === true) {
-      // Unset other defaults for this rectype first
-      clearDefaultForRecType(body.rectype, tplId);
-      rec.setValue({ fieldId: TPL_FLD_IS_DEFAULT, value: true });
-    }
+    rec.setValue({ fieldId: TPL_FLD_IS_DEFAULT, value: isDefault });
 
     var savedId = rec.save();
 
     var snap = tplAudit.snapshot({
       tplId: savedId,
       action: tplId ? 'update' : 'create',
-      name: body.name || 'Untitled',
-      rectype: body.rectype || '',
+      name: name,
+      rectype: recType,
       xml: body.xml,
-      data: body.data || '',
+      data: rec.getValue({ fieldId: TPL_FLD_DATA }) || '',
       note: body.note || ''
     });
 
     tplAudit.auditWrite(tplId ? 'update' : 'create', {
       tplid: String(savedId),
-      rectype: body.rectype || '',
-      name: body.name || 'Untitled',
-      isDefault: body.isDefault === true,
+      rectype: recType,
+      name: name,
+      isDefault: isDefault,
       version: snap.versionNo
     });
 
-    sendJson(context, { id: savedId, success: true, version: snap.versionNo });
+    // Content and version are durable before touching other records. Default
+    // selection spans records, so permission/concurrency failure must be visible
+    // without losing the new ID or pretending the template was never saved.
+    var warning = '';
+    if (isDefault) {
+      try { clearDefaultForRecType(recType, savedId); }
+      catch (e) {
+        warning = 'บันทึกเนื้อหาแล้ว (template ' + savedId + ', version ' + snap.versionNo +
+          ') แต่ตั้งค่า default ไม่ครบ — อาจมีหลาย default สำหรับ ' + recType +
+          '. ให้ผู้ดูแลตรวจสิทธิ์และเลือก default ให้เหลือหนึ่งรายการก่อนพิมพ์';
+        log.error({ title: 'PLD saved template default reconciliation failed', details: {
+          tplid: String(savedId), rectype: recType, version: snap.versionNo,
+          message: (e && e.message) || String(e)
+        } });
+      }
+    }
+    sendJson(context, { id: savedId, success: true, version: snap.versionNo, warning: warning });
   }
 
   /**

@@ -29,6 +29,7 @@
  */
 import type { AppState } from '../state/app-state';
 import type { AppStore } from '../state/store';
+import { tagAction } from '../state/middleware';
 import type { CanvasElement, TableElement } from '../models/element';
 import { ELEMENT_ROLES } from '../constants/roles';
 import { resolveBinding } from './binding.service';
@@ -68,62 +69,23 @@ export interface PageElement {
 }
 
 // ═══════════════════════════════════════
-// CACHE  [PERF-1] Fast fingerprint hash
+// CACHE — complete immutable inputs, never sampled document content
 // ═══════════════════════════════════════
 
+type PaginationInputs = Pick<AppState, 'elements' | 'pagination' | 'page' | 'jsonData'>;
 let _cache: {
-  key: string;
+  inputs: PaginationInputs;
+  mutableKey: string | null;
   result: PaginationResult;
 } | null = null;
+type HeaderMode = AppState['pagination']['headerMode'];
+let _finalizedCache = new WeakMap<PaginationResult, Map<HeaderMode, PaginationResult>>();
 
-function cacheKey(state: Readonly<AppState>): string {
-  const p = state.pagination;
-  const parts = [
-    state.elements.length,
-    state.elements.map((e) => `${e.id}:${e.role}:${e.h}:${e.binding || ''}`).join(','),
-    p.mode, p.rowsPerPage, p.baseRowHeight, p.lineHeightPx,
-    p.orphanWidowMinRows ?? 2, p.summaryBreak ?? 'auto',
-    (p.forceBreakBeforeRows ?? []).join(','),
-    p.keepTogetherField ?? '',
-    p.headerMode ?? 'all',
-    p.columnSpanField ?? '',
-    state.page.height,
-    state.jsonData ? fastJsonHash(state.jsonData) : '0',
-  ];
-  return parts.join('|');
-}
-
-/**
- * [PERF-1] Fast O(1) fingerprint for JSON data.
- * Instead of serialising every row*column we hash: array length + first + mid + last row.
- */
-function fastJsonHash(obj: Record<string, unknown>, prefix = ''): string {
-  const parts: string[] = [];
-  for (const key of Object.keys(obj).sort()) {
-    const fullKey = prefix ? `${prefix}.${key}` : key;
-    const val = obj[key];
-    if (Array.isArray(val)) {
-      const len = val.length;
-      const first = len > 0 ? rowFingerprint(val[0]) : '';
-      const last = len > 1 ? rowFingerprint(val[len - 1]) : '';
-      const mid = len > 2 ? rowFingerprint(val[Math.floor(len / 2)]) : '';
-      parts.push(`${fullKey}[${len}]:${first}|${mid}|${last}`);
-    } else if (val && typeof val === 'object') {
-      parts.push(fastJsonHash(val as Record<string, unknown>, fullKey));
-    } else {
-      parts.push(`${fullKey}=${String(val ?? '')}`);
-    }
-  }
-  return parts.join(';');
-}
-
-function rowFingerprint(item: unknown): string {
-  if (item && typeof item === 'object') {
-    return Object.values(item as Record<string, unknown>)
-      .map((v) => String(v ?? '').slice(0, 50))
-      .join(',');
-  }
-  return String(item ?? '').slice(0, 50);
+// Immer freezes the store's input branches. Reference equality detects every
+// edit while keeping UI-only selection/zoom cache hits O(1). Mutable callers
+// use a complete key: sampling rows or truncating text can return stale pages.
+function paginationInputs(state: Readonly<AppState>): PaginationInputs {
+  return { elements: state.elements, pagination: state.pagination, page: state.page, jsonData: state.jsonData };
 }
 
 // ═══════════════════════════════════════
@@ -131,27 +93,37 @@ function rowFingerprint(item: unknown): string {
 // ═══════════════════════════════════════
 
 export function computePagination(state: Readonly<AppState>): PaginationResult {
-  const key = cacheKey(state);
-  if (_cache && _cache.key === key) return _cache.result;
+  const inputs = paginationInputs(state);
+  const immutable = Object.values(inputs).every((value) => value === null || Object.isFrozen(value));
+  const mutableKey = immutable ? null : JSON.stringify(inputs);
+  if (_cache && (immutable
+    ? _cache.mutableKey === null && _cache.inputs.elements === inputs.elements &&
+      _cache.inputs.pagination === inputs.pagination && _cache.inputs.page === inputs.page &&
+      _cache.inputs.jsonData === inputs.jsonData
+    : _cache.mutableKey === mutableKey)) return _cache.result;
 
   const result =
     state.pagination.mode === 'rows'
       ? computeRowBased(state)
       : computeHeightBased(state);
 
-  _cache = { key, result };
+  _cache = { inputs, mutableKey, result };
   return result;
 }
 
 export function clearPaginationCache(): void {
   _cache = null;
+  _finalizedCache = new WeakMap();
 }
 
 export function applyPagination(store: AppStore): void {
   const result = computePagination(store.state);
-  store.dispatch((draft) => {
-    draft.totalPages = result.totalPages;
-  });
+  store.dispatch(tagAction(
+    (draft) => {
+      draft.totalPages = result.totalPages;
+    },
+    { name: 'applyPagination', undoable: false },
+  ));
 }
 
 // ═══════════════════════════════════════
@@ -637,24 +609,43 @@ function buildPage(
 export function finalizePagination(result: PaginationResult, state: Readonly<AppState>): PaginationResult {
   const lastPage = result.totalPages;
   const headerMode = state.pagination.headerMode ?? 'all';
+  let byHeaderMode = _finalizedCache.get(result);
+  const cached = byHeaderMode?.get(headerMode);
+  if (cached) return cached;
 
-  for (const page of result.pagesData) {
-    for (const pageEl of page.elements) {
+  let resultChanged = false;
+  const pagesData = result.pagesData.map((page) => {
+    let pageChanged = false;
+    const elements = page.elements.map((pageEl) => {
       const role = ELEMENT_ROLES[pageEl.element.role];
+      let visible = pageEl.visible;
 
       if (role.showOnPages === 'last') {
-        pageEl.visible = page.pageNumber === lastPage;
+        visible = page.pageNumber === lastPage;
       }
 
-      if (pageEl.element.role === 'header' && headerMode === 'firstLast') {
-        if (page.pageNumber === 1 || page.pageNumber === lastPage) {
-          pageEl.visible = true;
-        }
+      if (pageEl.element.role === 'header') {
+        visible = headerMode === 'all'
+          || page.pageNumber === 1
+          || (headerMode === 'firstLast' && page.pageNumber === lastPage);
       }
-    }
+
+      if (visible === pageEl.visible) return pageEl;
+      pageChanged = true;
+      resultChanged = true;
+      return { ...pageEl, visible };
+    });
+    return pageChanged ? { ...page, elements } : page;
+  });
+
+  const finalized = resultChanged ? { ...result, pagesData } : result;
+  if (!byHeaderMode) {
+    byHeaderMode = new Map();
+    _finalizedCache.set(result, byHeaderMode);
   }
+  byHeaderMode.set(headerMode, finalized);
 
-  return result;
+  return finalized;
 }
 
 // ═══════════════════════════════════════
@@ -811,6 +802,16 @@ export function getElementsForPage(
   pageNumber: number,
 ): PageElement[] {
   const result = finalizePagination(computePagination(state), state);
-  const page = result.pagesData.find((p) => p.pageNumber === pageNumber);
+  const page = getPageData(result, pageNumber);
   return page ? page.elements.filter((e) => e.visible) : [];
+}
+
+/** O(1) for canonical contiguous numbering; tolerate imported/test results defensively. */
+export function getPageData(result: PaginationResult, pageNumber: number): PageData | undefined {
+  const indexed = Number.isInteger(pageNumber) && pageNumber > 0
+    ? result.pagesData[pageNumber - 1]
+    : undefined;
+  return indexed?.pageNumber === pageNumber
+    ? indexed
+    : result.pagesData.find((page) => page.pageNumber === pageNumber);
 }

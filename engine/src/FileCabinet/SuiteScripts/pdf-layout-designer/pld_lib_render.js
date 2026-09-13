@@ -27,8 +27,9 @@ define([
   'N/runtime',
   'N/format',
   './pld_lib_company_config',
-  './pld_lib_invoice_data'
-], function (render, record, search, runtime, format, companyConfig, invoiceData) {
+  './pld_lib_invoice_data',
+  './pld_lib_invoice_reference'
+], function (render, record, search, runtime, format, companyConfig, invoiceData, invoiceReference) {
 
   // ─── Template custom record ───
   var TPL = {
@@ -58,7 +59,11 @@ define([
         'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
     }
 
-    return { xml: xmlContent, copies: copiesFromDataJson(rec.getValue({ fieldId: TPL.DATA })) };
+    return {
+      xml: xmlContent,
+      copies: copiesFromDataJson(rec.getValue({ fieldId: TPL.DATA })),
+      rectype: rec.getValue({ fieldId: TPL.RECTYPE }) || ''
+    };
   }
 
   /** Copy set stored in the designer JSON of a template record (#92) */
@@ -82,8 +87,12 @@ define([
         [TPL.IS_DEFAULT, 'is', 'T']
       ],
       columns: [TPL.XML, TPL.DATA]
-    }).run().getRange({ start: 0, end: 1 });
+    }).run().getRange({ start: 0, end: 2 });
 
+    if (results.length > 1) {
+      throw new Error('พบ default template มากกว่าหนึ่งรายการสำหรับ ' + recType +
+        ' — ให้ผู้ดูแลแก้ไขให้เหลือ default ที่ใช้งานอยู่หนึ่งรายการก่อนพิมพ์');
+    }
     if (results.length === 0) return null;
 
     var xmlContent = results[0].getValue(TPL.XML);
@@ -92,7 +101,11 @@ define([
         'Re-save it from the designer — the engine no longer generates XML from designer data (#6).');
     }
 
-    return { xml: xmlContent, copies: copiesFromDataJson(results[0].getValue(TPL.DATA)) };
+    return {
+      xml: xmlContent,
+      copies: copiesFromDataJson(results[0].getValue(TPL.DATA)),
+      rectype: recType
+    };
   }
 
   /**
@@ -110,6 +123,8 @@ define([
 
   // Thai statutory copy set (#15) — default for invoices when the template
   // doesn't define its own copy set (#92).
+  // Bound render passes before work begins: each copy consumes N/render governance.
+  var MAX_COPIES = 20;
   var INVOICE_COPIES = [
     { th: 'ต้นฉบับ', en: 'Original' },
     { th: 'สำเนา', en: 'Copy' }
@@ -134,7 +149,15 @@ define([
   /** Copies for a render (#92): template-defined set, else invoice default,
    *  else single original. */
   function resolveCopies(tplCopies, recType) {
-    return tplCopies || (recType === 'invoice' ? INVOICE_COPIES : [{ th: 'ต้นฉบับ', en: 'Original' }]);
+    var copies = tplCopies || (recType === 'invoice' ? INVOICE_COPIES : [{ th: 'ต้นฉบับ', en: 'Original' }]);
+    assertCopyCount(copies);
+    return copies;
+  }
+
+  function assertCopyCount(copies) {
+    if (!Array.isArray(copies) || copies.length === 0 || copies.length > MAX_COPIES) {
+      throw new Error('พิมพ์ได้ 1–' + MAX_COPIES + ' สำเนาต่อเอกสาร (render execution limit)');
+    }
   }
 
   /** Copy data source shape (#159) — keys a template may bind under ${copy.*}. */
@@ -186,7 +209,7 @@ define([
     renderer.addCustomDataSource({
       format: render.DataSource.OBJECT,
       alias: 'company',
-      data: companyConfig.load(subsidiaryId)
+      data: companyConfig.load(subsidiaryId, { forRender: true })
     });
 
     // Current date/user info
@@ -240,13 +263,13 @@ define([
    * into ONE <pdfset>, so a 40-page batch is a single file with every copy in
    * order (#181).
    *
-   * Curated types build their schema per copy (the doc title carries the copy
-   * label); a raw-record type loads the record ONCE and reuses it for every pass —
+   * Curated types build one immutable snapshot, with copy-specific title overlays; a raw-record type loads the record ONCE and reuses it for every pass —
    * only the ${copy.*} data source differs.
    *
    * @returns {{docs: string[], tranId: string, rec: Object|null}}
    */
   function renderDocumentXml(tplXml, recType, recId, copies, tel) {
+    assertCopyCount(copies);
     var curatedType = invoiceData.isSupportedType(recType);
 
     var rec = null;
@@ -256,11 +279,11 @@ define([
     }
     if (tel) tel.stage = 'render';
 
+    var snapshot = referenceData(tplXml, curatedType ? invoiceData.buildTransactionData(recType, recId) : null, recType, recId);
+    if (snapshot) freezeSnapshot(snapshot);
     var tranId = '';
     var docs = copies.map(function (c) {
-      var curated = curatedType
-        ? invoiceData.buildTransactionData(recType, recId, c.th, c.en)
-        : null;
+      var curated = snapshot ? dataForCopy(snapshot, recType, c) : null;
       if (curated) tranId = tranId || (curated.document && curated.document.number) || '';
       return extractPdfDoc(makeRenderer(tplXml, curated, rec, tel, c).renderAsString());
     });
@@ -272,6 +295,30 @@ define([
     return { docs: docs, tranId: tranId, rec: rec };
   }
 
+  // Only plain curated data is frozen; native NetSuite records are never frozen.
+  function freezeSnapshot(value) {
+    if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+      Object.keys(value).forEach(function (key) { freezeSnapshot(value[key]); });
+      Object.freeze(value);
+    }
+    return value;
+  }
+
+  function dataForCopy(snapshot, recType, copy) {
+    var label = copyBinding(copy);
+    var titles = invoiceData.docTitles[recType] || invoiceData.docTitles.invoice;
+    var document = Object.assign({}, snapshot.document, {
+      copyTH: label.th, copyEN: label.en
+    });
+    if (titles) {
+      document.titleTH = titles.th + ' (' + label.th + ')';
+      document.titleEN = titles.en + ' (' + label.en + ')';
+    }
+    return freezeSnapshot(Object.assign({}, snapshot, {
+      document: document, custbody_doc_copy_label: label.label
+    }));
+  }
+
   /**
    * The <pdf> document inside a FreeMarker-resolved template string. Anything
    * outside it (XML declaration, DOCTYPE, stray whitespace) cannot go inside a
@@ -279,7 +326,8 @@ define([
    * rather than produce a set that silently drops a copy (R4).
    */
   function extractPdfDoc(resolved) {
-    var start = resolved.indexOf('<pdf>');
+    var root = /<pdf(?:\s[^<>]*?)?>/.exec(resolved);
+    var start = root ? root.index : -1;
     var end = resolved.lastIndexOf('</pdf>');
     if (start < 0 || end < 0) {
       throw new Error('renderAsString produced no <pdf> document — cannot build the copy set');
@@ -304,11 +352,13 @@ define([
    * @returns {{pdfFile: Object, tranId: string, rec: Object|null}}
    */
   function renderDocument(tplXml, recType, recId, copies, tel) {
+    assertCopyCount(copies);
     if (copies.length === 1) {
       var only = copies[0];
       var singleData = invoiceData.isSupportedType(recType)
         ? invoiceData.buildTransactionData(recType, recId, only.th, only.en)
         : null;
+      singleData = referenceData(tplXml, singleData, recType, recId);
       var out = renderXmlWithRecord(tplXml, recType, recId, singleData, tel, only);
       return { pdfFile: out.pdfFile, rec: out.rec, tranId: '' };
     }
@@ -334,17 +384,30 @@ define([
    *
    * @returns {{pdfFile: Object}}
    */
-  function renderSampleDocument(tplXml, recType, copies, tel) {
+  function referenceData(tplXml, data, recType, recId) {
+    var comments = tplXml.match(/<#--[\s\S]*?-->/g) || [];
+    if (!comments.some(function (comment) { return /^\s*pld:reference-layout\s*$/m.test(comment); })) return data;
+    if (recType !== 'invoice' || !data) throw new Error('Reference invoice layout requires a curated invoice');
+    return invoiceReference.enrich(data, recId);
+  }
+
+  function renderSampleDocument(tplXml, recType, copies, tel, suppliedData) {
+    assertCopyCount(copies);
     if (tel) tel.stage = 'render';
+
+    var snapshot = suppliedData ? freezeSnapshot(JSON.parse(JSON.stringify(suppliedData))) : null;
+    function sampleForCopy(c) {
+      return snapshot ? dataForCopy(snapshot, recType, c) : invoiceData.buildSampleData(recType, c.th, c.en);
+    }
 
     if (copies.length === 1) {
       var only = copies[0];
-      var data = invoiceData.buildSampleData(recType, only.th, only.en);
+      var data = sampleForCopy(only);
       return { pdfFile: makeRenderer(tplXml, data, null, tel, only).renderAsPdf() };
     }
 
     var docs = copies.map(function (c) {
-      var perCopy = invoiceData.buildSampleData(recType, c.th, c.en);
+      var perCopy = sampleForCopy(c);
       return extractPdfDoc(makeRenderer(tplXml, perCopy, null, tel, c).renderAsString());
     });
     if (tel) tel.stage = 'copyset';
@@ -354,6 +417,7 @@ define([
   return {
     TPL: TPL,
     INVOICE_COPIES: INVOICE_COPIES,
+    MAX_COPIES: MAX_COPIES,
     loadTemplate: loadTemplate,
     findDefaultTemplate: findDefaultTemplate,
     resolveTemplate: resolveTemplate,

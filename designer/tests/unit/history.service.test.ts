@@ -5,8 +5,9 @@
 import { describe, it, expect } from 'vitest';
 import { AppStore } from '../../src/state/store';
 import { HistoryService } from '../../src/services/history.service';
+import { applyPagination } from '../../src/services/pagination.service';
 import { applyMiddleware, tagAction } from '../../src/state/middleware';
-import { addElement, removeElement, selectElement, setZoom, regenerateBands, splitColumn, setColumnWidth, setDragType, addElementToNewBand } from '../../src/state/actions';
+import { addElement, clearJsonData, loadJsonData, removeElement, selectElement, setZoom, regenerateBands, splitColumn, setColumnWidth, setDragType, addElementToNewBand, setPageSize, setOrientation, updateElement } from '../../src/state/actions';
 
 function createStoreWithHistory() {
   const store = new AppStore();
@@ -47,6 +48,26 @@ describe('HistoryService', () => {
     expect(store.state.elements).toHaveLength(0);
   });
 
+  it('does not let derived pagination create a no-op undo boundary', () => {
+    const { store, history } = createStoreWithHistory();
+
+    addElement(store, 'text', 10, 20);
+    applyPagination(store);
+
+    expect(history.stats.undoCount).toBe(1);
+    expect(history.undo()).toBe(true);
+    expect(store.state.elements).toHaveLength(0);
+  });
+
+  it('does not create layout undo boundaries for preview JSON load or clear', () => {
+    const { store, history } = createStoreWithHistory();
+
+    loadJsonData(store, { items: [{ name: 'A' }] });
+    clearJsonData(store);
+
+    expect(history.canUndo).toBe(false);
+  });
+
   it('redo restores undone action', () => {
     const { store, history } = createStoreWithHistory();
 
@@ -58,6 +79,64 @@ describe('HistoryService', () => {
     history.redo();
 
     expect(store.state.elements).toHaveLength(1);
+  });
+
+  it('undo and redo restore page settings that affect PDF output', () => {
+    const { store, history } = createStoreWithHistory();
+    const before = structuredClone(store.state.page);
+
+    setPageSize(store, 'A3');
+    setOrientation(store, 'landscape');
+    const after = structuredClone(store.state.page);
+
+    expect(history.undo()).toBe(true);
+    expect(store.state.page.orientation).toBe('portrait');
+    expect(store.state.page.size).toBe('A3');
+    expect(history.undo()).toBe(true);
+    expect(store.state.page).toEqual(before);
+
+    expect(history.redo()).toBe(true);
+    expect(history.redo()).toBe(true);
+    expect(store.state.page).toEqual(after);
+  });
+
+  it('undo and redo restore pagination and copy labels together', () => {
+    const { store, history } = createStoreWithHistory();
+    const beforePagination = structuredClone(store.state.pagination);
+
+    store.dispatch((draft) => {
+      draft.pagination.rowsPerPage = 25;
+      draft.pagination.headerMode = 'firstOnly';
+      draft.copies = [{ th: 'ต้นฉบับ', en: 'Original' }, { th: 'สำเนา', en: 'Copy' }];
+      draft.template.isDirty = true;
+    });
+
+    expect(history.undo()).toBe(true);
+    expect(store.state.pagination).toEqual(beforePagination);
+    expect(store.state.copies).toBeNull();
+
+    expect(history.redo()).toBe(true);
+    expect(store.state.pagination.rowsPerPage).toBe(25);
+    expect(store.state.pagination.headerMode).toBe('firstOnly');
+    expect(store.state.copies).toEqual([
+      { th: 'ต้นฉบับ', en: 'Original' },
+      { th: 'สำเนา', en: 'Copy' },
+    ]);
+  });
+
+  it('restores uploaded image data when deletion is undone', () => {
+    const { store, history } = createStoreWithHistory();
+    const id = addElement(store, 'image', 10, 20);
+    const imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA==';
+    updateElement(store, id, 'imageData', imageData);
+    history.clear();
+
+    removeElement(store, id);
+    expect(store.state.elements).toHaveLength(0);
+
+    expect(history.undo()).toBe(true);
+    expect(store.state.elements).toHaveLength(1);
+    expect(store.state.elements[0]).toMatchObject({ id, type: 'image', imageData });
   });
 
   it('multiple undo/redo', () => {
@@ -101,6 +180,43 @@ describe('HistoryService', () => {
   it('redo returns false when empty', () => {
     const { history } = createStoreWithHistory();
     expect(history.redo()).toBe(false);
+  });
+});
+
+describe('document-session fencing', () => {
+  it.each(['template', 'sample', 'draft'])('never crosses a %s document switch', () => {
+    const { store, history } = createStoreWithHistory();
+    addElement(store, 'shape', 0, 0);
+    expect(history.canUndo).toBe(true);
+
+    store.beginDocumentSession();
+    expect(history.canUndo).toBe(false);
+    store.dispatch((draft) => {
+      draft.elements = [];
+      draft.bands = [];
+      draft.template.id = 'loaded-document';
+      draft.template.name = 'Loaded document';
+      draft.template.isDirty = false;
+    });
+    expect(history.canUndo).toBe(false);
+
+    addElement(store, 'text', 15, 25);
+    expect(history.undo()).toBe(true);
+    expect(store.state.elements).toEqual([]);
+    expect(store.state.template.id).toBe('loaded-document');
+    expect(history.undo()).toBe(false);
+  });
+
+  it('keeps the first edit after reset undoable', () => {
+    const { store, history } = createStoreWithHistory();
+    addElement(store, 'shape', 0, 0);
+
+    store.reset();
+    expect(history.canUndo).toBe(false);
+    addElement(store, 'text', 15, 25);
+
+    expect(history.undo()).toBe(true);
+    expect(store.state.elements).toEqual([]);
   });
 });
 
