@@ -15,7 +15,9 @@ export default defineConfig({
   timeout: 60_000,
   use: {
     baseURL: 'http://127.0.0.1:4173',
-    trace: 'retain-on-failure',
+    // Recording snapshots adds work inside measured phases; opt in only for diagnosis.
+    trace: process.env.PLD_PERF_TRACE === '1' ? 'retain-on-failure' : 'off',
+    screenshot: 'only-on-failure',
   },
   projects: [{ name: 'chromium-production', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
