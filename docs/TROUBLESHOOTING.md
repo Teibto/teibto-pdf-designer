@@ -170,7 +170,7 @@
 | สาเหตุ | ตรวจอย่างไร |
 |---|---|
 | อยู่ในโหมด Edit | ปุ่มขึ้นเฉพาะโหมด View |
-| record type นั้นไม่อยู่ใน 10 ประเภทที่รองรับ | ดูรายการใน [`USER-GUIDE.md`](USER-GUIDE.md#ปุ่มบนหน้า-record) |
+| record type นั้นไม่อยู่ใน 11 ประเภทที่รองรับ | ดูรายการใน [`USER-GUIDE.md`](USER-GUIDE.md#ปุ่มบนหน้า-record) |
 | script `PLD - Transaction Buttons` ยังไม่ได้ deploy บน account | Setup > Scripting > Scripts |
 | role ที่ใช้อยู่ไม่มีสิทธิ์รัน Suitelet | ลองด้วย Administrator เทียบ |
 

@@ -1,0 +1,49 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ยอดเงินคำนวณสอดคล้องกัน: subtotal 40,500.00 + VAT 7% 2,835.00 = 43,335.00 · *Text คือค่าที่ template พิมพ์จริง (engine format มาแล้ว #165) ส่วนตัวเลขไว้ให้ col.format · entity = ผู้ขอซื้อ, entityEmail/entityPhone = ช่องทางติดต่อผู้ขอซื้อ, createdby = ผู้จัดทำเอกสาร, line.expectedreceiptdate = วันที่ต้องการสินค้า (#215) · @author Wichit Wongta @since 2026-09-13",
+  "record": {
+    "tranid": "PR-2026-0042",
+    "trandate": "13/09/2026",
+    "department": "ฝ่ายปฏิบัติการ",
+    "location": "สำนักงานใหญ่",
+    "entity": "ปิยะพร ศรีวัฒนา",
+    "entityEmail": "piyaporn.s@tbfurniture.example.co.th",
+    "entityPhone": "08-1234-5678",
+    "currency": "THB",
+    "createdby": "ปิยะพร ศรีวัฒนา",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "ขอซื้อทดแทนอุปกรณ์ชำรุดในห้องประชุมชั้น 3 ต้องการรับของก่อนสิ้นเดือน",
+    "item": [
+      { "item": "OFF-CHR-ERG", "description": "เก้าอี้สำนักงานพนักพิงตาข่าย ปรับระดับได้", "quantity": 4, "quantityText": "4", "units": "ตัว", "expectedreceiptdate": "30/09/2026", "rate": 3250.00, "rateText": "3,250.00", "amount": 13000.00, "amountText": "13,000.00" },
+      { "item": "IT-MON-27", "description": "จอมอนิเตอร์ 27 นิ้ว IPS ความละเอียด 2K", "quantity": 2, "quantityText": "2", "units": "เครื่อง", "expectedreceiptdate": "30/09/2026", "rate": 7900.00, "rateText": "7,900.00", "amount": 15800.00, "amountText": "15,800.00" },
+      { "item": "OFF-PRT-TNR", "description": "หมึกพิมพ์เลเซอร์ สีดำ (ตลับ)", "quantity": 6, "quantityText": "6", "units": "ตลับ", "expectedreceiptdate": "25/09/2026", "rate": 1450.00, "rateText": "1,450.00", "amount": 8700.00, "amountText": "8,700.00" },
+      { "item": "MNT-AC-SVC", "description": "บริการล้างเครื่องปรับอากาศ (ต่อเครื่อง)", "quantity": 5, "quantityText": "5", "units": "เครื่อง", "expectedreceiptdate": "20/09/2026", "rate": 600.00, "rateText": "600.00", "amount": 3000.00, "amountText": "3,000.00" }
+    ],
+    "subtotal": 40500.00,
+    "subtotalText": "40,500.00",
+    "taxtotal": 2835.00,
+    "taxtotalText": "2,835.00",
+    "total": 43335.00,
+    "totalText": "43,335.00"
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
+    "phone": "0-2740-1234",
+    "email": "purchasing@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
+  },
+  "context": {
+    "today": "13/09/2026",
+    "now": "13/09/2026 10:15",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}

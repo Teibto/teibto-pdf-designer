@@ -566,7 +566,7 @@ Local tests do not establish native uniqueness, governance limits or caller iden
 | Title | PLD Buttons |
 | ID | `customdeploy_pld_ue_btn` |
 | Status | Released |
-| Applied To | Invoice, Sales Order, Purchase Order (เลือกตามต้องการ) |
+| Applied To | Invoice, Sales Order, Purchase Order, Purchase Requisition (เลือกตามต้องการ — ดูตาราง Supported Record Types; id ของ deployment ต้องไม่เกิน 40 ตัวอักษร เช่น `customdeploy_pld_ue_btn_purchreq`) |
 | Event Type | Before Load |
 
 ---
@@ -676,6 +676,7 @@ ${record.trandate?string["dd/MM/yyyy"]} ← Date format
 | `invoice` | item | entity, trandate, duedate, terms, subtotal, taxtotal, total |
 | `salesorder` | item | entity, trandate, shipdate, terms, shipmethod, subtotal, total |
 | `purchaseorder` | item | entity, trandate, shipdate, terms, subtotal, total |
+| `purchaserequisition` | item | entity (ผู้ขอซื้อ), trandate, duedate, department, location, subtotal, total |
 | `estimate` | item | entity, trandate, duedate, probability, subtotal, total |
 | `vendorbill` | item | entity, trandate, duedate, terms, subtotal, total |
 | `cashsale` | item | entity, trandate, paymentmethod, subtotal, total |

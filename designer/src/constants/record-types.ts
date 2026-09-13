@@ -27,6 +27,7 @@ export const RECORD_TYPES: readonly RecordTypeOption[] = [
   { value: 'estimate', label: 'Estimate / ใบเสนอราคา' },
   { value: 'salesorder', label: 'Sales Order / ใบสั่งขาย' },
   { value: 'purchaseorder', label: 'Purchase Order / ใบสั่งซื้อ' },
+  { value: 'purchaserequisition', label: 'Purchase Requisition / ใบขอให้ซื้อ' },
   { value: 'cashsale', label: 'Cash Sale / ใบเสร็จรับเงิน (ขายสด)' },
   { value: 'customerpayment', label: 'Customer Payment / ใบเสร็จรับเงิน' },
   { value: 'itemfulfillment', label: 'Item Fulfillment / ใบส่งสินค้า' },

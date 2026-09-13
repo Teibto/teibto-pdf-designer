@@ -124,14 +124,16 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     vendorbill:          { th: 'ใบรับวางบิล', en: 'VENDOR BILL' },
     returnauthorization: { th: 'ใบรับคืนสินค้า', en: 'RETURN AUTHORIZATION' },
     itemfulfillment:     { th: 'ใบส่งสินค้า', en: 'DELIVERY NOTE' },
-    customerpayment:     { th: 'ใบเสร็จรับเงิน', en: 'RECEIPT' }
+    customerpayment:     { th: 'ใบเสร็จรับเงิน', en: 'RECEIPT' },
+    purchaserequisition: { th: 'ใบขอให้ซื้อ', en: 'PURCHASE REQUISITION' }
   };
   // Record types whose transactionline quantities are already the printed sign, so
   // they must NOT be negated (#176). Purchase-side documents were the original case;
   // a return authorization joined them after QA on SB2 proved it stores +0.5 and the
   // sales-side negation printed -0.5 on the customer's copy. The name says what the
   // flag DOES — it is not a statement about which side of the business a document is.
-  var KEEP_LINE_SIGN = { purchaseorder: true, vendorbill: true, returnauthorization: true };
+  // A purchase requisition (#215) is purchase-side too: its lines are stored positive.
+  var KEEP_LINE_SIGN = { purchaseorder: true, vendorbill: true, returnauthorization: true, purchaserequisition: true };
   // Record types whose transactionline rows are NOT the printed lines (#176).
   // An item fulfillment stores an accounting PAIR per shipped item — the item line and
   // its Cost of Sales counterpart — both `mainline='F' AND taxline='F'`, so the filter
@@ -199,7 +201,13 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // Receipt (#170): the settled-document rows plus how the money arrived. `apply`
     // is the same array as `item` — a payment's rows ARE the documents it settles —
     // so a template can loop whichever name reads better for the document it prints.
-    'apply', 'payment', 'paymentText', 'paymentmethod', 'checknum'
+    'apply', 'payment', 'paymentText', 'paymentmethod', 'checknum',
+    // Requisition header (#215): who asks, for which unit, and how to reach them.
+    // department/location/currency are the record's display text; createdby is the
+    // creator's name; entityEmail/entityPhone come from the counterparty record
+    // referenced by `entity` (an employee on a requisition, a vendor/customer
+    // elsewhere). Present on EVERY type, empty when the record has no such value.
+    'department', 'location', 'currency', 'createdby', 'entityEmail', 'entityPhone'
   ];
   var BINDING_KEYS = CURATED_KEYS.concat(RAW_ALIAS_KEYS);
   // One row shape for every document (#170). A key that does not apply to the row's
@@ -212,7 +220,10 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     // formatted counterparts (#165) — what the item table actually prints
     'quantityText', 'rateText', 'amountText',
     // settled-document rows on a receipt: which document, when, its total
-    'refnum', 'applydate', 'total', 'totalText'
+    'refnum', 'applydate', 'total', 'totalText',
+    // when the line is expected to arrive (requisition / purchase order, #215) —
+    // formatted DD/MM/YYYY text, blank on rows that carry no such date
+    'expectedreceiptdate'
   ];
   // ${copy.*} — data source ที่ pld_sl_render_pdf ใส่ให้ทุก render pass (#159)
   // ป้ายชุดเอกสารของ pass นั้น ใช้ได้ทั้ง curated และ raw-record binding
@@ -251,6 +262,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       "  TO_CHAR(t.duedate,'DD/MM/YYYY') AS duedate, t.otherrefnum, " +
       "  BUILTIN.DF(t.entity) AS customer_name, BUILTIN.DF(t.createdby) AS created_by, " +
       "  (SELECT symbol FROM currency WHERE currency.id = t.currency) AS currency_code, " +
+      "  (SELECT e.email FROM entity e WHERE e.id = t.entity) AS entity_email, " +
+      "  (SELECT e.phone FROM entity e WHERE e.id = t.entity) AS entity_phone, " +
       "  s.id AS summary_id, BUILTIN.DF(s.custrecord_sum_type) AS summary_type, " +
       "  s.custrecord_sum_total AS summary_total, s.custrecord_sum_taxrate AS summary_taxrate " +
       "FROM transaction t LEFT JOIN customrecord_thl_summarytotal s " +
@@ -321,6 +334,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       "  BUILTIN.DF(tl.item) AS item_code, itm.displayname AS item_name, tl.memo, " +
       "  " + sign + "tl.quantity AS quantity, tl.rate AS unit_price, " +
       "  uom.unitname AS unit_name, uom.conversionrate AS conv, " +
+      "  TO_CHAR(tl.expectedreceiptdate,'DD/MM/YYYY') AS expected_receipt_date, " +
       "  CASE WHEN tl.quantity IS NOT NULL AND tl.rate IS NOT NULL THEN " + sign + "tl.quantity * tl.rate " +
       "       ELSE " + sign + "tl.netamount END AS amount " +
       "FROM transactionline tl " +
@@ -393,6 +407,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         quantity: isItem && l.quantity != null ? qtyText(num(l.quantity) / conv) : '',
         unit: isItem ? (l.unit_name || '') : '',
         unit_price: isItem ? moneyOrBlank(l.unit_price) : '',
+        expected_receipt_date: isItem ? (l.expected_receipt_date || '') : '',
         discount: '',
         amount: moneyOrBlank(l.amount),
         // backward-compat (#69 simple template); \n renders via the table cell <br/>
@@ -417,7 +432,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         amountText: row.amount,
         // Settlement keys are blank on an item row, not absent (#170) — one row
         // shape for every document, so a template never binds a vanishing key.
-        refnum: '', applydate: '', total: null, totalText: ''
+        refnum: '', applydate: '', total: null, totalText: '',
+        expectedreceiptdate: l.expected_receipt_date || ''
       });
       prevMemo = memo;
     });
@@ -458,6 +474,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
           quantity: qty === '' ? '' : qtyText(num(qty)),
           unit: unitText,
           unit_price: '',
+          expected_receipt_date: '',
           discount: '',
           amount: '',
           description: wordbreak.breakThai(lineName + (lineMemo ? '\n' + lineMemo : ''))
@@ -479,7 +496,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
           quantityText: srow.quantity,
           rateText: '',
           amountText: '',
-          refnum: '', applydate: '', total: null, totalText: ''
+          refnum: '', applydate: '', total: null, totalText: '',
+          expectedreceiptdate: ''
         });
       }
     }
@@ -504,7 +522,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         items.push({
           no: items.length + 1,
           code: '', name: String(refnum == null ? '' : refnum), memo: '',
-          quantity: '', unit: '', unit_price: '', discount: '',
+          quantity: '', unit: '', unit_price: '', expected_receipt_date: '', discount: '',
           amount: moneyOrBlank(paidAmt),
           description: String(refnum == null ? '' : refnum)
         });
@@ -517,7 +535,8 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
           refnum: String(refnum == null ? '' : refnum),
           applydate: dateText(applyDate),
           total: docTotal == null ? null : num(docTotal),
-          totalText: money(docTotal)
+          totalText: money(docTotal),
+          expectedreceiptdate: ''
         });
       }
     }
@@ -671,6 +690,15 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       paymentText: isPayment ? money(paymentAmount) : '',
       paymentmethod: bodyFields.paymentmethod || '',
       checknum: bodyFields.checknum || '',
+      // Requisition header (#215). Display text off the loaded record for the
+      // select fields (never from SuiteQL — see #174); the creator and the
+      // counterparty's contact details ride on the header query.
+      department: bodyFields.department || '',
+      location: bodyFields.location || '',
+      currency: currencyCode || bodyFields.currency || '',
+      createdby: cleanName(hdr.created_by),
+      entityEmail: String(hdr.entity_email || ''),
+      entityPhone: String(hdr.entity_phone || ''),
       subtotal: rawSubtotal,
       discounttotal: rawDiscount,
       taxtotal: vat,
@@ -748,11 +776,11 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
 
     var itemRows = [
       sampleRow({ item: 'ITEM-A100', description: 'กระดาษถ่ายเอกสาร A4 80 แกรม (Laser & Inkjet)',
-        quantity: 100, units: 'รีม', rate: 100, amount: 10000 }),
+        quantity: 100, units: 'รีม', rate: 100, amount: 10000, expectedreceiptdate: '31/07/2026' }),
       sampleRow({ item: 'ITEM-B220', description: 'หมึกพิมพ์เลเซอร์ สีดำ รุ่นมาตรฐาน',
-        quantity: 5, units: 'กล่อง', rate: 2500, amount: 12500 }),
+        quantity: 5, units: 'กล่อง', rate: 2500, amount: 12500, expectedreceiptdate: '31/07/2026' }),
       sampleRow({ item: 'SRV-INST', description: 'ค่าบริการติดตั้งและอบรมการใช้งาน',
-        quantity: 1, units: 'งาน', rate: 130000, amount: 130000 })
+        quantity: 1, units: 'งาน', rate: 130000, amount: 130000, expectedreceiptdate: '15/08/2026' })
     ];
     // ใบเสร็จรับเงินไม่มีบรรทัดสินค้า — แถวของมันคือเอกสารที่ตัดชำระ (#170)
     // `total` คือยอดเต็มของเอกสารอ้างอิง ส่วน `amount` คือยอดที่รับชำระในครั้งนี้;
@@ -785,6 +813,7 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
         quantity: row.quantityText,
         unit: row.units,
         unit_price: row.rateText,
+        expected_receipt_date: row.expectedreceiptdate || '',
         discount: '',
         amount: row.amountText,
         description: wordbreak.breakThai(row.item + (row.description ? '\n' + row.description : ''))
@@ -924,7 +953,14 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
       payment: isPayment ? customerPaid : 0,
       paymentText: isPayment ? money(customerPaid) : '',
       paymentmethod: 'เงินโอน',
-      checknum: 'CHQ-0001'
+      checknum: 'CHQ-0001',
+      // requisition header (#215)
+      department: 'ฝ่ายขาย',
+      location: 'คลังกลาง',
+      currency: 'THB',
+      createdby: 'ผู้จัดทำตัวอย่าง',
+      entityEmail: 'buyer@example.co.th',
+      entityPhone: '02-000-0001'
     };
   }
 

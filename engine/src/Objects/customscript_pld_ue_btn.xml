@@ -38,6 +38,16 @@
       <runasrole></runasrole>
       <status>RELEASED</status>
     </scriptdeployment>
+    <scriptdeployment scriptid="customdeploy_pld_ue_btn_purchreq">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>AUDIT</loglevel>
+      <recordtype>PURCHASEREQUISITION</recordtype>
+      <eventtype>VIEW</eventtype>
+      <executioncontext>USERINTERFACE</executioncontext>
+      <runasrole></runasrole>
+      <status>RELEASED</status>
+    </scriptdeployment>
     <scriptdeployment scriptid="customdeploy_pld_ue_btn_estimate">
       <allroles>T</allroles>
       <isdeployed>T</isdeployed>

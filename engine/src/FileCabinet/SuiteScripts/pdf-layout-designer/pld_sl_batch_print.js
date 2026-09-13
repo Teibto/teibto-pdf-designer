@@ -58,6 +58,7 @@ define([
     invoice: true, creditmemo: true, estimate: true, salesorder: true,
     purchaseorder: true, cashsale: true, vendorbill: true,
     returnauthorization: true, customerpayment: true
+    // purchaserequisition (#215) is deliberately absent until `total` is proven a valid search column for it on SB2.
   };
 
   /** Resolve this deployed Suitelet instead of relying on the browser's current

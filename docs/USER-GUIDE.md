@@ -25,7 +25,7 @@
 | **Design PDF** | เปิดดีไซเนอร์พร้อมข้อมูลของเอกสารใบนี้ (สำหรับ consultant) |
 | **PDF Template** + **Print Selected Template** | เลือกเทมเพลตเฉพาะครั้ง ปุ่มนี้ขึ้นเมื่อ record type นั้นมีเทมเพลตมากกว่า 1 แบบ |
 
-ปุ่มขึ้นกับ 10 ประเภทเอกสาร: ใบแจ้งหนี้ (`invoice`) · ใบลดหนี้ (`creditmemo`) · ใบเสนอราคา (`estimate`) · ใบสั่งขาย (`salesorder`) · ใบสั่งซื้อ (`purchaseorder`) · ใบกำกับภาษีอย่างย่อ/ขายสด (`cashsale`) · ใบตั้งหนี้ (`vendorbill`) · ใบรับคืน (`returnauthorization`) · ใบส่งสินค้า (`itemfulfillment`) · ใบเสร็จรับเงิน (`customerpayment`).
+ปุ่มขึ้นกับ 11 ประเภทเอกสาร: ใบแจ้งหนี้ (`invoice`) · ใบลดหนี้ (`creditmemo`) · ใบเสนอราคา (`estimate`) · ใบสั่งขาย (`salesorder`) · ใบสั่งซื้อ (`purchaseorder`) · ใบขอให้ซื้อ (`purchaserequisition`) · ใบกำกับภาษีอย่างย่อ/ขายสด (`cashsale`) · ใบตั้งหนี้ (`vendorbill`) · ใบรับคืน (`returnauthorization`) · ใบส่งสินค้า (`itemfulfillment`) · ใบเสร็จรับเงิน (`customerpayment`).
 
 ไม่ระบุเทมเพลต ระบบใช้ **เทมเพลตค่าเริ่มต้นของ record type นั้น** เสมอ. ยังไม่มีใครตั้งค่าเริ่มต้นไว้ จะขึ้น `No template found` ([ทางแก้](TROUBLESHOOTING.md#no-template-found)).
 

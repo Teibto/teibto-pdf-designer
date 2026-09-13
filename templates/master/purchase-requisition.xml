@@ -1,0 +1,284 @@
+<?xml version="1.0"?>
+<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
+<#--
+  ใบขอให้ซื้อ — master template · Issue #215
+  @author Wichit Wongta
+  @since 2026-09-13
+  pld:rectype purchaserequisition   — record type ที่ template นี้ผูกกับ (scripts/validate-templates.sh + engine test อ่านบรรทัดนี้)
+  โครง/CSS/macro/font pattern เดียวกับ purchase-order.xml (reference ของ Standard Template Pack)
+  กติกา: docs/TOOLSTACK.md + templates/README.md (binding null-safe ทุกตัว,
+  header/footer ผ่าน macrolist, ฟอนต์ไทย embed เท่านั้น)
+
+  จุดต่อลูกค้าทั้งหมดมาจาก ${company.*} = config record customrecord_pld_config
+  ของแต่ละ account (#9) — ไฟล์นี้ save เข้า account ได้ตรง ๆ ไม่ต้องแก้อะไรเลย
+
+  Field mapping ฝั่ง purchaserequisition: entity = ผู้ขอซื้อ (requester), entityEmail /
+  entityPhone = ช่องทางติดต่อผู้ขอซื้อ, department / location / currency = หัวเอกสาร,
+  createdby = ผู้จัดทำเอกสาร (footer), line.expectedreceiptdate = วันที่ต้องการสินค้า
+  หัวเอกสาร (ป้ายชื่อ, ตารางข้อมูล, ช่องประเภท/เหตุผล) อยู่ใน macro header จึงซ้ำทุกหน้า
+  ช่องติ๊กทั้งหมดพิมพ์ว่างเสมอ — ไว้ให้ผู้ใช้ติ๊กบนกระดาษตาม layout เดิม
+
+  กล่องมุมมนใช้ `corner-radius` (property ของ BFO ที่ form เดิมบน SB2 ใช้แล้วพิมพ์มุมมนจริง) — ถ้า BFO รุ่นใดเมิน จะได้กล่องเหลี่ยม ไม่ error
+-->
+
+<pdf>
+<head>
+<link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />
+<macrolist>
+  <macro id="nlheader">
+    <#-- โลโก้: กำหนด width และ height คู่กันเสมอ แล้ววางในแถวของตัวเอง (#178) -->
+    <#if (company.logo!"") != "">
+    <p class="cell"><img src="${(company.logo)?xml}" style="width: 150pt; height: 40pt;" /></p>
+    </#if>
+    <table style="width: 100%;">
+      <tr>
+        <td style="width: 58%;">
+          <p class="cell">
+          <span class="company-name">${(company.name!"")?xml}</span><br />
+          <span>${(company.address!"")?xml}</span><br />
+          <span>โทร. ${(company.phone!"")?xml}<#if (company.email!"") != ""> อีเมล ${(company.email!"")?xml}</#if></span>
+          </p>
+        </td>
+        <td style="width: 42%;">
+          <table class="title-box" align="right">
+            <tr>
+              <td>
+                <p class="cell-c">
+                <span class="doc-title">ใบขอให้ซื้อ (${(copy.th!"ต้นฉบับ")?xml})</span><br />
+                <span class="doc-title-en">PURCHASE REQUISITION (${(copy.en!"Original")?xml})</span>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+    <table style="width: 100%;">
+      <tr>
+        <td style="width: 50%;">
+          <p class="cell">
+          <br />
+          <span>Tax ID / เลขประจำตัวผู้เสียภาษี : ${(company.taxId!"")?xml}</span><br />
+          <span>Branch / สาขา : ${(company.branch!"")?xml}</span>
+          </p>
+        </td>
+        <td style="width: 50%;">
+          <table class="info" style="width: 100%;">
+            <tr>
+              <td class="lbl"><p class="cell">Doc No. / เลขที่เอกสาร</p></td>
+              <td class="val"><p class="cell">${(record.tranid!"")?xml}</p></td>
+            </tr>
+            <tr>
+              <td class="lbl"><p class="cell">Date / วันที่</p></td>
+              <td class="val"><p class="cell">${(record.trandate!"")?xml}</p></td>
+            </tr>
+            <tr>
+              <td class="lbl"><p class="cell">Department / แผนก</p></td>
+              <td class="val"><p class="cell">${(record.department!"")?xml}</p></td>
+            </tr>
+            <tr>
+              <td class="lbl"><p class="cell">Location / สาขา</p></td>
+              <td class="val"><p class="cell">${(record.location!"")?xml}</p></td>
+            </tr>
+            <tr>
+              <td class="lbl"><p class="cell">Requester / ผู้ขอซื้อ</p></td>
+              <td class="val"><p class="cell">${(record.entity!"")?xml}</p></td>
+            </tr>
+            <tr>
+              <td class="lbl"><p class="cell">E-mail / อีเมล</p></td>
+              <td class="val"><p class="cell">${(record.entityEmail!"")?xml}</p></td>
+            </tr>
+            <tr>
+              <td class="lbl"><p class="cell">Tel. / เบอร์ติดต่อ</p></td>
+              <td class="val"><p class="cell">${(record.entityPhone!"")?xml}</p></td>
+            </tr>
+            <tr>
+              <td class="lbl"><p class="cell">Currency / สกุลเงิน</p></td>
+              <td class="val"><p class="cell">${(record.currency!"")?xml}</p></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+    <hr class="header-rule" />
+    <#-- ประเภท / เหตุผล — ช่องติ๊กเป็นตารางเซลล์เดียวมีขอบ (ไม่ใช้รูป, ไม่ใช้ glyph ☐ ที่ฟอนต์ไทยไม่มี) -->
+    <table class="checks" style="width: 100%;">
+      <tr>
+        <td class="chk-group"><p class="cell">ประเภท :</p></td>
+        <td class="chk-cell"><table class="chk"><tr><td><p class="chk-pad"> </p></td></tr></table></td>
+        <td class="chk-label"><p class="cell">ใบเสนอซื้อ</p></td>
+        <td class="chk-cell"><table class="chk"><tr><td><p class="chk-pad"> </p></td></tr></table></td>
+        <td class="chk-label"><p class="cell">ใบเสนอซ่อม</p></td>
+        <td class="chk-cell"><table class="chk"><tr><td><p class="chk-pad"> </p></td></tr></table></td>
+        <td class="chk-label"><p class="cell">ใบเสนอสั่งทำ</p></td>
+        <td class="chk-cell"><p class="cell"> </p></td>
+        <td class="chk-label"><p class="cell"> </p></td>
+      </tr>
+      <tr>
+        <td class="chk-group"><p class="cell">เหตุผลในการขอซื้อ :</p></td>
+        <td class="chk-cell"><table class="chk"><tr><td><p class="chk-pad"> </p></td></tr></table></td>
+        <td class="chk-label"><p class="cell">ชำรุด</p></td>
+        <td class="chk-cell"><table class="chk"><tr><td><p class="chk-pad"> </p></td></tr></table></td>
+        <td class="chk-label"><p class="cell">สูญหาย</p></td>
+        <td class="chk-cell"><table class="chk"><tr><td><p class="chk-pad"> </p></td></tr></table></td>
+        <td class="chk-label"><p class="cell">ขาดสต๊อก</p></td>
+        <td class="chk-cell"><table class="chk"><tr><td><p class="chk-pad"> </p></td></tr></table></td>
+        <td class="chk-label"><p class="cell">อื่นๆ (ระบุในหมายเหตุ)</p></td>
+      </tr>
+    </table>
+  </macro>
+  <macro id="nlfooter">
+    <table class="footer" style="width: 100%;">
+      <tr>
+        <td class="footer-note" style="width: 40%;">ผู้จัดทำเอกสาร / Created By : ${(record.createdby!"")?xml}</td>
+        <td class="footer-note" style="width: 35%; text-align: center;">Printed Date : ${(context.now!"")?xml}</td>
+        <td class="footer-note" style="width: 25%; text-align: right;">Page <pagenumber/> / <totalpages/></td>
+      </tr>
+    </table>
+  </macro>
+</macrolist>
+<style type="text/css">
+body { font-family: THSarabunNew, sans-serif; font-size: 12pt; color: #000000; }
+table { border-collapse: collapse; }
+td, th { padding: 2pt 4pt; vertical-align: top; }
+.bold { font-weight: bold; }
+.company-name { font-size: 15pt; font-weight: bold; }
+.title-box td { border: 0.5pt solid #888888; corner-radius: 8pt; padding: 6pt 14pt; }
+.doc-title { font-size: 17pt; font-weight: bold; }
+.doc-title-en { font-size: 12pt; font-weight: bold; }
+.header-rule { border: none; border-top: 0.5pt solid #888888; margin-top: 4pt; }
+.info td { border: 0.5pt solid #888888; padding: 2pt 5pt; font-size: 11pt; }
+.info td.lbl { width: 46%; font-weight: bold; }
+.info td.val { width: 54%; }
+.checks td { padding: 3pt 2pt; vertical-align: middle; }
+.chk-group { width: 19%; font-weight: bold; }
+.chk-cell { width: 5%; }
+.chk-label { width: 14%; }
+.chk td { width: 9pt; height: 9pt; border: 0.5pt solid #000000; padding: 0; }
+.chk-pad { margin: 0; font-size: 4pt; }
+.items th { border: 0.5pt solid #000000; text-align: center; font-weight: bold; padding: 3pt 4pt; font-size: 11pt; }
+.items td { border-left: 0.5pt solid #000000; border-right: 0.5pt solid #000000; padding: 3pt 4pt; font-size: 11pt; }
+.items tr.last td { border-bottom: 0.5pt solid #000000; }
+/* BFO justify ข้อความเปล่าใน td ที่ wrap หลายบรรทัด (ช่องไฟยืด, cluster ไทยแตก) — text-align
+   บน td หรือ align attr เอาไม่อยู่ ต้องห่อเนื้อหา cell ด้วย block p ที่ระบุ alignment เอง */
+p.cell { margin: 0; text-align: left; }
+p.cell-c { margin: 0; text-align: center; }
+p.cell-r { margin: 0; text-align: right; }
+.desc { font-size: 10pt; color: #444444; }
+td.c { text-align: center; }
+td.r { text-align: right; }
+.remark-box { border: 0.5pt solid #888888; padding: 4pt 6pt; }
+.summary td { padding: 2pt 6pt; font-size: 11pt; }
+.summary td.amt { border-bottom: 0.5pt solid #888888; width: 30%; }
+.sig-line { border-bottom: 0.5pt dotted #888888; height: 40pt; }
+.sig-date-lbl { width: 25%; text-align: right; }
+.sig-date { border-bottom: 0.5pt dotted #888888; }
+.footer td { border-top: 0.5pt solid #888888; }
+.footer-note { font-size: 9pt; color: #555555; padding-top: 4pt; }
+</style>
+</head>
+<body header="nlheader" header-height="320pt" footer="nlfooter" footer-height="26pt" size="A4" padding="0.35in">
+
+<#-- ═══ รายการขอซื้อ ═══ -->
+<table class="items" style="width: 100%;">
+  <thead>
+    <tr>
+      <th style="width: 4%;">No.<br />ลำดับ</th>
+      <th style="width: 19%;">Item<br />รายการ</th>
+      <th style="width: 26%;">Description<br />รายละเอียด</th>
+      <th style="width: 6%;">Quantity<br />จำนวน</th>
+      <th style="width: 9%;">Unit<br />หน่วย</th>
+      <th style="width: 11%;">Expt. Receipt Date<br />วันที่ต้องการสินค้า</th>
+      <th style="width: 12%;">Unit Price<br />ราคาต่อหน่วย</th>
+      <th style="width: 13%;">Total Amount<br />ราคารวม</th>
+    </tr>
+  </thead>
+  <tbody>
+    <#list (record.item)![] as line>
+    <tr<#if !line_has_next> class="last"</#if>>
+      <td class="c">${line_index + 1}</td>
+      <td><p class="cell">${(line.item!"")?xml}</p></td>
+      <td><p class="cell">${(line.description!"")?xml}</p></td>
+      <td class="c">${(line.quantityText!"")?xml}</td>
+      <td class="c">${(line.units!"")?xml}</td>
+      <td class="c">${(line.expectedreceiptdate!"")?xml}</td>
+      <td class="r">${(line.rateText!"")?xml}</td>
+      <td class="r">${(line.amountText!"")?xml}</td>
+    </tr>
+    </#list>
+  </tbody>
+</table>
+
+<#-- ═══ หมายเหตุ + สรุปยอด ═══ -->
+<table style="width: 100%;">
+  <tr>
+    <td class="remark-box" style="width: 55%;">
+      <p class="cell">
+      <span class="bold">Remark / หมายเหตุ :</span> ${(record.memo!"")?xml}
+      <br /><br /><br />
+      </p>
+    </td>
+    <td style="width: 45%;">
+      <#-- เอกสารที่ไม่มียอดตามกฎหมาย (totalText ว่าง) ไม่พิมพ์สรุปยอดเลย แทนที่จะพิมพ์ 0.00 (#170) -->
+      <#if (record.totalText!"") != "">
+      <table class="summary" style="width: 100%;">
+        <tr>
+          <td><p class="cell-r">Base Amount / มูลค่าก่อนภาษีมูลค่าเพิ่ม</p></td>
+          <td class="amt"><p class="cell-r">${(record.subtotalText!"")?xml}</p></td>
+        </tr>
+        <tr>
+          <td><p class="cell-r">VAT / ภาษีมูลค่าเพิ่ม</p></td>
+          <td class="amt"><p class="cell-r">${(record.taxtotalText!"")?xml}</p></td>
+        </tr>
+        <tr>
+          <td><p class="cell-r">Grand Total / มูลค่าสุทธิ</p></td>
+          <td class="amt"><p class="cell-r bold">${(record.totalText!"")?xml}</p></td>
+        </tr>
+      </table>
+      </#if>
+    </td>
+  </tr>
+</table>
+
+<br /><br /><br />
+
+<#-- ═══ ช่องลายเซ็น ═══ -->
+<table style="width: 100%;">
+  <tr>
+    <td style="width: 32%;">
+      <table style="width: 100%;">
+        <tr><td class="sig-line" colspan="2"><p class="cell"> </p></td></tr>
+        <tr><td colspan="2"><p class="cell-c">ผู้ขอซื้อ</p></td></tr>
+        <tr>
+          <td class="sig-date-lbl"><p class="cell-r">วันที่</p></td>
+          <td class="sig-date"><p class="cell-c">${(record.trandate!"")?xml}</p></td>
+        </tr>
+      </table>
+    </td>
+    <td style="width: 2%;"> </td>
+    <td style="width: 32%;">
+      <table style="width: 100%;">
+        <tr><td class="sig-line" colspan="2"><p class="cell"> </p></td></tr>
+        <tr><td colspan="2"><p class="cell-c">ผู้อนุมัติ</p></td></tr>
+        <tr>
+          <td class="sig-date-lbl"><p class="cell-r">วันที่</p></td>
+          <td class="sig-date"><p class="cell-c"> </p></td>
+        </tr>
+      </table>
+    </td>
+    <td style="width: 2%;"> </td>
+    <td style="width: 32%;">
+      <table style="width: 100%;">
+        <tr><td class="sig-line" colspan="2"><p class="cell"> </p></td></tr>
+        <tr><td colspan="2"><p class="cell-c">ผู้รับงาน / แผนกจัดซื้อ</p></td></tr>
+        <tr>
+          <td class="sig-date-lbl"><p class="cell-r">วันที่</p></td>
+          <td class="sig-date"><p class="cell-c"> </p></td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</pdf>

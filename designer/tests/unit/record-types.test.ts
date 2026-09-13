@@ -26,7 +26,7 @@ describe('RECORD_TYPES', () => {
     // pld_ue_button.js SUPPORTED_TYPES — a button with no selectable template
     // type is a dead end for the user
     const buttonTypes = [
-      'invoice', 'salesorder', 'purchaseorder', 'estimate', 'vendorbill',
+      'invoice', 'salesorder', 'purchaseorder', 'purchaserequisition', 'estimate', 'vendorbill',
       'cashsale', 'itemfulfillment', 'creditmemo', 'returnauthorization', 'customerpayment',
     ];
     const values = new Set(RECORD_TYPES.map((rt) => rt.value));

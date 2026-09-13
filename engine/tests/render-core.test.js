@@ -489,7 +489,7 @@ test('metrics tolerate preinitialized empty performance and invalid governance v
 });
 
 
-for (const type of ['invoice', 'purchaseorder', 'itemfulfillment', 'customerpayment']) {
+for (const type of ['invoice', 'purchaseorder', 'purchaserequisition', 'itemfulfillment', 'customerpayment']) {
   for (const copyCount of [1, 2]) {
     test(`request reuse preserves complete standalone ${type} binding with ${copyCount} copies`, () => {
       const h = countingGraph({ rich: true });
