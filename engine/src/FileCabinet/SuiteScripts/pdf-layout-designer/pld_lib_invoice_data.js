@@ -296,9 +296,18 @@ function (query, record, format, companyConfig, bahtText, wordbreak) {
     var specialDiscount = Math.abs(num(T['Special Discount']) + num(T['Discount Item']));
     var advanceReceive  = Math.abs(num(T['Apply Advance']));
     var cashCoupon      = Math.abs(num(T['Cash Coupon']));
-    // Fall back to body fields when a sum type isn't present.
-    var baseAmount = T['Base Total'] != null ? num(T['Base Total']) : num(bodyValue(rec, 'subtotal'));
-    var vat        = T['Tax Total']  != null ? num(T['Tax Total'])  : num(bodyValue(rec, 'taxtotal'));
+    // Fall back to body fields when a sum type isn't present. A record with no
+    // `subtotal` body field at all (a purchase requisition carries only `total`,
+    // proven on SB2 PR-TH-260800015 in #215) derives the base from `total` net of
+    // `taxtotal`, so the printed Base/Grand Total is the record's own figure rather
+    // than a truthful-looking 0.00.
+    var bodySubtotal = bodyValue(rec, 'subtotal');
+    var bodyTax      = num(bodyValue(rec, 'taxtotal'));
+    var baseFromBody = (bodySubtotal === '' || bodySubtotal == null)
+      ? (num(bodyValue(rec, 'total')) - bodyTax)
+      : num(bodySubtotal);
+    var baseAmount = T['Base Total'] != null ? num(T['Base Total']) : baseFromBody;
+    var vat        = T['Tax Total']  != null ? num(T['Tax Total'])  : bodyTax;
     var grandTotal = T['Net Total']  != null ? num(T['Net Total'])  : (baseAmount + vat);
     var wht        = whtTotal || Math.abs(num(T['Withholding Tax']));
     var customerPaid = grandTotal - wht - cashCoupon;

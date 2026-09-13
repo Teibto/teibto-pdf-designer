@@ -183,14 +183,14 @@ td.r { text-align: right; }
 <table class="items" style="width: 100%;">
   <thead>
     <tr>
-      <th style="width: 4%;">No.<br />ลำดับ</th>
-      <th style="width: 19%;">Item<br />รายการ</th>
-      <th style="width: 26%;">Description<br />รายละเอียด</th>
-      <th style="width: 6%;">Quantity<br />จำนวน</th>
-      <th style="width: 9%;">Unit<br />หน่วย</th>
-      <th style="width: 11%;">Expt. Receipt Date<br />วันที่ต้องการสินค้า</th>
-      <th style="width: 12%;">Unit Price<br />ราคาต่อหน่วย</th>
-      <th style="width: 13%;">Total Amount<br />ราคารวม</th>
+      <th style="width: 4%;"><p class="cell-c">No.<br />ลำดับ</p></th>
+      <th style="width: 19%;"><p class="cell-c">Item<br />รายการ</p></th>
+      <th style="width: 26%;"><p class="cell-c">Description<br />รายละเอียด</p></th>
+      <th style="width: 6%;"><p class="cell-c">Quantity<br />จำนวน</p></th>
+      <th style="width: 9%;"><p class="cell-c">Unit<br />หน่วย</p></th>
+      <th style="width: 11%;"><p class="cell-c">Expt. Receipt Date<br />วันที่ต้องการสินค้า</p></th>
+      <th style="width: 12%;"><p class="cell-c">Unit Price<br />ราคาต่อหน่วย</p></th>
+      <th style="width: 13%;"><p class="cell-c">Total Amount<br />ราคารวม</p></th>
     </tr>
   </thead>
   <tbody>

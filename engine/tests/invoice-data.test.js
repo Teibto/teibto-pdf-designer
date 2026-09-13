@@ -588,6 +588,23 @@ test('requisition header aliases are empty strings, never absent, when the recor
   }
 });
 
+test('a requisition with no summary rows and no subtotal body field prints its body total, not 0.00 (#215)', () => {
+  // NetSuite's purchaserequisition has `total` but no `subtotal`/`taxtotal`; the
+  // record stub returns '' for an unknown field exactly like N/record does here.
+  const data = buildLib({
+    values: { subtotal: '', taxtotal: '', total: 2255 },
+    sums: [],
+  }).buildTransactionData('purchaserequisition', 42);
+  assert.equal(data.subtotalText, '2,255.00');
+  assert.equal(data.taxtotalText, '0.00');
+  assert.equal(data.totalText, '2,255.00');
+  assert.equal(data.subtotal, 2255);
+  // an invoice that DOES carry a subtotal keeps using it
+  const inv = buildLib({ values: { subtotal: 10000, taxtotal: 700, total: 10700 }, sums: [] })
+    .buildTransactionData('invoice', 42);
+  assert.equal(inv.subtotalText, '10,000.00');
+});
+
 test('counterparty contact details come off the entity row of t.entity in the header query', () => {
   // Employee for a requisition, vendor/customer elsewhere — the `entity` table is the
   // one view that covers all of them, so no per-type record load is needed and the
