@@ -822,7 +822,7 @@ export class PldAppShell extends LitElement {
       draft.currentPage = 1;
     });
 
-    showToast(`Loaded sample: ${tpl.name}`, 'success');
+    showToast(`โหลดตัวอย่างแล้ว: ${tpl.name}`, 'success');
   }
 
   private async _togglePanel(side: 'left' | 'right') {

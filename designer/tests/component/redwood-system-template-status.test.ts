@@ -54,6 +54,26 @@ describe('template persistence status', () => {
 });
 
 
+describe('local-save badge (#217)', () => {
+  afterEach(() => { delete (window as any).__NS_CONTEXT__; });
+
+  it('labels a saved template "Saved locally" when not connected to NetSuite', async () => {
+    const store = new AppStore();
+    store.dispatch(draft => { draft.template.id = 'local-template'; });
+    const { badge } = await mount(store);
+    expect(badge().textContent).toContain('บันทึกในเครื่อง · Saved locally');
+  });
+
+  it('keeps the NetSuite-saved label unchanged when connected', async () => {
+    (window as any).__NS_CONTEXT__ = { userId: 1 };
+    const store = new AppStore();
+    store.dispatch(draft => { draft.template.id = '45'; });
+    const { badge } = await mount(store);
+    expect(badge().textContent).toContain('บันทึกแล้ว · Saved');
+    expect(badge().textContent).not.toContain('locally');
+  });
+});
+
 it('treats imported JSON as unsaved and detaches previous NetSuite identity/default metadata', async () => {
   const { bar, store, badge } = await mount();
   store.dispatch(draft => {

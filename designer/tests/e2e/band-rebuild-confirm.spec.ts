@@ -9,7 +9,7 @@ import { gotoApp } from './_helpers';
 test('rebuild Cancel preserves edits and confirmed reset can be undone', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await gotoApp(page);
-  const addText = page.getByRole('button', { name: 'เพิ่ม Text ใน content', exact: true });
+  const addText = page.getByRole('button', { name: 'เพิ่ม Text ใน เนื้อหา', exact: true });
   await addText.click();
   await addText.click();
   await page.locator('pld-band-view').getByTitle('แยกคอลัมน์', { exact: true }).first().click();

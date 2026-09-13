@@ -282,7 +282,7 @@ export class PldHeader extends LitElement {
 
       <div class="brand" aria-label="PDF Layout Designer">
         <div class="mark" aria-hidden="true">PD</div>
-        <span class="brand-copy"><strong>PDF Layout Designer</strong><small>Oracle Redwood workspace</small></span>
+        <span class="brand-copy"><strong>PDF Layout Designer</strong><small>ออกแบบเอกสาร PDF สำหรับ NetSuite</small></span>
       </div>
 
       ${this.editorMode === 'visual' ? html`<div class="view-tabs" role="group" aria-label="มุมมอง (Views)">
@@ -296,7 +296,7 @@ export class PldHeader extends LitElement {
         ${this.readOnly ? html`<span class="readonly read-only-badge" title=${READ_ONLY_REASON}>อ่านอย่างเดียว · Read only</span>` : nothing}
         <button class="btn theme" type="button" @click=${this._onToggleTheme} title="สลับธีม (Toggle theme)">
           <span aria-hidden="true">${icon(this.theme === 'dark' ? 'sun' : 'moon')}</span>
-          <span class="label">${this.theme === 'dark' ? 'Light' : 'Dark'}</span>
+          <span class="label">${this.theme === 'dark' ? 'โหมดสว่าง (Light)' : 'โหมดมืด (Dark)'}</span>
         </button>
         <button class="btn templates" type="button" @click=${this._onTemplates}>เทมเพลต</button>
         <button class="btn save" type="button" @click=${this._onSave} ?disabled=${this.readOnly}

@@ -9,6 +9,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { setTemplateName } from '../../state/actions';
+import { isNetSuiteEnv } from '../../services/netsuite-adapter.service';
 
 @customElement('pld-template-bar')
 export class PldTemplateBar extends LitElement {
@@ -116,7 +117,11 @@ export class PldTemplateBar extends LitElement {
           setTemplateName(this.store, (e.target as HTMLInputElement).value)}
       />
       <span class="badge ${this.isDirty || !this.templateId ? 'dirty' : ''}" role="status">
-        ${this.isDirty ? 'ยังไม่บันทึก · Unsaved' : this.templateId ? 'บันทึกแล้ว · Saved' : 'ยังไม่เคยบันทึก · New'}
+        ${this.isDirty
+          ? 'ยังไม่บันทึก · Unsaved'
+          : this.templateId
+            ? (isNetSuiteEnv() ? 'บันทึกแล้ว · Saved' : 'บันทึกในเครื่อง · Saved locally')
+            : 'ยังไม่เคยบันทึก · New'}
       </span>
     `;
   }

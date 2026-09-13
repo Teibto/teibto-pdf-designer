@@ -23,7 +23,7 @@ test.describe('Flow map', () => {
     await loadSample(page);
     await headerBtn(page, 'ผังข้อมูล').click();
 
-    await expect(flow(page).locator('.column-header', { hasText: 'JSON Data Keys' })).toBeVisible();
+    await expect(flow(page).locator('.column-header', { hasText: 'ฟิลด์ข้อมูล' })).toBeVisible();
     await expect(flow(page).locator('.flow-node-sub').filter({ hasText: '{{' }).first()).toBeVisible();
   });
 
@@ -35,8 +35,8 @@ test.describe('Flow map', () => {
     // while flow-view is mounted, so its listener populates the map.
     await openHeaderMore(page);
     await headerBtn(page, 'ตัวอย่าง').click();
-    await expect(toast(page, 'Loaded sample')).toBeVisible();
-    await expect(flow(page).locator('.column-header', { hasText: 'JSON Data Keys' })).toBeVisible();
+    await expect(toast(page, 'โหลดตัวอย่างแล้ว')).toBeVisible();
+    await expect(flow(page).locator('.column-header', { hasText: 'ฟิลด์ข้อมูล' })).toBeVisible();
     await expect(flow(page).locator('.flow-node-sub').filter({ hasText: '{{' }).first()).toBeVisible();
   });
 });

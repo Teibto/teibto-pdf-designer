@@ -185,13 +185,13 @@ export class PldFlowView extends LitElement {
     return html`
       <div class="flow-title">
         <div class="flow-title-icon">${icon('layers')}</div>
-        Flow Map — Data Bindings
+        ผังข้อมูล (Data Bindings)
       </div>
 
       <div class="flow-container">
         <!-- JSON Keys Column -->
         <div class="flow-column">
-          <div class="column-header">${icon('copy')} JSON Data Keys</div>
+          <div class="column-header">${icon('copy')} ฟิลด์ข้อมูล (JSON keys)</div>
           ${this.jsonKeys.map(
             (key) => html`
               <div class="flow-node ${usedKeys.has(key) ? 'connected' : ''}">
@@ -200,7 +200,7 @@ export class PldFlowView extends LitElement {
                 </div>
                 <div>
                   <div class="flow-node-label">${key}</div>
-                  <div class="flow-node-sub">${usedKeys.has(key) ? 'Bound' : 'Available'}</div>
+                  <div class="flow-node-sub">${usedKeys.has(key) ? 'ผูกแล้ว (Bound)' : 'ยังไม่ใช้ (Available)'}</div>
                 </div>
               </div>
             `,
@@ -214,7 +214,7 @@ export class PldFlowView extends LitElement {
 
         <!-- Elements Column -->
         <div class="flow-column">
-          <div class="column-header">${icon('square')} Bound Elements</div>
+          <div class="column-header">${icon('square')} องค์ประกอบที่ผูกข้อมูล (Bound elements)</div>
           ${boundElements.map((el) => {
             return html`
               <div class="flow-node connected">

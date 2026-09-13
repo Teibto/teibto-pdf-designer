@@ -55,16 +55,16 @@ test.describe('Row operations', () => {
     const header = band(page, 'Header');
     const head = header.locator('.band-head').first();
 
-    await header.locator('button', { hasText: '+ row' }).click();
-    await expect(head).toContainText('2 row');
+    await header.locator('button', { hasText: '+ แถว' }).click();
+    await expect(head).toContainText('2 แถว');
 
     // Reorder: move the first row down, then back up — count stays stable.
     await header.locator('.rowtools button[title="เลื่อนลง"]').first().click();
-    await expect(head).toContainText('2 row');
+    await expect(head).toContainText('2 แถว');
     await header.locator('.rowtools button[title="เลื่อนขึ้น"]').last().click();
-    await expect(head).toContainText('2 row');
+    await expect(head).toContainText('2 แถว');
 
     await header.locator('.rowtools button[title="ลบแถว"]').last().click();
-    await expect(head).toContainText('1 row');
+    await expect(head).toContainText('1 แถว');
   });
 });

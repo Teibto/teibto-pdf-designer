@@ -366,7 +366,7 @@ export class PldTemplateManagerModal extends LitElement {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="Template Manager"
+        modalTitle="จัดการเทมเพลต (Template Manager)"
         size="lg"
         @close=${this._close}
       >
@@ -375,11 +375,11 @@ export class PldTemplateManagerModal extends LitElement {
           <div class="tabs" role="tablist" aria-label="Template sources">
             <button role="tab" id="manager-saved" aria-controls="manager-content" aria-selected=${this.activeTab === 'saved'} tabindex=${this.activeTab === 'saved' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'saved' ? 'active' : ''}"
               @click=${() => (this.activeTab = 'saved')}>
-              ${icon('save')} Saved (${this.savedTemplates.length})
+              ${icon('save')} ที่บันทึกไว้ (Saved) (${this.savedTemplates.length})
             </button>
             <button role="tab" id="manager-samples" aria-controls="manager-content" aria-selected=${this.activeTab === 'samples'} tabindex=${this.activeTab === 'samples' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'samples' ? 'active' : ''}"
               @click=${() => (this.activeTab = 'samples')}>
-              ${icon('file')} Samples
+              ${icon('file')} ตัวอย่าง (Samples)
             </button>
             ${isNetSuiteEnv() ? html`
               <button role="tab" id="manager-netsuite" aria-controls="manager-content" aria-selected=${this.activeTab === 'netsuite'} tabindex=${this.activeTab === 'netsuite' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'netsuite' ? 'active' : ''}"
@@ -389,7 +389,7 @@ export class PldTemplateManagerModal extends LitElement {
             ` : nothing}
             <button role="tab" id="manager-import" aria-controls="manager-content" aria-selected=${this.activeTab === 'import'} tabindex=${this.activeTab === 'import' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'import' ? 'active' : ''}"
               @click=${() => (this.activeTab = 'import')}>
-              ${icon('upload')} Import / Export
+              ${icon('upload')} นำเข้า/ส่งออก (Import / Export)
             </button>
           </div>
 
@@ -403,8 +403,8 @@ export class PldTemplateManagerModal extends LitElement {
 
         <div slot="footer">
           <div class="footer-btns">
-            <button class="btn" @click=${this._saveCurrentTemplate}>${icon('save')} Save Current</button>
-            <button class="btn" @click=${this._close}>Close</button>
+            <button class="btn" @click=${this._saveCurrentTemplate}>${icon('save')} บันทึกงานปัจจุบัน (Save Current)</button>
+            <button class="btn" @click=${this._close}>ปิด (Close)</button>
           </div>
         </div>
       </pld-modal>
@@ -436,15 +436,15 @@ export class PldTemplateManagerModal extends LitElement {
           <div class="template-card">
             <div class="tpl-name">${tpl.name}</div>
             <div class="tpl-meta">
-              <span>Page: ${tpl.page.size} ${tpl.page.orientation}</span>
-              <span>Modified: ${new Date(tpl.updatedAt).toLocaleDateString()}</span>
+              <span>กระดาษ: ${tpl.page.size} ${tpl.page.orientation}</span>
+              <span>แก้ไขล่าสุด: ${new Date(tpl.updatedAt).toLocaleDateString()}</span>
             </div>
-            <div class="tpl-elements">${tpl.elements.length} elements</div>
+            <div class="tpl-elements">${tpl.elements.length} องค์ประกอบ</div>
             <div class="tpl-actions">
-              <button class="tpl-btn primary" @click=${() => this._loadTemplate(tpl.id)}>Load</button>
-              <button class="tpl-btn" @click=${() => this._duplicateTemplate(tpl.id)}>Duplicate</button>
-              <button class="tpl-btn" @click=${() => this._exportSingle(tpl)}>Export</button>
-              <button class="tpl-btn danger" @click=${() => this._deleteTemplate(tpl.id, tpl.name)}>Delete</button>
+              <button class="tpl-btn primary" @click=${() => this._loadTemplate(tpl.id)}>เปิด (Load)</button>
+              <button class="tpl-btn" @click=${() => this._duplicateTemplate(tpl.id)}>ทำสำเนา (Duplicate)</button>
+              <button class="tpl-btn" @click=${() => this._exportSingle(tpl)}>ส่งออก (Export)</button>
+              <button class="tpl-btn danger" @click=${() => this._deleteTemplate(tpl.id, tpl.name)}>ลบ (Delete)</button>
             </div>
           </div>
         `)}
@@ -459,11 +459,11 @@ export class PldTemplateManagerModal extends LitElement {
           <div class="template-card" @click=${() => this._loadSample(tpl)}>
             <div class="tpl-name">${tpl.name}</div>
             <div class="tpl-meta">
-              <span>Page: ${tpl.page.size} ${tpl.page.orientation}</span>
+              <span>กระดาษ: ${tpl.page.size} ${tpl.page.orientation}</span>
             </div>
-            <div class="tpl-elements">${tpl.elements.length} elements • Includes sample data</div>
+            <div class="tpl-elements">${tpl.elements.length} องค์ประกอบ • Includes sample data</div>
             <div class="tpl-actions">
-              <button class="tpl-btn primary">Load Sample</button>
+              <button class="tpl-btn primary">เปิด (Load)</button>
             </div>
           </div>
         `)}
@@ -513,16 +513,16 @@ export class PldTemplateManagerModal extends LitElement {
             </div>
             <div class="tpl-elements">NetSuite ID: ${tpl.id}</div>
             <div class="tpl-actions">
-              <button class="tpl-btn primary" @click=${() => this._loadNsTemplate(tpl.id)}>Load</button>
+              <button class="tpl-btn primary" @click=${() => this._loadNsTemplate(tpl.id)}>เปิด (Load)</button>
               <button class="tpl-btn" ?disabled=${readOnly}
                 title=${readOnly ? READ_ONLY_REASON : 'สร้างสำเนาใน NetSuite'}
-                @click=${() => this._duplicateNsTemplate(tpl.id)}>Duplicate</button>
+                @click=${() => this._duplicateNsTemplate(tpl.id)}>ทำสำเนา (Duplicate)</button>
               <button class="tpl-btn" @click=${() => this._toggleHistory(tpl.id)}>
                 ${icon('clock')} ${this.historyFor === tpl.id ? 'ปิดประวัติ' : 'ประวัติ'}
               </button>
               <button class="tpl-btn danger" ?disabled=${readOnly}
                 title=${readOnly ? READ_ONLY_REASON : 'ลบเทมเพลตนี้ออกจาก NetSuite'}
-                @click=${() => this._deleteNsTemplate(tpl.id, tpl.name)}>Delete</button>
+                @click=${() => this._deleteNsTemplate(tpl.id, tpl.name)}>ลบ (Delete)</button>
             </div>
             ${this.historyFor === tpl.id ? this._renderHistory(readOnly) : nothing}
           </div>
@@ -717,7 +717,7 @@ export class PldTemplateManagerModal extends LitElement {
       draft.multiSelect = [];
       draft.currentPage = 1;
     });
-    showToast(`Loaded sample: ${tpl.name}`, 'success');
+    showToast(`โหลดตัวอย่างแล้ว: ${tpl.name}`, 'success');
     this._close();
   }
 

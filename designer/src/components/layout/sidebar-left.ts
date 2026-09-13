@@ -35,6 +35,20 @@ const TABS: { id: TabId; icon: IconName; label: string }[] = [
   { id: 'settings', icon: 'settings', label: 'ตั้งค่า' },
 ];
 
+/**
+ * Thai (+ English) names for the insertion-destination band roles (#217).
+ * `bilingual` renders the select's <option>; `th` is the short name used in
+ * add-element button title/aria instead of the raw role value.
+ */
+const DESTINATION_LABELS: Record<ElementRoleType, { th: string; bilingual: string }> = {
+  header:    { th: 'ส่วนหัว',     bilingual: 'ส่วนหัว (Header)' },
+  content:   { th: 'เนื้อหา',     bilingual: 'เนื้อหา (Content)' },
+  table:     { th: 'ตาราง',       bilingual: 'ตาราง (Table)' },
+  summary:   { th: 'สรุปยอด',     bilingual: 'สรุปยอด (Summary)' },
+  footer:    { th: 'ท้ายกระดาษ',  bilingual: 'ท้ายกระดาษ (Footer)' },
+  watermark: { th: 'ลายน้ำ',      bilingual: 'ลายน้ำ (Watermark)' },
+};
+
 @customElement('pld-sidebar-left')
 export class PldSidebarLeft extends LitElement {
   @consume({ context: storeContext })
@@ -313,9 +327,9 @@ export class PldSidebarLeft extends LitElement {
       <div class="section">
         <div class="section-title">${icon('shapes')} เพิ่มองค์ประกอบ</div>
         <label for="insert-destination">เพิ่มแถวใหม่ในส่วน (Destination)</label>
-        <select id="insert-destination" .value=${this.destination}
+        <select id="insert-destination"
           @change=${(event: Event) => { this.destination = (event.target as HTMLSelectElement).value as ElementRoleType; }}>
-          ${BAND_ORDER.filter(role => role !== 'watermark').map(role => html`<option value=${role}>${role}</option>`)}
+          ${BAND_ORDER.filter(role => role !== 'watermark').map(role => html`<option value=${role} ?selected=${role === this.destination}>${DESTINATION_LABELS[role].bilingual}</option>`)}
         </select>
         <p class="palette-help">คลิกหรือกด Enter / Space เพื่อเพิ่มแถวใหม่ หรือ drag ไปยังช่องที่ต้องการ</p>
         <div class="element-grid">
@@ -398,8 +412,8 @@ export class PldSidebarLeft extends LitElement {
   private _elItem(type: ElementType, iconName: IconName, label: string) {
     return html`
       <button type="button" class="element-item" draggable="true"
-        title=${bandAccepts(this.destination, type) ? `เพิ่มใน ${this.destination}` : `ส่วน ${this.destination} ไม่รองรับ ${label} — เลือกส่วนอื่นหรือลากไปยังช่องที่รองรับ`}
-        aria-label="เพิ่ม ${label} ใน ${this.destination}"
+        title=${bandAccepts(this.destination, type) ? `เพิ่มใน ${DESTINATION_LABELS[this.destination].th}` : `ส่วน ${DESTINATION_LABELS[this.destination].th} ไม่รองรับ ${label} — เลือกส่วนอื่นหรือลากไปยังช่องที่รองรับ`}
+        aria-label="เพิ่ม ${label} ใน ${DESTINATION_LABELS[this.destination].th}"
         @click=${() => this._insert(type, label)}
         @dragstart=${(e: DragEvent) => this._onDragStart(e, type)}
         @dragend=${this._onPaletteDragEnd}>
@@ -426,8 +440,9 @@ export class PldSidebarLeft extends LitElement {
 
   private _insert(type: ElementType, label: string) {
     const id = addElementToNewBand(this.store, type, this.destination);
-    if (id) showToast(`เพิ่ม ${label} ใน ${this.destination} แล้ว`, 'success');
-    else showToast(`ส่วน ${this.destination} ไม่รองรับ ${label} — กรุณาเลือกส่วนอื่น`, 'warning');
+    const band = DESTINATION_LABELS[this.destination].th;
+    if (id) showToast(`เพิ่ม ${label} ใน ${band} แล้ว`, 'success');
+    else showToast(`ส่วน ${band} ไม่รองรับ ${label} — กรุณาเลือกส่วนอื่น`, 'warning');
   }
 
   private readonly _onPaletteDragEnd = () => {
