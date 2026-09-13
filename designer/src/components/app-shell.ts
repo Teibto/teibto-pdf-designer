@@ -9,6 +9,7 @@
 import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { provide } from '@lit/context';
+import { freeze } from 'immer';
 import { AppStore, storeContext } from '../state/store';
 import { HistoryService } from '../services/history.service';
 import { registerKeyboardShortcuts, shouldIgnoreShortcut } from '../services/keyboard.service';
@@ -31,6 +32,7 @@ import { loadJsonData, extractJsonKeys } from '../state/actions';
 import { confirmDiscardUnsaved } from '../utils/unsaved-guard';
 import { applyMiddleware } from '../state/middleware';
 import { debounce } from '../utils/debounce';
+import { yieldTask } from '../utils/yield-task';
 import { elementsToBands } from '../services/band-layout.service';
 import { createDefaultPagination } from '../models/template';
 
@@ -539,6 +541,12 @@ export class PldAppShell extends LitElement {
     try {
       const data = await autoLoadRecordIfAvailable(controller.signal);
       if (!this._isCurrentDataLoad(intent) || controller.signal.aborted || !data) return;
+      // The store already freezes incoming JSON. Do that traversal before a task
+      // boundary so decoding/freezing does not share pagination and rendering's task.
+      freeze(data, true);
+      if (!this._isCurrentDataLoad(intent) || controller.signal.aborted) return;
+      await yieldTask(controller.signal);
+      if (!this._isCurrentDataLoad(intent) || controller.signal.aborted) return;
       this._recordLoadController = null;
       loadJsonData(this.store, data);
       showToast(`Loaded ${data._recordType} #${data._internalId}`, 'success');

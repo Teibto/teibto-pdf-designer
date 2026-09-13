@@ -166,3 +166,19 @@ or sizes as gaps. Do not change transactions to manufacture a benchmark.
 Connected evidence now verifies the selected small-record loading and PDF layout
 paths. Large real-record loading/pagination remains a stated coverage gap; local
 mock tests do not close it. See [the SB2 report](213-sb2-performance.md).
+
+## Initial-load task separation
+
+Trace-off CI run 34727118624 passed 121 functional E2E cases and 13/14
+performance cases. Purchase Order with 10,000 synthetic rows retained a 163 ms
+initial-load task against the unchanged 150 ms limit; its edit p95 was 93.6 ms.
+The task spanned data commit and subsequent UI work. Removing trace instrumentation
+therefore did not resolve all application work in the same browser task.
+
+The subsequent load path explicitly deep-freezes freshly decoded record JSON,
+then yields a browser task before synchronous store commit, pagination and Lit
+updates. Immer already freezes that data on commit; moving the same traversal
+preserves immutable state while separating preparation from layout work. Abort
+and current-document checks guard the boundary. The measurement still includes
+all stages from response start through form paint, with unchanged budgets.
+Final validation and the matching SB2 deployment are tracked on PR #214.
