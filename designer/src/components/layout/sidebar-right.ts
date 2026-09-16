@@ -667,11 +667,11 @@ export class PldSidebarRight extends LitElement {
   private _autoDetectColumns(elementId: string) {
     const columns = autoDetectColumnsFromStore(this.store, elementId);
     if (columns.length === 0) {
-      showToast('No array data found in JSON. Load JSON data first.', 'warning');
+      showToast('ไม่พบข้อมูลแบบ array ใน JSON — โหลดข้อมูล JSON ก่อน (No array data found in JSON)', 'warning');
       return;
     }
     updateElement(this.store, elementId, 'columns' as any, columns);
-    showToast(`Detected ${columns.length} columns from JSON data`, 'success');
+    showToast(`ตรวจพบ ${columns.length} คอลัมน์จากข้อมูล JSON (Detected ${columns.length} columns from JSON data)`, 'success');
   }
 }
 

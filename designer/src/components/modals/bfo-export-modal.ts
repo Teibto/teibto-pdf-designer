@@ -471,7 +471,7 @@ export class PldBfoExportModal extends LitElement {
 
   private _copyToClipboard() {
     navigator.clipboard?.writeText(this.xmlPreview);
-    showToast('BFO XML copied to clipboard!', 'success');
+    showToast('คัดลอก BFO XML ไปยังคลิปบอร์ดแล้ว (BFO XML copied to clipboard)', 'success');
   }
 
   private _downloadFile() {
@@ -482,7 +482,7 @@ export class PldBfoExportModal extends LitElement {
     a.download = `${this.store.state.template.name || 'template'}_bfo.xml`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('BFO XML downloaded!', 'success');
+    showToast('ดาวน์โหลด BFO XML แล้ว (BFO XML downloaded)', 'success');
   }
 
   private _close() {

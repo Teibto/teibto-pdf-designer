@@ -767,7 +767,7 @@ export class PldColumnConfigModal extends LitElement {
     this.columns = JSON.parse(JSON.stringify(preset.columns));
     this.selectedColIdx = 0;
     this.showPresets = false;
-    showToast(`Applied preset: ${preset.name}`, 'success');
+    showToast(`ใช้พรีเซ็ตแล้ว: ${preset.name} (Applied preset)`, 'success');
   }
 
   // ─── Drag Reorder ───
@@ -813,7 +813,7 @@ export class PldColumnConfigModal extends LitElement {
       draft.template.isDirty = true;
     });
 
-    showToast(`Updated ${this.columns.length} columns`, 'success');
+    showToast(`อัปเดต ${this.columns.length} คอลัมน์แล้ว (Updated ${this.columns.length} columns)`, 'success');
     this._close();
   }
 

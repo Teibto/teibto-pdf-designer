@@ -5,7 +5,7 @@
  * @author Wichit Wongta
  * @since 2026-09-13
  */
-import type { CanvasElement, ElementType } from '../models/element';
+import type { CanvasElement, ElementRoleType, ElementType } from '../models/element';
 
 export const ELEMENT_TYPE_LABEL_TH: Record<ElementType, string> = {
   header: 'หัวเรื่อง',
@@ -16,6 +16,19 @@ export const ELEMENT_TYPE_LABEL_TH: Record<ElementType, string> = {
   line: 'เส้น',
   barcode: 'บาร์โค้ด',
   list: 'รายการ',
+};
+
+/**
+ * Thai (+ English) names for the six band roles, shared by the insertion
+ * Destination select (#217) and the band rejection toasts so both agree.
+ */
+export const ELEMENT_ROLE_LABEL: Record<ElementRoleType, { th: string; bilingual: string }> = {
+  header:    { th: 'ส่วนหัว',    bilingual: 'ส่วนหัว (Header)' },
+  content:   { th: 'เนื้อหา',    bilingual: 'เนื้อหา (Content)' },
+  table:     { th: 'ตาราง',      bilingual: 'ตาราง (Table)' },
+  summary:   { th: 'สรุปยอด',    bilingual: 'สรุปยอด (Summary)' },
+  footer:    { th: 'ท้ายกระดาษ', bilingual: 'ท้ายกระดาษ (Footer)' },
+  watermark: { th: 'ลายน้ำ',     bilingual: 'ลายน้ำ (Watermark)' },
 };
 
 const PREVIEW_MAX = 24;

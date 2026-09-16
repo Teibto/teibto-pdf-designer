@@ -400,7 +400,7 @@ export class PldJsonEditor extends LitElement {
         this._rawDraftDirty = false;
       } catch {
         // Stay on JSON view if invalid
-        showToast('Fix JSON errors before switching to Form view', 'warning');
+        showToast('แก้ไขข้อผิดพลาด JSON ก่อนสลับไปมุมมองฟอร์ม (Fix JSON errors before switching to Form view)', 'warning');
         return;
       }
     }
@@ -459,7 +459,7 @@ export class PldJsonEditor extends LitElement {
     this._rawDraftDirty = false;
     this._commitLocalData(data);
     this.isValid = true;
-    showToast('Sample data loaded!', 'success');
+    showToast('โหลดข้อมูลตัวอย่างแล้ว (Sample data loaded)', 'success');
   }
 
   private _format() {
@@ -471,7 +471,7 @@ export class PldJsonEditor extends LitElement {
       this.isValid = true;
       this._rawDraftDirty = false;
     } catch {
-      showToast('Cannot format — invalid JSON', 'warning');
+      showToast('จัดรูปแบบไม่ได้ — JSON ไม่ถูกต้อง (Cannot format — invalid JSON)', 'warning');
     }
   }
 
