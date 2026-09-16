@@ -319,17 +319,17 @@ export class PldBfoExportModal extends LitElement {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="NetSuite BFO XML Export"
+        modalTitle="ส่งออก BFO XML สำหรับ NetSuite (NetSuite BFO XML Export)"
         size="xl"
         @close=${this._close}
       >
         <div slot="body">
           <!-- Config Section -->
           ${this.store.state.editorMode === 'visual' ? html`<div class="config-section">
-            <div class="section-label">Export Settings</div>
+            <div class="section-label">ตั้งค่าการส่งออก (Export Settings)</div>
             <div class="config-row">
               <div class="config-field">
-                <label for="bfo-export-record-type">NetSuite Record Type</label>
+                <label for="bfo-export-record-type">ประเภทเอกสาร NetSuite (NetSuite Record Type)</label>
                 <select id="bfo-export-record-type"
                   @change=${(e: Event) => {
                     this.recordType = (e.target as HTMLSelectElement).value;
@@ -348,7 +348,7 @@ export class PldBfoExportModal extends LitElement {
                     this.useFreeMarker = (e.target as HTMLInputElement).checked;
                     this._generatePreview();
                   }} />
-                Use FreeMarker Syntax
+                ใช้ไวยากรณ์ FreeMarker (Use FreeMarker Syntax)
               </label>
               <label class="check-item">
                 <input type="checkbox" .checked=${this.includePageHeaders}
@@ -356,10 +356,10 @@ export class PldBfoExportModal extends LitElement {
                     this.includePageHeaders = (e.target as HTMLInputElement).checked;
                     this._generatePreview();
                   }} />
-                Include Page Header/Footer CSS
+                รวม CSS หัว/ท้ายกระดาษ (Include Page Header/Footer CSS)
               </label>
             </div>
-          </div>` : html`<p class="config-section">Canonical XML is exported exactly as edited. Generator options do not apply.</p>`}
+          </div>` : html`<p class="config-section">Canonical XML ถูกส่งออกตามที่แก้ไขจริง — ตัวเลือกของ generator ไม่มีผล (Canonical XML is exported exactly as edited)</p>`}
 
           <!-- ฟอนต์ไทยยังไม่ได้ตั้งใน config (#156): binding company.fontRegular
                จะว่าง → BFO เมินฟอนต์เงียบ ๆ แล้วตัวอักษรไทยหายทั้งใบ -->
@@ -376,11 +376,11 @@ export class PldBfoExportModal extends LitElement {
           <!-- XML Preview -->
           <div class="xml-preview-area">
             <div class="xml-toolbar">
-              <h3>⟨/⟩ ${this.store.state.editorMode === 'xml' ? 'Canonical XML' : 'Generated XML'}</h3>
+              <h3>⟨/⟩ ${this.store.state.editorMode === 'xml' ? 'XML หลัก (Canonical XML)' : 'XML ที่สร้าง (Generated XML)'}</h3>
               <div class="xml-actions">
-                <button class="small-btn" ?disabled=${!!this.xmlError} @click=${this._copyToClipboard}>${icon('copy')} Copy</button>
-                <button class="small-btn" ?disabled=${!!this.xmlError} @click=${this._downloadFile}>${icon('download')} Download .xml</button>
-                <button class="small-btn" @click=${this._generatePreview}>${icon('refresh')} Regenerate</button>
+                <button class="small-btn" ?disabled=${!!this.xmlError} @click=${this._copyToClipboard}>${icon('copy')} คัดลอก (Copy)</button>
+                <button class="small-btn" ?disabled=${!!this.xmlError} @click=${this._downloadFile}>${icon('download')} ดาวน์โหลด .xml (Download .xml)</button>
+                <button class="small-btn" @click=${this._generatePreview}>${icon('refresh')} สร้างใหม่ (Regenerate)</button>
               </div>
             </div>
             <pre class="xml-code">${this.xmlPreview}</pre>
@@ -388,7 +388,7 @@ export class PldBfoExportModal extends LitElement {
 
           <!-- Info -->
           <div class="info-panel">
-            <p>${icon('info')} <strong>NetSuite BFO Tips:</strong></p>
+            <p>${icon('info')} <strong>เคล็ดลับ BFO ของ NetSuite (NetSuite BFO Tips):</strong></p>
             <p>• Variable syntax: <code>\${${this.recordType}.fieldName}</code></p>
             <p>• List iteration: <code>&lt;#list ${this.recordType}.items as item&gt;</code></p>
             <p>• Template ถูกเก็บใน Custom Record แยก ไม่ใช้ Advanced PDF Templates</p>
@@ -398,9 +398,9 @@ export class PldBfoExportModal extends LitElement {
 
         <div slot="footer">
           <div class="footer-btns">
-            <button class="btn" @click=${this._close}>Close</button>
-            <button class="btn" ?disabled=${!!this.xmlError} @click=${this._copyToClipboard}>${icon('copy')} Copy XML</button>
-            <button class="btn btn-bfo" ?disabled=${!!this.xmlError} @click=${this._downloadFile}>${icon('download')} Download</button>
+            <button class="btn" @click=${this._close}>ปิด (Close)</button>
+            <button class="btn" ?disabled=${!!this.xmlError} @click=${this._copyToClipboard}>${icon('copy')} คัดลอก XML (Copy XML)</button>
+            <button class="btn btn-bfo" ?disabled=${!!this.xmlError} @click=${this._downloadFile}>${icon('download')} ดาวน์โหลด (Download)</button>
           </div>
         </div>
       </pld-modal>

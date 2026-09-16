@@ -119,12 +119,12 @@ describe('layers panel (Layers tab)', () => {
 
   it('toggles visibility and lock through the store', async () => {
     const item = allInShadow(panel, '.layer-item')[0];
-    const hideBtn = item.querySelector('.action-btn[title="Hide"]');
+    const hideBtn = item.querySelector('.action-btn[title="ซ่อน (Hide)"]');
     click(hideBtn);
     await h.flush();
     expect(h.store.state.elements[0].visible).toBe(false);
 
-    const lockBtn = allInShadow(panel, '.layer-item')[0].querySelector('.action-btn[title="Lock"]');
+    const lockBtn = allInShadow(panel, '.layer-item')[0].querySelector('.action-btn[title="ล็อก (Lock)"]');
     click(lockBtn);
     await h.flush();
     expect(h.store.state.elements[0].locked).toBe(true);

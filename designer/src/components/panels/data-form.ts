@@ -428,7 +428,7 @@ export class PldDataForm extends LitElement {
                     ${columns.map(
                       (col) => html`
                         <td>
-                          <input aria-label=${`${this._formatLabel(key)}, row ${rowIdx + 1}, ${this._formatLabel(col)}`}
+                          <input aria-label=${`${this._formatLabel(key)}, แถวที่ ${rowIdx + 1} (row), ${this._formatLabel(col)}`}
                             type="${typeof row[col] === 'number' ? 'number' : 'text'}"
                             .value=${String(row[col] ?? '')}
                             @change=${(e: Event) =>
@@ -438,7 +438,7 @@ export class PldDataForm extends LitElement {
                       `,
                     )}
                     <td>
-                      <button class="del-btn" title="Remove row" @click=${() => this._removeArrayRow(key, rowIdx)}>${icon('close')}</button>
+                      <button class="del-btn" title="ลบแถว (Remove row)" @click=${() => this._removeArrayRow(key, rowIdx)}>${icon('close')}</button>
                     </td>
                   </tr>
                 `;
@@ -447,27 +447,27 @@ export class PldDataForm extends LitElement {
           </table>
         </div>
         ${allColumns.length > columns.length
-          ? this._renderOverflow(`${allColumns.length - columns.length} more columns`)
+          ? this._renderOverflow(`${allColumns.length - columns.length} คอลัมน์เพิ่มเติม (more columns)`)
           : nothing}
         ${visibleRows.length < end - start
-          ? this._renderOverflow(`${end - start - visibleRows.length} rows hidden by the visual-form budget`)
+          ? this._renderOverflow(`ซ่อนอีก ${end - start - visibleRows.length} แถว (rows hidden by the visual-form budget)`)
           : nothing}
         <div class="array-actions">
-          <button class="small-btn" @click=${() => this._addArrayRow(key, allColumns)}>+ Add Row</button>
+          <button class="small-btn" @click=${() => this._addArrayRow(key, allColumns)}>+ เพิ่มแถว (Add Row)</button>
           ${arr.length > ARRAY_PAGE_SIZE ? html`
-            <span class="array-page-status">Rows ${start + 1}–${end} of ${arr.length}</span>
+            <span class="array-page-status">แถวที่ ${start + 1}–${end} จาก ${arr.length}</span>
             <button
               class="small-btn array-page-prev"
-              aria-label="Previous rows"
+              aria-label="แถวก่อนหน้า (Previous rows)"
               ?disabled=${page === 0}
               @click=${() => this._setArrayPage(key, page - 1, arr.length)}
-            >Previous</button>
+            >ก่อนหน้า (Previous)</button>
             <button
               class="small-btn array-page-next"
-              aria-label="Next rows"
+              aria-label="แถวถัดไป (Next rows)"
               ?disabled=${page === pageCount - 1}
               @click=${() => this._setArrayPage(key, page + 1, arr.length)}
-            >Next</button>
+            >ถัดไป (Next)</button>
           ` : nothing}
         </div>
       </div>

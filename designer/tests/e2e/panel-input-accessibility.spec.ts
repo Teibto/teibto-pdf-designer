@@ -13,10 +13,10 @@ test('JSON editor has an associated label and keyboard-operable expansion withou
   await page.locator('pld-json-editor').getByRole('button', { name: 'JSON', exact: true }).click();
   const textarea = page.getByLabel('ข้อมูล JSON (JSON data)', { exact: true });
   await expect(textarea).toBeVisible();
-  const toggle = page.getByRole('button', { name: 'Expand', exact: true });
+  const toggle = page.getByRole('button', { name: 'ขยาย (Expand)', exact: true });
   await toggle.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Collapse', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: 'ย่อ (Collapse)', exact: true })).toHaveAttribute('aria-expanded', 'true');
   await expect(textarea).toHaveCSS('min-height', '300px');
   await page.keyboard.press('Space');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');

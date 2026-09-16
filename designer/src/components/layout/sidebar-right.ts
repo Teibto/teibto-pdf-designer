@@ -12,6 +12,7 @@ import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { updateElement, resizeElement, removeElement, duplicateElement, moveElementToBandByRole } from '../../state/actions';
 import type { CanvasElement, TextElement, ImageElement, ShapeElement, LineElement, BarcodeElement, ListElement, TableElement, ElementRoleType } from '../../models/element';
 import { ELEMENT_ROLES } from '../../constants/roles';
+import { ELEMENT_ROLE_LABEL } from '../../utils/element-label';
 import { openImagePicker, clearElementImage } from '../../services/image.service';
 import { autoDetectColumnsFromStore } from '../../services/column-detect.service';
 import { listBindingPaths } from '../../services/binding.service';
@@ -346,14 +347,14 @@ export class PldSidebarRight extends LitElement {
         <div class="group-title">ส่วนของหน้า (Band)</div>
         <div class="role-selector">
           ${(Object.entries(ELEMENT_ROLES) as [ElementRoleType, typeof ELEMENT_ROLES[ElementRoleType]][]).map(
-            ([key, role]) => html`
+            ([key]) => html`
               <button type="button"
                 class="role-option ${el.role === key ? 'active' : ''}"
                 aria-pressed=${el.role === key}
                 @click=${() => this._setRole(key)}
               >
                 <span class="role-dot" style="background: var(--color-role-${key})"></span>
-                ${role.label}
+                ${ELEMENT_ROLE_LABEL[key].bilingual}
               </button>
             `,
           )}

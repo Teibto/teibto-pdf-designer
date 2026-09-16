@@ -372,7 +372,7 @@ export class PldTemplateManagerModal extends LitElement {
       >
         <div slot="body">
           <!-- Tabs -->
-          <div class="tabs" role="tablist" aria-label="Template sources">
+          <div class="tabs" role="tablist" aria-label="แหล่งเทมเพลต (Template sources)">
             <button role="tab" id="manager-saved" aria-controls="manager-content" aria-selected=${this.activeTab === 'saved'} tabindex=${this.activeTab === 'saved' ? 0 : -1} @keydown=${this._onTabKeydown} class="tab ${this.activeTab === 'saved' ? 'active' : ''}"
               @click=${() => (this.activeTab = 'saved')}>
               ${icon('save')} ที่บันทึกไว้ (Saved) (${this.savedTemplates.length})
@@ -506,7 +506,7 @@ export class PldTemplateManagerModal extends LitElement {
       <div class="template-grid">
         ${this.nsTemplates.map((tpl) => html`
           <div class="template-card">
-            <div class="tpl-name">${tpl.isDefault ? html`<span title="Default">${icon('check')}</span>` : nothing}${tpl.name}</div>
+            <div class="tpl-name">${tpl.isDefault ? html`<span title="ค่าเริ่มต้น (Default)">${icon('check')}</span>` : nothing}${tpl.name}</div>
             <div class="tpl-meta">
               <span>ประเภทเอกสาร: ${tpl.rectype || '—'}${tpl.isDefault ? ' (ค่าเริ่มต้น)' : ''}</span>
               <span>แก้ไขล่าสุด: ${tpl.modified}</span>

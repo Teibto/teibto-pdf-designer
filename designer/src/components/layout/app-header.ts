@@ -290,7 +290,7 @@ export class PldHeader extends LitElement {
           @click=${() => switchView(this.store, 'design')}>ออกแบบ <small>Design</small></button>
         <button class="tab" aria-pressed=${this.activeView === 'flow'}
           @click=${() => switchView(this.store, 'flow')}>ผังข้อมูล <small>Flow</small></button>
-      </div>` : html`<span class="xml-mode">Canonical XML</span>`}
+      </div>` : html`<span class="xml-mode">XML หลัก (Canonical XML)</span>`}
 
       <div class="actions">
         ${this.readOnly ? html`<span class="readonly read-only-badge" title=${READ_ONLY_REASON}>อ่านอย่างเดียว · Read only</span>` : nothing}
@@ -308,7 +308,7 @@ export class PldHeader extends LitElement {
         <details @keydown=${this._onMenuKeydown}>
           <summary class="iconbtn" title="การทำงานเพิ่มเติม (More actions)" aria-label="การทำงานเพิ่มเติม">${icon('more-horizontal')}</summary>
           <div class="menu" @click=${this._closeMenu}>
-            <button type="button" @click=${this._onToggleTheme}>สลับเป็น ${this.theme === 'dark' ? 'Light' : 'Dark'} theme</button>
+            <button type="button" @click=${this._onToggleTheme}>สลับเป็นโหมด${this.theme === 'dark' ? 'สว่าง (Light)' : 'มืด (Dark)'}</button>
             <div class="menu-separator"></div>
             <button type="button" @click=${this._onTemplates}>เทมเพลต · Templates</button>
             <button type="button" @click=${this._onSave} ?disabled=${this.readOnly}>บันทึก · Save</button>

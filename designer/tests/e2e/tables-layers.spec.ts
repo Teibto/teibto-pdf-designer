@@ -45,18 +45,18 @@ test.describe('Layers panel', () => {
   test('toggles element visibility', async ({ page }) => {
     const first = page.locator('pld-layers-panel .layer-item').first();
     await first.click();
-    await first.locator('.action-btn[title="Hide"]').click();
+    await first.locator('.action-btn[title="ซ่อน (Hide)"]').click();
     await expect(first).toHaveClass(/hidden-el/);
-    await first.locator('.action-btn[title="Show"]').click();
+    await first.locator('.action-btn[title="แสดง (Show)"]').click();
     await expect(first).not.toHaveClass(/hidden-el/);
   });
 
   test('toggles element lock', async ({ page }) => {
     const first = page.locator('pld-layers-panel .layer-item').first();
     await first.click();
-    await first.locator('.action-btn[title="Lock"]').click();
+    await first.locator('.action-btn[title="ล็อก (Lock)"]').click();
     await expect(first).toHaveClass(/locked/);
-    await first.locator('.action-btn[title="Unlock"]').click();
+    await first.locator('.action-btn[title="ปลดล็อก (Unlock)"]').click();
     await expect(first).not.toHaveClass(/locked/);
   });
 

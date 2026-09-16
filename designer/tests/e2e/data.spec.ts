@@ -46,7 +46,7 @@ test.describe('Data tab — JSON editor', () => {
   test('clears loaded data', async ({ page }) => {
     await editor(page).locator('.small-btn', { hasText: 'ตัวอย่าง' }).click();
     await expect(editor(page).locator('.badge.keys')).toBeVisible();
-    await editor(page).locator('.small-btn[title="Clear"]').click();
+    await editor(page).locator('.small-btn[title="ล้างข้อมูล (Clear)"]').click();
     await expect(editor(page).locator('.badge.keys')).toBeHidden();
     const data = await storeState(page, (s) => s.jsonData);
     expect(data).toBeNull();

@@ -283,7 +283,7 @@ export class PldPaginationPanel extends LitElement {
       </label>
 
       <label class="check-item"
-        title="Pad the table with empty rows to a multiple of Rows per Page so the summary block stays anchored on the last page (#84)">
+        title="เติมแถวว่างให้จำนวนแถวเป็นเท่าของจำนวนแถวต่อหน้า เพื่อให้ส่วนสรุปอยู่ตำแหน่งเดิมบนหน้าสุดท้าย (Pad the table with empty rows to a multiple of Rows per Page so the summary block stays anchored on the last page)">
         <input type="checkbox" .checked=${this.config.fillLastPage ?? false}
           @change=${(e: Event) => this._update('fillLastPage', (e.target as HTMLInputElement).checked)} />
         เติมแถวว่างให้เต็มหน้า (summary อยู่ตำแหน่งคงที่)
@@ -326,8 +326,8 @@ export class PldPaginationPanel extends LitElement {
               @change=${(e: Event) => this._updateCopy(i, 'th', (e.target as HTMLInputElement).value)} />
           </div>
           <div class="field">
-            <label for="copy-en-${i}">Copy ${i + 1} (EN)</label>
-            <input id="copy-en-${i}" type="text" placeholder="EN e.g. Original" .value=${c.en}
+            <label for="copy-en-${i}">สำเนา ${i + 1} (EN)</label>
+            <input id="copy-en-${i}" type="text" placeholder="EN เช่น Original" .value=${c.en}
               @change=${(e: Event) => this._updateCopy(i, 'en', (e.target as HTMLInputElement).value)} />
           </div>
           <button class="mode-btn copy-remove" title="ลบสำเนา" aria-label="ลบสำเนา ${i + 1}" @click=${() => this._removeCopy(i)}>${icon('close')}</button>

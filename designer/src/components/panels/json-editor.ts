@@ -301,26 +301,26 @@ export class PldJsonEditor extends LitElement {
     return html`
       <div class="header">
         <div class="header-left">
-          <span class="title">{} Data</span>
+          <span class="title">{} ข้อมูล (Data)</span>
           ${this.keyCount > 0
-            ? html`<span class="badge keys">${this.keyCount} keys</span>`
+            ? html`<span class="badge keys">${this.keyCount} ฟิลด์ (keys)</span>`
             : nothing}
           ${this.jsonText && this.viewMode === 'json'
             ? html`<span class="badge ${this.isValid ? 'valid' : 'invalid'}">
-                ${icon(this.isValid ? 'check' : 'error')} ${this.isValid ? 'Valid' : 'Invalid'}
+                ${icon(this.isValid ? 'check' : 'error')} ${this.isValid ? 'ถูกต้อง (Valid)' : 'ไม่ถูกต้อง (Invalid)'}
               </span>`
             : nothing}
         </div>
         <div class="actions">
           ${getNsContext()?.recordId
             ? html`<button class="small-btn" @click=${this._loadFromRecord}
-                title="Reload data from the NetSuite record">${icon('refresh')} โหลดจาก Record</button>`
+                title="โหลดข้อมูลจากระเบียน NetSuite ใหม่ (Reload data from the NetSuite record)">${icon('refresh')} โหลดจาก Record</button>`
             : nothing}
-          <button class="small-btn" @click=${this._loadSample} title="Load sample data">${icon('file')} ตัวอย่าง</button>
+          <button class="small-btn" @click=${this._loadSample} title="โหลดข้อมูลตัวอย่าง (Load sample data)">${icon('file')} ตัวอย่าง</button>
           ${this.viewMode === 'json'
-            ? html`<button class="small-btn" @click=${this._format} title="Format JSON">{ }</button>`
+            ? html`<button class="small-btn" @click=${this._format} title="จัดรูปแบบ JSON (Format JSON)">{ }</button>`
             : nothing}
-          <button class="small-btn" @click=${this._clear} title="Clear">${icon('close')}</button>
+          <button class="small-btn" @click=${this._clear} title="ล้างข้อมูล (Clear)">${icon('close')}</button>
         </div>
       </div>
 
@@ -362,7 +362,7 @@ export class PldJsonEditor extends LitElement {
       <textarea id="json-source" aria-describedby="data-scope-hint"
         class="${this.isValid ? '' : 'invalid'}"
         style="min-height: ${this.isExpanded ? '300px' : '120px'};"
-        placeholder='Paste JSON data here...
+        placeholder='วางข้อมูล JSON ที่นี่ (Paste JSON data here)...
 {
   "company": { "name": "..." },
   "items": [...]
@@ -373,7 +373,7 @@ export class PldJsonEditor extends LitElement {
 
       <button type="button" class="expand-toggle" aria-controls="json-source" aria-expanded=${this.isExpanded}
         @click=${() => (this.isExpanded = !this.isExpanded)}>
-        ${icon(this.isExpanded ? 'up' : 'down')} ${this.isExpanded ? 'Collapse' : 'Expand'}
+        ${icon(this.isExpanded ? 'up' : 'down')} ${this.isExpanded ? 'ย่อ (Collapse)' : 'ขยาย (Expand)'}
       </button>
     `;
   }

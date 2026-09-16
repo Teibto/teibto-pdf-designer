@@ -102,9 +102,9 @@ describe('Redwood system accessibility', () => {
     expect(store.state.elements.map((el) => el.zIndex)).toEqual([3, 2, 1]);
     expect((root.activeElement as HTMLElement).dataset.selectId).toBe('b');
     expect(root.querySelector('[role="status"]')?.textContent).toContain('1 / 3');
-    root.querySelector<HTMLButtonElement>('[aria-label="Lock b"]')!.click();
+    root.querySelector<HTMLButtonElement>('[aria-label="ล็อก b (Lock)"]')!.click();
     await component.updateComplete;
     expect(store.state.elements.find((el) => el.id === 'b')?.locked).toBe(true);
-    expect(root.querySelector('[aria-label="Unlock b"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(root.querySelector('[aria-label="ปลดล็อก b (Unlock)"]')?.getAttribute('aria-pressed')).toBe('true');
   });
 });
