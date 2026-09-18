@@ -18,6 +18,21 @@ test('manifest declares EXTREMELIST as an optional custom-record dependency', ()
   assert.equal(matches[0][1], 'false', 'validation dependency must not force the feature on every account');
 });
 
+test('manifest requires SUBSIDIARIES whenever an object selects the subsidiary record type', () => {
+  const folder = path.join(__dirname, '../src/Objects');
+  const usesSubsidiary = fs.readdirSync(folder)
+    .filter((name) => name.endsWith('.xml'))
+    .some((name) => fs.readFileSync(path.join(folder, name), 'utf8').includes('<selectrecordtype>-117</selectrecordtype>'));
+  if (!usesSubsidiary) return;
+
+  const manifest = fs.readFileSync(path.join(__dirname, '../src/manifest.xml'), 'utf8');
+  assert.match(
+    manifest,
+    /<feature\s+required="true">SUBSIDIARIES<\/feature>/,
+    'selectrecordtype -117 requires a required=true SUBSIDIARIES feature or SuiteCloud validation fails'
+  );
+});
+
 test('packaged PDF deployments do not pin a role and Suitelets prohibit anonymous access', () => {
   const folder = path.join(__dirname, '../src/Objects');
   const files = fs.readdirSync(folder).filter((name) => name.startsWith('customscript_') && name.endsWith('.xml'));
