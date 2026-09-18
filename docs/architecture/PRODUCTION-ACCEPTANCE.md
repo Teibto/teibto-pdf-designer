@@ -75,8 +75,10 @@ all rows appeared once in order, headers and page numbers repeated, and totals f
 row. All six pages were inspected. This proves one-copy pagination, not multipage copy sets.
 Code39 and EAN13 native rendering and decoding were verified after exporter corrections in that
 candidate; its full Designer coverage run passed 830 tests. These scoped results supplement the
-earlier evidence below without closing the broader matrix items. Current remote CI still did not
-start because of account billing/spending restrictions.
+earlier evidence below without closing the broader matrix items. Remote CI is now restored on the
+self-hosted `teibto-devtools` runner (#197 closed; #204 integrated the runner change), and the
+`quality-gate` job is green. The designer novice-UX and Thai-localization PRs #219/#220 were
+squash-merged on 2026-09-18.
 
 Fresh local verification of the `05310c9` runtime passed all 115 Chromium E2E cases with
 one worker and a newly started server. The serial production startup gate passed unchanged:
@@ -104,8 +106,9 @@ The committed integration `6119e27` passed 827 local Designer tests, full 115-ca
 and production startup gates. Coverage was 83.79% statements, 78.63% branches, 86.32%
 functions and 84.96% lines. Current source changes must identify their own follow-up
 validation rather than inheriting these results. Sandbox validation/deployment and actual
-asset readback matched that candidate. Its remote CI did not execute because of account
-billing/spending restrictions; the preceding committed candidate passed complete remote CI.
+asset readback matched that candidate. Its remote CI did not execute while GitHub-hosted minutes
+were unavailable; that limitation was resolved by moving `quality-gate` to the self-hosted
+runner (#197/#204), and current remote CI now executes and passes.
 
 Native evidence verifies saved-template sample-type precedence, exact template XML/JSON
 readback and reload, and all six unmodified canonical masters rendered through the existing
@@ -137,8 +140,8 @@ Fixtures and outputs are retained until the user explicitly requests deletion.
   verified for the fixtures above. Keep custom-copy configurations and other unexercised
   feature combinations explicitly separate from these scoped results.
 - Complete the entirely keyboard-only feature journey and remaining panel/theme states.
-- Restore current remote CI after account-owner billing resolution, then satisfy required
-  review and release policy. Production deployment requires separate authorization.
+- Remote CI is restored on the self-hosted `teibto-devtools` runner and reviewer approval is
+  optional (#211); production deployment still requires separate authorization.
 
 Connected acceptance below remains open until the integrated deployment is verified. Native
 restricted-role/private-file checks and positive batch runs cannot be replaced by local mocks.
