@@ -91,7 +91,7 @@ for (const rectype of ['invoice', 'salesorder', 'purchaseorder', 'creditmemo']) 
                 const request = performance.getEntriesByType('resource')
                   .find(e => e.name.includes('/mock-designer?')) as PerformanceResourceTiming | undefined;
                 if (!request || request.responseStart <= 0) throw new Error('Missing actual response timing');
-                const input = element.shadowRoot.querySelector('.array-table tbody input[aria-label*="row 1"]') as HTMLInputElement;
+                const input = element.shadowRoot.querySelector('.array-table tbody input[aria-label*="แถวที่ 1"]') as HTMLInputElement;
                 if (!input) throw new Error('Missing visible item-cell editor');
                 const editStart = markers.editStart = performance.now();
                 input.value = '777';

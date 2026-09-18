@@ -26,7 +26,7 @@ describe('Redwood modal chrome', () => {
     const generate = vi.spyOn(modal, '_generatePreview').mockImplementation(() => {});
     const label = container.querySelector('label[for="bfo-export-record-type"]') as HTMLLabelElement;
     const select = container.querySelector(`#${label.htmlFor}`) as HTMLSelectElement;
-    expect(label.textContent).toBe('NetSuite Record Type');
+    expect(label.textContent).toBe('ประเภทเอกสาร NetSuite (NetSuite Record Type)');
     select.value = 'invoice'; select.dispatchEvent(new Event('change'));
     expect(modal.recordType).toBe('invoice');
     expect(generate).toHaveBeenCalledOnce();
@@ -34,8 +34,8 @@ describe('Redwood modal chrome', () => {
   });
 
   it.each([
-    ['pld-bfo-export-modal', 'Download .xml'],
-    ['pld-column-config-modal', 'Apply'],
+    ['pld-bfo-export-modal', 'ดาวน์โหลด .xml (Download .xml)'],
+    ['pld-column-config-modal', 'นำไปใช้ (Apply)'],
   ])('keeps %s action text alongside a decorative SVG', (tag, text) => {
     const { container } = renderModal(tag);
     const button = [...container.querySelectorAll('button')].find(button => button.textContent?.trim() === text)!;

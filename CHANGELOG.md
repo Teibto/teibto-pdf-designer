@@ -6,6 +6,8 @@
 
 - Make the Designer easier for first-time users: band chips show a Thai element type with a preview of what prints (internal name kept in the tooltip), the save badge says `บันทึกในเครื่อง · Saved locally` when not connected to NetSuite, the insert Destination select now matches the state it inserts into and shows Thai band names, remaining English-only header, Template Manager, Flow and toast copy follows `ไทย (English)`, and band icon buttons have accessible names (#217).
 
+- Finish the Designer's `ไทย (English)` pass beyond the first two files: column config, BFO export, PDF preview, canonical XML editor, data form, layers, pagination and JSON editor labels/tooltips, remaining toasts, and the inspector band names. BFO/FreeMarker output is unchanged (#217, #218).
+
 - Add Purchase Requisition (ใบขอให้ซื้อ, `purchaserequisition`) as a curated document type: canonical master template and synthetic sample modelled on the legacy PFTS print layout, Print button deployment, designer picker/column preset, and new binding aliases `department`, `location`, `currency`, `createdby`, `entityEmail`, `entityPhone` and line `expectedreceiptdate` populated for every curated type (#215).
 
 - Reuse one transaction and company snapshot per PDF document, including the reference Invoice and copy sets, while refreshing each new request. Add numeric server phase/governance measurements and a serial canonical-template benchmark (#213).

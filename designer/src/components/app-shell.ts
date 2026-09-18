@@ -484,7 +484,7 @@ export class PldAppShell extends LitElement {
     if (isNetSuiteEnv()) {
       const ctx = getNsContext();
       if (ctx) {
-        showToast(`Connected to NetSuite (${ctx.userName})`, 'info');
+        showToast(`เชื่อมต่อ NetSuite แล้ว (${ctx.userName}) (Connected to NetSuite)`, 'info');
       }
       // Auto-load record data if opened from a record
       void this._loadRecord();
@@ -549,10 +549,10 @@ export class PldAppShell extends LitElement {
       if (!this._isCurrentDataLoad(intent) || controller.signal.aborted) return;
       this._recordLoadController = null;
       loadJsonData(this.store, data);
-      showToast(`Loaded ${data._recordType} #${data._internalId}`, 'success');
+      showToast(`โหลด ${data._recordType} #${data._internalId}`, 'success');
     } catch (err) {
       if (!this._isCurrentDataLoad(intent) || controller.signal.aborted) return;
-      showToast(`Failed to load record: ${(err as Error).message}`, 'error');
+      showToast(`โหลดระเบียนไม่สำเร็จ: ${(err as Error).message}`, 'error');
     } finally {
       if (this._recordLoadController === controller) this._recordLoadController = null;
     }
@@ -767,13 +767,13 @@ export class PldAppShell extends LitElement {
   private _exportJson() {
     if (this.store.state.editorMode === 'xml') {
       navigator.clipboard?.writeText(this.store.state.rawXml);
-      showToast('Canonical XML copied to clipboard!', 'success');
+      showToast('คัดลอก canonical XML ไปยังคลิปบอร์ดแล้ว (Canonical XML copied to clipboard)', 'success');
       return;
     }
     const { template, page, pagination, elements, jsonData } = this.store.state;
     const json = JSON.stringify({ name: template.name, page, pagination, elements, jsonData }, null, 2);
     navigator.clipboard?.writeText(json);
-    showToast('Template JSON copied to clipboard!', 'success');
+    showToast('คัดลอก JSON เทมเพลตไปยังคลิปบอร์ดแล้ว (Template JSON copied to clipboard)', 'success');
   }
 
   /**

@@ -61,7 +61,7 @@ export class ErrorBoundary extends LitElement {
   private _handleError = (e: ErrorEvent): void => {
     e.stopPropagation();
     this._hasError = true;
-    this._errorMessage = e.message || 'Unknown error';
+    this._errorMessage = e.message || 'ข้อผิดพลาดที่ไม่รู้จัก (Unknown error)';
     console.error(`[ErrorBoundary:${this.label}]`, e.error || e.message);
   };
 
@@ -76,7 +76,7 @@ export class ErrorBoundary extends LitElement {
       return html`
         <div class="error-fallback">
           <span>${icon('alert')} ${this.label}: ${this._errorMessage}</span>
-          <button @click=${this._retry}>Retry</button>
+          <button @click=${this._retry}>ลองใหม่ (Retry)</button>
         </div>
       `;
     }

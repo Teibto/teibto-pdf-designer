@@ -25,5 +25,5 @@ it('associates primitive, object, long-text and array labels without path collis
   const ids = controls.map(control => control.id).filter(Boolean);
   expect(new Set(ids).size).toBe(ids.length);
   const cells = [...root.querySelectorAll('tbody input')];
-  expect(cells.map(cell => cell.getAttribute('aria-label'))).toEqual(['items, row 1, name', 'items, row 1, quantity', 'items, row 2, name', 'items, row 2, quantity']);
+  expect(cells.map(cell => cell.getAttribute('aria-label'))).toEqual(['items, แถวที่ 1 (row), name', 'items, แถวที่ 1 (row), quantity', 'items, แถวที่ 2 (row), name', 'items, แถวที่ 2 (row), quantity']);
 });

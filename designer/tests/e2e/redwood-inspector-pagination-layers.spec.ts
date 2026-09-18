@@ -78,9 +78,9 @@ test('layers select, rename, visibility and document order are keyboard operable
   await expect(renamed).toBeFocused();
   const bandNames = await page.locator('pld-band-view .chip-select').evaluateAll(els => els.map(el => el.getAttribute('data-name') ?? ''));
   expect(bandNames[0]).toContain('Layer renamed');
-  await layers.getByRole('button', { name: 'Hide Layer renamed', exact: true }).focus();
+  await layers.getByRole('button', { name: 'ซ่อน Layer renamed (Hide)', exact: true }).focus();
   await page.keyboard.press('Space');
-  await expect(layers.getByRole('button', { name: 'Show Layer renamed', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(layers.getByRole('button', { name: 'แสดง Layer renamed (Show)', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 
@@ -122,7 +122,7 @@ test('import errors remain inside the modal and hovered primary controls retain 
   await manager.getByRole('tab', { name: 'นำเข้า/ส่งออก (Import / Export)', exact: true }).click();
   const input = manager.getByLabel('Template JSON / JSON เทมเพลต', { exact: true });
   await input.fill('{');
-  const submit = manager.getByRole('button', { name: 'Import JSON', exact: true });
+  const submit = manager.getByRole('button', { name: /นำเข้า JSON/ });
   await submit.click();
   const alert = manager.getByRole('alert');
   await expect(alert).toBeVisible();

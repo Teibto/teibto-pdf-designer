@@ -43,7 +43,7 @@ import { BAND_ORDER, bandAccepts, type Band } from '../../models/bands';
 import { tagAction } from '../../state/middleware';
 import { showToast } from '../shared/toast-notification';
 import type { ElementType, ElementRoleType, CanvasElement } from '../../models/element';
-import { ELEMENT_TYPE_LABEL_TH, elementPreview } from '../../utils/element-label';
+import { ELEMENT_ROLE_LABEL, ELEMENT_TYPE_LABEL_TH, elementPreview } from '../../utils/element-label';
 
 let nextResizeGestureId = 0;
 
@@ -453,7 +453,8 @@ export class PldBandView extends LitElement {
       const id = addElementToCell(this.store, type as ElementType, bi, ri, ci);
       if (id === null) {
         const role = this.store.state.bands[bi]?.role;
-        showToast(`band ${role ?? ''} ไม่รับ element ชนิด ${type} (#49)`, 'warning');
+        const bandName = role ? ELEMENT_ROLE_LABEL[role].th : 'ส่วนนี้';
+        showToast(`ส่วน${bandName} ไม่รองรับ ${ELEMENT_TYPE_LABEL_TH[type as ElementType]} — เลือกส่วนอื่นหรือลากไปยังช่องที่รองรับ`, 'warning');
       }
       setDragType(this.store, null); // transient flag, not undoable (#129)
     } else if (this._dragElId) {
@@ -469,7 +470,7 @@ export class PldBandView extends LitElement {
     if (type) {
       const id = addElementToNewBand(this.store, type as ElementType, role);
       if (id === null) {
-        showToast(`band ${role} ไม่รับ element ชนิด ${type} (#49)`, 'warning');
+        showToast(`ส่วน${ELEMENT_ROLE_LABEL[role].th} ไม่รองรับ ${ELEMENT_TYPE_LABEL_TH[type as ElementType]} — เลือกส่วนอื่นหรือลากไปยังช่องที่รองรับ`, 'warning');
       }
       setDragType(this.store, null); // transient flag, not undoable (#129)
     }

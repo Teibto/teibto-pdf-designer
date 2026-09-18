@@ -466,7 +466,7 @@ export class PldPreviewModal extends LitElement {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="PDF Preview"
+        modalTitle="ตัวอย่าง PDF (PDF Preview)"
         size="xl"
         @close=${this._close}
       >
@@ -474,7 +474,7 @@ export class PldPreviewModal extends LitElement {
           ${this._serverMode
             ? this._renderServerBody()
             : this.store.state.editorMode === 'xml'
-              ? html`<div class="server-status error">Canonical XML preview requires the NetSuite BFO render service.</div>`
+              ? html`<div class="server-status error">การพรีวิว Canonical XML ต้องใช้บริการเรนเดอร์ BFO ของ NetSuite (Canonical XML preview requires the NetSuite BFO render service)</div>`
               : this._renderSimBody()}
         </div>
       </pld-modal>
@@ -502,7 +502,7 @@ export class PldPreviewModal extends LitElement {
               <button class="nav-btn" style="width:auto;padding:0 12px;" @click=${this._loadServerPreview}>${icon('refresh')} ลองใหม่</button>
             </div>`
           : this.serverPdfUrl
-            ? html`<iframe class="server-frame" src=${this.serverPdfUrl} title="PDF Preview"></iframe>`
+            ? html`<iframe class="server-frame" src=${this.serverPdfUrl} title="ตัวอย่าง PDF (PDF Preview)"></iframe>`
             : nothing}
     `;
   }
@@ -638,7 +638,7 @@ export class PldPreviewModal extends LitElement {
       before.push(html`
         <div class="break-indicator force-break">
           <span class="break-line"></span>
-          <span class="break-label">✂ force break before row ${pageData.tableRowStart + 1}</span>
+          <span class="break-label">✂ แบ่งหน้าก่อนแถว ${pageData.tableRowStart + 1} (force break before row)</span>
           <span class="break-line"></span>
         </div>
       `);
@@ -648,7 +648,7 @@ export class PldPreviewModal extends LitElement {
       after.push(html`
         <div class="break-indicator page-end">
           <span class="break-line"></span>
-          <span class="break-label">page ${pageNum} ends — row ${pageData.tableRowEnd} ↓</span>
+          <span class="break-label">จบหน้า ${pageNum} — แถว ${pageData.tableRowEnd} (page ${pageNum} ends — row ${pageData.tableRowEnd}) ↓</span>
           <span class="break-line"></span>
         </div>
       `);
@@ -710,7 +710,7 @@ export class PldPreviewModal extends LitElement {
           }
           return html`${wrapper}`;
         }
-        return html`<div class="el-barcode">Loading...</div>`;
+        return html`<div class="el-barcode">กำลังโหลด… (Loading...)</div>`;
       }
       case 'image': {
         const ie = el as ImageElement;
@@ -718,7 +718,7 @@ export class PldPreviewModal extends LitElement {
         if (src) {
           return html`<img src="${src}" style="width:100%;height:100%;object-fit:${ie.objectFit};" />`;
         }
-        return html`<div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;">Image</div>`;
+        return html`<div style="width:100%;height:100%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;">รูปภาพ (Image)</div>`;
       }
       case 'list': {
         const le = el as ListElement;

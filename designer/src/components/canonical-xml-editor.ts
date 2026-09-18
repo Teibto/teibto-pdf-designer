@@ -92,13 +92,14 @@ export class PldCanonicalXmlEditor extends LitElement {
     return html`
       <main class="editor" aria-labelledby="canonical-xml-heading">
         <div class="heading">
-          <h2 id="canonical-xml-heading">Canonical XML</h2>
-          <span class="mode">BFO + FreeMarker source mode</span>
+          <h2 id="canonical-xml-heading">XML หลัก (Canonical XML)</h2>
+          <span class="mode">โหมดแก้ไขต้นฉบับ BFO + FreeMarker (source mode)</span>
         </div>
         <p class="help" id="canonical-xml-help">
-          Source is saved, previewed, and exported exactly as entered. Visual conversion is not applied.
+          ต้นฉบับจะถูกบันทึก พรีวิว และส่งออกตามที่พิมพ์จริง — ไม่แปลงเป็นโหมดออกแบบ
+          (Source is saved, previewed, and exported exactly as entered. Visual conversion is not applied.)
         </p>
-        <label for="canonical-xml-source">BFO XML source</label>
+        <label for="canonical-xml-source">ต้นฉบับ BFO XML (BFO XML source)</label>
         <textarea id="canonical-xml-source" .value=${this.xml} wrap="off" spellcheck="false"
           aria-describedby="canonical-xml-help canonical-xml-status"
           aria-invalid=${empty}
@@ -107,8 +108,8 @@ export class PldCanonicalXmlEditor extends LitElement {
           @keyup=${this._updateLine}
           @select=${this._updateLine}></textarea>
         <div class="status" id="canonical-xml-status" role="status">
-          <span>Line ${this.currentLine} of ${this.totalLines}</span>
-          <span class=${empty ? 'error' : ''}>${empty ? 'XML is empty' : `${this.xml.length.toLocaleString()} characters`}</span>
+          <span>บรรทัดที่ ${this.currentLine} จาก ${this.totalLines} (Line ${this.currentLine} of ${this.totalLines})</span>
+          <span class=${empty ? 'error' : ''}>${empty ? 'XML ว่างเปล่า (XML is empty)' : `${this.xml.length.toLocaleString()} ตัวอักษร (characters)`}</span>
         </div>
       </main>
     `;

@@ -472,7 +472,7 @@ export class PldColumnConfigModal extends LitElement {
     return html`
       <pld-modal
         .open=${this.open}
-        modalTitle="Table Column Configuration"
+        modalTitle="ตั้งค่าคอลัมน์ตาราง (Table Column Configuration)"
         size="lg"
         @close=${this._close}
       >
@@ -482,10 +482,10 @@ export class PldColumnConfigModal extends LitElement {
         <div slot="footer">
           <div class="footer-btns">
             <button class="btn" @click=${() => (this.showPresets = !this.showPresets)}>
-              ${icon(this.showPresets ? 'left' : 'file')} ${this.showPresets ? 'Back' : 'Presets'}
+              ${icon(this.showPresets ? 'left' : 'file')} ${this.showPresets ? 'กลับ (Back)' : 'พรีเซ็ต (Presets)'}
             </button>
-            <button class="btn" @click=${this._close}>Cancel</button>
-            <button class="btn btn-primary" @click=${this._apply}>${icon('check')} Apply</button>
+            <button class="btn" @click=${this._close}>ยกเลิก (Cancel)</button>
+            <button class="btn btn-primary" @click=${this._apply}>${icon('check')} นำไปใช้ (Apply)</button>
           </div>
         </div>
       </pld-modal>
@@ -504,9 +504,9 @@ export class PldColumnConfigModal extends LitElement {
         <!-- Column List -->
         <div class="col-list-area">
           <div class="col-list-header">
-            <h3>Columns (${this.columns.length})</h3>
+            <h3>คอลัมน์ — Columns (${this.columns.length})</h3>
             <div class="col-list-actions">
-              <button class="icon-btn" title="Add Column" aria-label="Add Column" @click=${this._addColumn}>${icon('plus')}</button>
+              <button class="icon-btn" title="เพิ่มคอลัมน์ (Add Column)" aria-label="เพิ่มคอลัมน์ (Add Column)" @click=${this._addColumn}>${icon('plus')}</button>
             </div>
           </div>
           <div class="col-list">
@@ -545,14 +545,14 @@ export class PldColumnConfigModal extends LitElement {
 
   private _renderColumnProps(col: TableColumn, idx: number) {
     return html`
-      <div class="props-title">Column: ${col.label}</div>
+      <div class="props-title">คอลัมน์: ${col.label}</div>
 
       <!-- Basic -->
       <div class="prop-group">
-        <div class="prop-group-title">Basic</div>
+        <div class="prop-group-title">พื้นฐาน (Basic)</div>
         <div class="prop-row">
           <div class="prop-field">
-            <label for="column-config-modal-field-1">Key (field name)</label>
+            <label for="column-config-modal-field-1">คีย์ฟิลด์ (Key / field name)</label>
             <input id="column-config-modal-field-1" type="text" .value=${col.key} list="pld-row-keys"
               @change=${(e: Event) => this._updateCol(idx, 'key', (e.target as HTMLInputElement).value)} />
             <datalist id="pld-row-keys">
@@ -560,7 +560,7 @@ export class PldColumnConfigModal extends LitElement {
             </datalist>
           </div>
           <div class="prop-field">
-            <label for="column-config-modal-field-2">Label (header text)</label>
+            <label for="column-config-modal-field-2">ป้ายหัวคอลัมน์ (Label / header text)</label>
             <input id="column-config-modal-field-2" type="text" .value=${col.label}
               @change=${(e: Event) => this._updateCol(idx, 'label', (e.target as HTMLInputElement).value)} />
           </div>
@@ -574,28 +574,28 @@ export class PldColumnConfigModal extends LitElement {
         </div>
         <div class="prop-row">
           <div class="prop-field">
-            <label for="column-config-modal-field-4">Width (px)</label>
+            <label for="column-config-modal-field-4">ความกว้าง (Width, px)</label>
             <input id="column-config-modal-field-4" type="number" .value=${String(col.width)} min="20" max="500"
               @change=${(e: Event) => this._updateCol(idx, 'width', Number((e.target as HTMLInputElement).value))} />
           </div>
           <div class="prop-field">
-            <label for="column-config-modal-field-5">Align</label>
+            <label for="column-config-modal-field-5">จัดแนว (Align)</label>
             <select id="column-config-modal-field-5" .value=${col.align}
               @change=${(e: Event) => this._updateCol(idx, 'align', (e.target as HTMLSelectElement).value)}>
-              <option value="left">Left</option>
-              <option value="center">Center</option>
-              <option value="right">Right</option>
+              <option value="left">ซ้าย (Left)</option>
+              <option value="center">กลาง (Center)</option>
+              <option value="right">ขวา (Right)</option>
             </select>
           </div>
           <div class="prop-field">
-            <label for="column-config-modal-field-6">Format</label>
+            <label for="column-config-modal-field-6">รูปแบบ (Format)</label>
             <select id="column-config-modal-field-6" .value=${col.format}
               @change=${(e: Event) => this._updateCol(idx, 'format', (e.target as HTMLSelectElement).value)}>
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="currency">Currency</option>
-              <option value="date">Date</option>
-              <option value="percent">Percent</option>
+              <option value="text">ข้อความ (Text)</option>
+              <option value="number">ตัวเลข (Number)</option>
+              <option value="currency">สกุลเงิน (Currency)</option>
+              <option value="date">วันที่ (Date)</option>
+              <option value="percent">เปอร์เซ็นต์ (Percent)</option>
             </select>
           </div>
         </div>
@@ -603,20 +603,20 @@ export class PldColumnConfigModal extends LitElement {
 
       <!-- Text Options -->
       <div class="prop-group">
-        <div class="prop-group-title">Text Options</div>
+        <div class="prop-group-title">ตัวเลือกข้อความ (Text Options)</div>
         <div class="prop-row">
           <div class="prop-field">
-            <label for="column-config-modal-field-7">Overflow</label>
+            <label for="column-config-modal-field-7">การแสดงข้อความเกิน (Overflow)</label>
             <select id="column-config-modal-field-7" .value=${col.overflow ?? 'ellipsis'}
               @change=${(e: Event) => this._updateCol(idx, 'overflow', (e.target as HTMLSelectElement).value)}>
-              <option value="ellipsis">Ellipsis (…)</option>
-              <option value="wrap">Word Wrap</option>
-              <option value="clip">Clip (hidden)</option>
+              <option value="ellipsis">ตัดด้วย … (Ellipsis)</option>
+              <option value="wrap">ขึ้นบรรทัดใหม่ (Word Wrap)</option>
+              <option value="clip">ตัดทิ้ง (Clip)</option>
             </select>
           </div>
           ${(col.overflow ?? 'ellipsis') === 'wrap' ? html`
             <div class="prop-field">
-              <label for="column-config-modal-field-8">Max Lines (0 = unlimited)</label>
+              <label for="column-config-modal-field-8">จำนวนบรรทัดสูงสุด (Max Lines, 0 = ไม่จำกัด)</label>
               <input id="column-config-modal-field-8" type="number" .value=${String(col.maxLines)} min="0" max="20"
                 @change=${(e: Event) => this._updateCol(idx, 'maxLines', Number((e.target as HTMLInputElement).value))} />
             </div>
@@ -633,40 +633,40 @@ export class PldColumnConfigModal extends LitElement {
           <label class="check-item">
             <input type="checkbox" .checked=${col.bold}
               @change=${(e: Event) => this._updateCol(idx, 'bold', (e.target as HTMLInputElement).checked)} />
-            Bold
+            ตัวหนา (Bold)
           </label>
           <label class="check-item">
             <input type="checkbox" .checked=${col.uppercase}
               @change=${(e: Event) => this._updateCol(idx, 'uppercase', (e.target as HTMLInputElement).checked)} />
-            UPPERCASE
+            ตัวพิมพ์ใหญ่ (UPPERCASE)
           </label>
           <label class="check-item">
             <input type="checkbox" .checked=${col.hidden}
               @change=${(e: Event) => this._updateCol(idx, 'hidden', (e.target as HTMLInputElement).checked)} />
-            Hidden
+            ซ่อน (Hidden)
           </label>
           <label class="check-item">
             <input type="checkbox" .checked=${col.isIndex ?? false}
               @change=${(e: Event) => this._updateCol(idx, 'isIndex', (e.target as HTMLInputElement).checked)} />
-            Auto Index (#)
+            ลำดับอัตโนมัติ (Auto Index)
           </label>
           <label class="check-item">
             <input type="checkbox" .checked=${col.boldFirstLine ?? false}
               @change=${(e: Event) => this._updateCol(idx, 'boldFirstLine', (e.target as HTMLInputElement).checked)} />
-            Bold first line
+            บรรทัดแรกตัวหนา (Bold first line)
           </label>
           <label class="check-item"
             title="รวมยอดคอลัมน์นี้ในแถวรวมย่อยท้ายแต่ละ section — มีผลเมื่อเปิด Section Subtotal ใน Pagination panel (#106)">
             <input type="checkbox" .checked=${col.subtotal ?? false}
               @change=${(e: Event) => this._updateCol(idx, 'subtotal', (e.target as HTMLInputElement).checked)} />
-            Section Subtotal (Σ)
+            รวมยอดท้ายส่วน (Section Subtotal Σ)
           </label>
         </div>
       </div>
 
       <!-- Delete -->
       <div class="prop-group">
-        <button class="btn btn-danger" @click=${() => this._removeColumn(idx)}>${icon('close')} Remove Column</button>
+        <button class="btn btn-danger" @click=${() => this._removeColumn(idx)}>${icon('close')} ลบคอลัมน์ (Remove Column)</button>
       </div>
     `;
   }
@@ -677,7 +677,7 @@ export class PldColumnConfigModal extends LitElement {
 
     return html`
       <div class="preview">
-        <div class="prop-group-title">Preview</div>
+        <div class="prop-group-title">ตัวอย่าง (Preview)</div>
         <table class="preview-table">
           <thead>
             <tr>
@@ -693,7 +693,7 @@ export class PldColumnConfigModal extends LitElement {
               <tr>
                 ${visibleCols.map((c) => html`
                   <td style="text-align: ${c.align};${c.bold ? ' font-weight: 600;' : ''}">
-                    ${c.isIndex ? row : `Sample ${row}`}
+                    ${c.isIndex ? row : `ตัวอย่าง ${row}`}
                   </td>
                 `)}
               </tr>
@@ -712,8 +712,8 @@ export class PldColumnConfigModal extends LitElement {
     return html`
       <div class="presets-overlay">
         <div class="presets-header">
-          <h3>${icon('file')} Column Presets</h3>
-          <button class="icon-btn" aria-label="กลับไปตั้งค่าคอลัมน์ (Back to columns)" title="Back to columns" @click=${() => (this.showPresets = false)}>${icon('left')}</button>
+          <h3>${icon('file')} พรีเซ็ตคอลัมน์ (Column Presets)</h3>
+          <button class="icon-btn" aria-label="กลับไปตั้งค่าคอลัมน์ (Back to columns)" title="กลับไปตั้งค่าคอลัมน์ (Back to columns)" @click=${() => (this.showPresets = false)}>${icon('left')}</button>
         </div>
         <div class="preset-grid">
           ${COLUMN_PRESETS.map((preset) => html`
@@ -721,7 +721,7 @@ export class PldColumnConfigModal extends LitElement {
               <div class="preset-icon">${icon('table', 'lg')}</div>
               <div class="preset-name">${preset.name}</div>
               <div class="preset-desc">${preset.description}</div>
-              <div class="preset-cols">${preset.columns.length} columns: ${preset.columns.map((c) => c.key).join(', ')}</div>
+              <div class="preset-cols">${preset.columns.length} คอลัมน์: ${preset.columns.map((c) => c.key).join(', ')}</div>
             </div>
           `)}
         </div>
@@ -742,7 +742,7 @@ export class PldColumnConfigModal extends LitElement {
   private _addColumn() {
     const newCol: TableColumn = {
       key: `col_${this.columns.length + 1}`,
-      label: `Column ${this.columns.length + 1}`,
+      label: `คอลัมน์ ${this.columns.length + 1}`,
       width: 100,
       align: 'left',
       format: 'text',
@@ -767,7 +767,7 @@ export class PldColumnConfigModal extends LitElement {
     this.columns = JSON.parse(JSON.stringify(preset.columns));
     this.selectedColIdx = 0;
     this.showPresets = false;
-    showToast(`Applied preset: ${preset.name}`, 'success');
+    showToast(`ใช้พรีเซ็ตแล้ว: ${preset.name} (Applied preset)`, 'success');
   }
 
   // ─── Drag Reorder ───
@@ -813,7 +813,7 @@ export class PldColumnConfigModal extends LitElement {
       draft.template.isDirty = true;
     });
 
-    showToast(`Updated ${this.columns.length} columns`, 'success');
+    showToast(`อัปเดต ${this.columns.length} คอลัมน์แล้ว (Updated ${this.columns.length} columns)`, 'success');
     this._close();
   }
 

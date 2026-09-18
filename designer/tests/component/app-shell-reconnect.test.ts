@@ -138,7 +138,7 @@ describe('app-shell reconnect lifecycle', () => {
       await newerLoad;
       expect(shell.store.state.jsonData?.marker).not.toBe('stale');
       if (action === 'reload') expect(shell.store.state.jsonData.marker).toBe('new');
-      expect(mocks.showToast).not.toHaveBeenCalledWith('Loaded invoice #stale', 'success');
+      expect(mocks.showToast).not.toHaveBeenCalledWith('โหลด invoice #stale', 'success');
     },
   );
 
@@ -244,7 +244,7 @@ describe('app-shell reconnect lifecycle', () => {
 
     expect(shell.store.state.jsonData).toMatchObject({ marker: 'new' });
     expect(mocks.showToast).toHaveBeenCalledTimes(1);
-    expect(mocks.showToast).toHaveBeenCalledWith('Loaded invoice #new', 'success');
+    expect(mocks.showToast).toHaveBeenCalledWith('โหลด invoice #new', 'success');
   });
 
   it('shares auto-load and editor reload intent before either response commits', async () => {
@@ -298,7 +298,7 @@ describe('app-shell reconnect lifecycle', () => {
     await settle(shell);
 
     expect(shell.store.state.jsonData).toEqual({ marker: 'local-edit' });
-    expect(mocks.showToast).not.toHaveBeenCalledWith('Loaded invoice #stale', 'success');
+    expect(mocks.showToast).not.toHaveBeenCalledWith('โหลด invoice #stale', 'success');
   });
 
   it('does not let initial NetSuite auto-load cross a document switch', async () => {

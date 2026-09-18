@@ -43,7 +43,7 @@ describe('data-form large-array paging', () => {
 
     expect(form.shadowRoot.querySelectorAll('tbody tr')).toHaveLength(50);
     expect(form.shadowRoot.querySelectorAll('tbody input')).toHaveLength(500);
-    expect(form.shadowRoot.querySelector('.array-page-status')?.textContent).toContain('Rows 1–50 of 10000');
+    expect(form.shadowRoot.querySelector('.array-page-status')?.textContent).toContain('แถวที่ 1–50 จาก 10000');
     expect(form.jsonData.items).toHaveLength(10_000);
   });
 
@@ -54,7 +54,7 @@ describe('data-form large-array paging', () => {
 
     const firstRow = form.shadowRoot.querySelector('tbody tr') as HTMLTableRowElement;
     expect(firstRow.dataset.rowIndex).toBe('50');
-    expect(form.shadowRoot.querySelector('.array-page-status')?.textContent).toContain('Rows 51–100 of 10000');
+    expect(form.shadowRoot.querySelector('.array-page-status')?.textContent).toContain('แถวที่ 51–100 จาก 10000');
 
     const changed = new Promise<CustomEvent>((resolve) => {
       form.addEventListener('data-changed', (event: Event) => resolve(event as CustomEvent), { once: true });

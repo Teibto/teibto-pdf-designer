@@ -13,6 +13,7 @@ import { consume } from '@lit/context';
 import { storeContext, AppStore, StateChangedEvent } from '../../state/store';
 import { BAND_ORDER, type Band } from '../../models/bands';
 import { showToast } from '../shared/toast-notification';
+import { ELEMENT_ROLE_LABEL } from '../../utils/element-label';
 import type { CanvasElement, ElementType } from '../../models/element';
 import {
   selectElement,
@@ -352,14 +353,14 @@ export class PldLayersPanel extends LitElement {
     return html`
       <div class="panel-header">
         <div class="panel-title">
-          <span>${icon('layers')}</span> Layers
+          <span>${icon('layers')}</span> เลเยอร์ (Layers)
           <span class="count-badge">${this.elements.length}</span>
         </div>
       </div>
 
       <p id="layer-help" class="layer-help">Enter: เลือก · F2: เปลี่ยนชื่อ · Alt+↑/↓: จัดลำดับเอกสาร</p>
       <span class="sr-only" role="status">${this.announcement}</span>
-      <div class="layer-list" role="list" aria-label="Layers" @dragover=${this._onListDragOver} @drop=${this._onListDrop}>
+      <div class="layer-list" role="list" aria-label="รายการเลเยอร์ (Layers)" @dragover=${this._onListDragOver} @drop=${this._onListDrop}>
         ${sorted.length === 0
           ? html`<div class="empty-state">ลาก element ลงพื้นที่ออกแบบ<br>เพื่อสร้างเลเยอร์</div>`
           : sorted.map((el) => this._renderLayer(el))
@@ -419,9 +420,9 @@ export class PldLayersPanel extends LitElement {
           }
           <div class="layer-meta">
             <span class="role-dot" style="background:var(--color-role-${el.role})"></span>
-            <span class="layer-role">${el.role}</span>
+            <span class="layer-role">${ELEMENT_ROLE_LABEL[el.role].th}</span>
             ${el.groupId
-              ? html`<span class="group-badge" title="Grouped">G</span>`
+              ? html`<span class="group-badge" title="จัดกลุ่ม (Grouped)">G</span>`
               : nothing
             }
             ${el.binding
@@ -435,16 +436,16 @@ export class PldLayersPanel extends LitElement {
         <div class="layer-actions">
           <button
             class="action-btn ${el.visible ? '' : 'active'}"
-            aria-label="${el.visible ? 'Hide' : 'Show'} ${el.name}" aria-pressed=${!el.visible}
-            title="${el.visible ? 'Hide' : 'Show'}"
+            aria-label="${el.visible ? 'ซ่อน' : 'แสดง'} ${el.name} (${el.visible ? 'Hide' : 'Show'})" aria-pressed=${!el.visible}
+            title="${el.visible ? 'ซ่อน (Hide)' : 'แสดง (Show)'}"
             @click=${(e: MouseEvent) => { e.stopPropagation(); toggleVisibility(this.store, el.id); }}
           >
             ${icon(el.visible ? 'eye' : 'eye-off')}
           </button>
           <button
             class="action-btn ${el.locked ? 'active' : ''}"
-            aria-label="${el.locked ? 'Unlock' : 'Lock'} ${el.name}" aria-pressed=${el.locked}
-            title="${el.locked ? 'Unlock' : 'Lock'}"
+            aria-label="${el.locked ? 'ปลดล็อก' : 'ล็อก'} ${el.name} (${el.locked ? 'Unlock' : 'Lock'})" aria-pressed=${el.locked}
+            title="${el.locked ? 'ปลดล็อก (Unlock)' : 'ล็อก (Lock)'}"
             @click=${(e: MouseEvent) => { e.stopPropagation(); toggleLock(this.store, el.id); }}
           >
             ${icon(el.locked ? 'lock' : 'unlock')}
