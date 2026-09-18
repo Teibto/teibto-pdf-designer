@@ -33,7 +33,7 @@ test.describe('List element', () => {
     await gotoApp(page);
     await dragPaletteTo(page, 'List', emptyRole(page, 'Content'));
     await expect(band(page, 'Content')).toBeVisible();
-    await expect(chips(page).filter({ hasText: 'list' })).toHaveCount(1);
+    await expect(chips(page).filter({ has: page.locator('[data-name^="list_"]') })).toHaveCount(1);
   });
 });
 

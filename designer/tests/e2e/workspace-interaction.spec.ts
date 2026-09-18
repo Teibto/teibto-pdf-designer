@@ -15,7 +15,7 @@ for (const width of [860, 861, 1023, 1024]) {
     if (width === 1024) {
       await expect(tools).toBeHidden();
       await expect(panel).not.toHaveAttribute('inert');
-      await expect(page.getByRole('button', { name: 'เพิ่ม Text ใน content', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'เพิ่ม Text ใน เนื้อหา', exact: true })).toBeVisible();
       return;
     }
     await expect(tools).toBeVisible();
@@ -51,7 +51,7 @@ test('keyboard tabs, explicit insertion destination and undo preserve band seman
   await page.keyboard.press('Home');
   await expect(firstTab).toBeFocused();
   await page.getByLabel('เพิ่มแถวใหม่ในส่วน (Destination)').selectOption('footer');
-  const text = page.getByRole('button', { name: 'เพิ่ม Text ใน footer', exact: true });
+  const text = page.getByRole('button', { name: 'เพิ่ม Text ใน ท้ายกระดาษ', exact: true });
   await text.focus();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Space');
@@ -73,7 +73,7 @@ test('native palette drag keeps drop destination and inserts exactly once', asyn
   await gotoApp(page);
   // The click destination rejects List, but dragging to Content remains valid.
   await page.getByLabel('เพิ่มแถวใหม่ในส่วน (Destination)').selectOption('footer');
-  const list = page.getByRole('button', { name: 'เพิ่ม List ใน footer', exact: true });
+  const list = page.getByRole('button', { name: 'เพิ่ม List ใน ท้ายกระดาษ', exact: true });
   await list.click();
   await expect(page.locator('pld-band-view .chip')).toHaveCount(0);
   await list.dragTo(page.locator('pld-band-view .empty-slot').filter({ hasText: 'Content' }));
@@ -85,7 +85,7 @@ test('native palette drag keeps drop destination and inserts exactly once', asyn
 test('resizing desktop controls into a closed drawer restores focus to its trigger', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await gotoApp(page);
-  await page.getByRole('button', { name: 'เพิ่ม Text ใน content', exact: true }).focus();
+  await page.getByRole('button', { name: 'เพิ่ม Text ใน เนื้อหา', exact: true }).focus();
   await page.setViewportSize({ width: 1023, height: 900 });
   await expect(page.getByRole('button', { name: 'เปิดเครื่องมือ (Open tools)', exact: true })).toBeFocused();
   await expect(page.locator('#tools-panel')).toHaveAttribute('inert');
@@ -99,10 +99,10 @@ for (const cancel of ['Escape', 'outside'] as const) {
   test(`canceled palette drag (${cancel}) does not change the next existing-chip move`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await gotoApp(page);
-    await page.getByRole('button', { name: 'เพิ่ม Text ใน content', exact: true }).click();
-    await page.getByRole('button', { name: 'เพิ่ม Text ใน content', exact: true }).click();
+    await page.getByRole('button', { name: 'เพิ่ม Text ใน เนื้อหา', exact: true }).click();
+    await page.getByRole('button', { name: 'เพิ่ม Text ใน เนื้อหา', exact: true }).click();
     const before = await page.locator('pld-app-shell').evaluate((shell: any) => shell.store.state.elements.map((el: any) => el.id));
-    const palette = page.getByRole('button', { name: 'เพิ่ม List ใน content', exact: true });
+    const palette = page.getByRole('button', { name: 'เพิ่ม List ใน เนื้อหา', exact: true });
     const box = (await palette.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
@@ -142,7 +142,7 @@ for (const multiple of [false, true]) {
   test(`drawer Escape retains ${multiple ? 'multiple' : 'single'} selection and normal Escape still deselects`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await gotoApp(page);
-    const text = page.getByRole('button', { name: 'เพิ่ม Text ใน content', exact: true });
+    const text = page.getByRole('button', { name: 'เพิ่ม Text ใน เนื้อหา', exact: true });
     await text.click();
     await text.click();
     if (multiple) await page.keyboard.press('Control+a');

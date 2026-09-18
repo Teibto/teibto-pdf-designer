@@ -26,7 +26,7 @@ test.describe('Palette → band drop', () => {
   test('drops a List into the Content band', async ({ page }) => {
     await dragPaletteTo(page, 'List', emptyRole(page, 'Content'));
     await expect(band(page, 'Content')).toBeVisible();
-    await expect(chips(page).filter({ hasText: 'list' })).toHaveCount(1);
+    await expect(chips(page).filter({ has: page.locator('[data-name^="list_"]') })).toHaveCount(1);
   });
 
   test('rejects a List on the Header band (acceptance matrix #49)', async ({ page }) => {
@@ -92,13 +92,13 @@ test.describe('Row management', () => {
     await gotoApp(page);
     await dragPaletteTo(page, 'Text', emptyRole(page, 'Header'));
     const header = band(page, 'Header');
-    await expect(header.locator('.band-head').first()).toContainText('1 row');
+    await expect(header.locator('.band-head').first()).toContainText('1 แถว');
 
-    await header.locator('button', { hasText: '+ row' }).click();
-    await expect(header.locator('.band-head').first()).toContainText('2 row');
+    await header.locator('button', { hasText: '+ แถว' }).click();
+    await expect(header.locator('.band-head').first()).toContainText('2 แถว');
 
     // Remove the last row via its rowtools ✕.
     await header.locator('.rowtools button[title="ลบแถว"]').last().click();
-    await expect(header.locator('.band-head').first()).toContainText('1 row');
+    await expect(header.locator('.band-head').first()).toContainText('1 แถว');
   });
 });

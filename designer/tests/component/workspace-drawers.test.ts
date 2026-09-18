@@ -104,7 +104,7 @@ it('detaching a palette during an active drag clears its transient state without
   await shell.updateComplete;
   const palette = shell.shadowRoot!.querySelector('pld-sidebar-left')!;
   await palette.updateComplete;
-  const button = palette.shadowRoot!.querySelector<HTMLElement>('[aria-label="เพิ่ม List ใน content"]')!;
+  const button = palette.shadowRoot!.querySelector<HTMLElement>('[aria-label="เพิ่ม List ใน เนื้อหา"]')!;
   button.dispatchEvent(new Event('dragstart', { bubbles: true }));
   expect(shell.store.state.dragType).toBe('list');
   palette.remove();

@@ -65,7 +65,7 @@ export function chips(page: Page): Locator {
 export async function loadSample(page: Page): Promise<void> {
   await openHeaderMore(page);
   await headerBtn(page, 'ตัวอย่าง').click();
-  await expect(toast(page, 'Loaded sample')).toBeVisible();
+  await expect(toast(page, 'โหลดตัวอย่างแล้ว')).toBeVisible();
   await expect(chips(page).first()).toBeVisible();
 }
 

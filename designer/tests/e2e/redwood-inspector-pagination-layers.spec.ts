@@ -9,12 +9,12 @@ import { gotoApp } from './_helpers';
 test('inspector labels route edits and font/icon styles resolve in both themes', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await gotoApp(page);
-  await page.getByRole('button', { name: 'เพิ่ม Text ใน content', exact: true }).click();
+  await page.getByRole('button', { name: 'เพิ่ม Text ใน เนื้อหา', exact: true }).click();
   const inspector = page.locator('pld-sidebar-right');
   const name = inspector.getByLabel('ชื่อ (Name)', { exact: true });
   await name.fill('Readable Thai ไทย');
   await name.press('Tab');
-  await expect(page.locator('pld-band-view .chip')).toContainText('Readable Thai ไทย');
+  await expect(page.locator('pld-band-view .chip-select')).toHaveAttribute('data-name', 'Readable Thai ไทย');
   await page.evaluate(() => document.fonts.ready);
   for (const theme of ['light', 'dark']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
@@ -63,7 +63,7 @@ test('pagination disclosures work by keyboard and copy labels remain unique afte
 test('layers select, rename, visibility and document order are keyboard operable', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await gotoApp(page);
-  const add = page.getByRole('button', { name: 'เพิ่ม Text ใน content', exact: true });
+  const add = page.getByRole('button', { name: 'เพิ่ม Text ใน เนื้อหา', exact: true });
   await add.click(); await add.click();
   await page.getByRole('tab', { name: 'เลเยอร์', exact: true }).click();
   const layers = page.locator('pld-layers-panel');
@@ -76,7 +76,7 @@ test('layers select, rename, visibility and document order are keyboard operable
   await renamed.focus(); await page.keyboard.press('Alt+ArrowUp');
   await expect(layers.locator('.layer-select').first()).toHaveText('Layer renamed');
   await expect(renamed).toBeFocused();
-  const bandNames = await page.locator('pld-band-view .chip-select').allTextContents();
+  const bandNames = await page.locator('pld-band-view .chip-select').evaluateAll(els => els.map(el => el.getAttribute('data-name') ?? ''));
   expect(bandNames[0]).toContain('Layer renamed');
   await layers.getByRole('button', { name: 'Hide Layer renamed', exact: true }).focus();
   await page.keyboard.press('Space');
@@ -119,7 +119,7 @@ test('import errors remain inside the modal and hovered primary controls retain 
   await gotoApp(page);
   await page.getByRole('button', { name: 'เทมเพลต', exact: true }).click();
   const manager = page.locator('pld-template-manager-modal');
-  await manager.getByRole('tab', { name: 'Import / Export', exact: true }).click();
+  await manager.getByRole('tab', { name: 'นำเข้า/ส่งออก (Import / Export)', exact: true }).click();
   const input = manager.getByLabel('Template JSON / JSON เทมเพลต', { exact: true });
   await input.fill('{');
   const submit = manager.getByRole('button', { name: 'Import JSON', exact: true });

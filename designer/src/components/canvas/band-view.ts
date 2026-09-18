@@ -43,6 +43,7 @@ import { BAND_ORDER, bandAccepts, type Band } from '../../models/bands';
 import { tagAction } from '../../state/middleware';
 import { showToast } from '../shared/toast-notification';
 import type { ElementType, ElementRoleType, CanvasElement } from '../../models/element';
+import { ELEMENT_TYPE_LABEL_TH, elementPreview } from '../../utils/element-label';
 
 let nextResizeGestureId = 0;
 
@@ -231,13 +232,13 @@ export class PldBandView extends LitElement {
     return html`
             <div class="band" style="--band-color: var(--color-role-${band.role});">
               <div class="band-head">
-                ${role.label} <span style="opacity:.7;font-weight:400;">· ${band.rows.length} row</span>
+                ${role.label} <span style="opacity:.7;font-weight:400;">· ${band.rows.length} แถว (row)</span>
                 <span class="sp"></span>
                 ${itemTable ? html`
                   <button class="wide" title="ตั้งค่าคอลัมน์ของตาราง item (#119)"
                     @click=${() => this._openColumnConfig(itemTable.id)}>${icon('settings')} คอลัมน์</button>
                 ` : nothing}
-                <button class="wide" title="เพิ่มแถว" @click=${() => addBandRow(this.store, bi)}>+ row</button>
+                <button class="wide" title="เพิ่มแถว" @click=${() => addBandRow(this.store, bi)}>+ แถว (row)</button>
               </div>
               <div class="band-body">
                 ${repeat(band.rows, (row) => row.id, (row, ri) => html`
@@ -252,15 +253,15 @@ export class PldBandView extends LitElement {
                           <span class="cell-w">
                             <span class="wgroup">
                               ${row.columns.length > 1 ? html`
-                                <button title="ลดความกว้าง 5%" ?disabled=${col.widthPct <= 5} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct - 5)}>${icon('minus')}</button>
+                                <button title="ลดความกว้าง 5%" aria-label="ลดความกว้าง 5%" ?disabled=${col.widthPct <= 5} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct - 5)}>${icon('minus')}</button>
                                 <span class="pct">${col.widthPct}%</span>
-                                <button title="เพิ่มความกว้าง 5%" ?disabled=${col.widthPct >= 95} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct + 5)}>${icon('plus')}</button>
+                                <button title="เพิ่มความกว้าง 5%" aria-label="เพิ่มความกว้าง 5%" ?disabled=${col.widthPct >= 95} @click=${() => setColumnWidth(this.store, bi, ri, ci, col.widthPct + 5)}>${icon('plus')}</button>
                               ` : html`<span class="pct">${col.widthPct}%</span>`}
                             </span>
                             <span class="sp"></span>
                             <span class="cgroup">
-                              ${ci > 0 ? html`<button title="รวมกับคอลัมน์ซ้าย" @click=${() => mergeColumn(this.store, bi, ri, ci)}>${icon('left')}</button>` : nothing}
-                              <button title="แยกคอลัมน์" @click=${() => splitColumn(this.store, bi, ri, ci)}>${icon('arrow-left-right')}</button>
+                              ${ci > 0 ? html`<button title="รวมกับคอลัมน์ซ้าย" aria-label="รวมกับคอลัมน์ซ้าย" @click=${() => mergeColumn(this.store, bi, ri, ci)}>${icon('left')}</button>` : nothing}
+                              <button title="แยกคอลัมน์" aria-label="แยกคอลัมน์" @click=${() => splitColumn(this.store, bi, ri, ci)}>${icon('arrow-left-right')}</button>
                             </span>
                           </span>
                           ${col.elementIds.length
@@ -272,8 +273,9 @@ export class PldBandView extends LitElement {
                                     @click=${() => selectElement(this.store, el.id)}
                                     @dragstart=${(e: DragEvent) => this._onDragStart(e, el.id)}
                                     @dragend=${(e: DragEvent) => this._onDragEnd(e)}>
-                                    <button class="chip-select" type="button" aria-pressed=${selectedId === el.id}>${el.name || el.type} <span class="t">${el.type}</span></button>
-                                    <button class="del" title="ลบ element"
+                                    <button class="chip-select" type="button" aria-pressed=${selectedId === el.id}
+                                      title=${el.name} data-name=${el.name}><span class="t">${ELEMENT_TYPE_LABEL_TH[el.type] ?? el.type}</span> ${elementPreview(el)}</button>
+                                    <button class="del" title="ลบ element" aria-label="ลบ element ${el.name}"
                                       @click=${(e: Event) => { e.stopPropagation(); removeBandElement(this.store, el.id); }}>${icon('close')}</button>
                                   </span>`;
                               })
@@ -295,9 +297,9 @@ export class PldBandView extends LitElement {
                           .value=${row.height != null ? String(Math.round(row.height)) : ''}
                           @change=${(e: Event) => setRowHeight(this.store, bi, ri, Number((e.target as HTMLInputElement).value))} />
                       ` : nothing}
-                      <button title="เลื่อนขึ้น" ?disabled=${ri === 0} @click=${() => moveBandRow(this.store, bi, ri, -1)}>${icon('up')}</button>
-                      <button title="เลื่อนลง" ?disabled=${ri === band.rows.length - 1} @click=${() => moveBandRow(this.store, bi, ri, 1)}>${icon('down')}</button>
-                      <button class="danger" title="ลบแถว" @click=${() => this._removeRow(bi, ri)}>${icon('close')}</button>
+                      <button title="เลื่อนขึ้น" aria-label="เลื่อนแถวขึ้น" ?disabled=${ri === 0} @click=${() => moveBandRow(this.store, bi, ri, -1)}>${icon('up')}</button>
+                      <button title="เลื่อนลง" aria-label="เลื่อนแถวลง" ?disabled=${ri === band.rows.length - 1} @click=${() => moveBandRow(this.store, bi, ri, 1)}>${icon('down')}</button>
+                      <button class="danger" title="ลบแถว" aria-label="ลบแถว" @click=${() => this._removeRow(bi, ri)}>${icon('close')}</button>
                     </div>
                   </div>
                 `)}

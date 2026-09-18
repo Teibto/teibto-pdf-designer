@@ -29,7 +29,7 @@ test.describe('Inspector — common fields', () => {
   test('renames the element and the chip label follows', async ({ page }) => {
     await inspectorField(page, 'Name').locator('input').fill('CompanyName');
     await inspectorField(page, 'Name').locator('input').blur();
-    await expect(chips(page).first()).toContainText('CompanyName');
+    await expect(chips(page).first().locator('.chip-select')).toHaveAttribute('data-name', 'CompanyName');
   });
 
   test('type field is read-only', async ({ page }) => {
