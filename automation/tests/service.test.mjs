@@ -10,7 +10,7 @@ const fixture = Buffer.from('%PDF-1.4\ntransport test only\n%%EOF\n');
 test('canonical catalog needs no session and maps record types from XML', async () => {
   const result = await createService().listTemplates();
   assert.deepEqual(result.templates.map(template => template.id), [
-    'delivery-note', 'invoice-reference', 'invoice', 'purchase-order', 'purchase-requisition', 'quotation', 'receipt', 'tax-invoice',
+    'cash-sale', 'credit-memo', 'delivery-note', 'invoice-reference', 'invoice', 'purchase-order', 'purchase-requisition', 'quotation', 'receipt', 'return-authorization', 'sales-order', 'tax-invoice', 'vendor-bill',
   ]);
   assert.deepEqual(result.templates.find(t => t.id === 'invoice-reference'), { id: 'invoice-reference', rectype: 'invoice' });
   assert.deepEqual(result.templates.find(t => t.id === 'receipt'), { id: 'receipt', rectype: 'customerpayment' });
