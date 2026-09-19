@@ -1,0 +1,42 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ใบรับคืนสินค้าไม่แสดงราคา — line มีเฉพาะ item/description/quantity/units · quantityText คือค่าที่ template พิมพ์จริง (engine format มาแล้ว #165) ส่วน quantity เป็น number ไว้ให้ col.format · entity = ลูกค้าที่คืนสินค้า, createdfrom = ใบส่งของ/ใบสั่งขายต้นทาง, shipaddress = สถานที่รับคืน · @author Wichit Wongta @since 2026-09-20",
+  "record": {
+    "tranid": "RA-2026-0031",
+    "trandate": "19/07/2026",
+    "createdfrom": "DN-2026-0089",
+    "otherrefnum": "PO-CUST-8891",
+    "entity": "บริษัท สยามเทครุ่งเรือง จำกัด",
+    "billaddress": "55/9 อาคารสาทรซิตี้ทาวเวอร์ ชั้น 21 ถนนสาทรใต้ แขวงทุ่งมหาเมฆ เขตสาทร กรุงเทพมหานคร 10120",
+    "shipaddress": "อาคารคลังสินค้า B ชั้น 1 — 55/9 ถนนสาทรใต้ แขวงทุ่งมหาเมฆ เขตสาทร กรุงเทพมหานคร 10120",
+    "custbody_buyer_taxid": "0105549123456",
+    "custbody_buyer_branch": "สำนักงานใหญ่",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "รับคืนสินค้าชำรุดจากการขนส่ง — โปรดตรวจสอบสภาพสินค้าก่อนออกใบลดหนี้",
+    "item": [
+      { "item": "OFC-CHR-B", "description": "เก้าอี้สำนักงานตาข่ายระบายอากาศ รับประกัน 3 ปี (ชำรุด)", "quantity": 2, "quantityText": "2", "units": "ตัว" },
+      { "item": "NET-SW-24P", "description": "สวิตช์เครือข่าย 24 พอร์ต Gigabit (เปลี่ยนรุ่น)", "quantity": 5, "quantityText": "5", "units": "เครื่อง" },
+      { "item": "CBL-CAT6-305", "description": "สายแลน CAT6 กล่อง 305 เมตร (บรรจุภัณฑ์เสียหาย)", "quantity": 1, "quantityText": "1", "units": "กล่อง" }
+    ]
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
+    "phone": "0-2740-1234",
+    "email": "logistics@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
+  },
+  "context": {
+    "today": "19/07/2026",
+    "now": "19/07/2026 09:30",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}

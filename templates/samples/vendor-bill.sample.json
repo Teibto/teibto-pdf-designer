@@ -1,0 +1,51 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ใบรับวางบิลฝั่งเจ้าหนี้: subtotal 47,000.00 − ส่วนลด 2,000.00 = 45,000.00 + VAT 7% 3,150.00 = 48,150.00 (ตัวอักษร: สี่หมื่นแปดพันหนึ่งร้อยห้าสิบบาทถ้วน) · entity = ผู้ขาย/ผู้ให้บริการ, employee = ผู้จัดซื้อ, billaddress = ที่อยู่วางบิลผู้ขาย, shipaddress = สถานที่รับของ · ค่าที่ template พิมพ์คือ *Text ที่ engine format มาแล้ว (#165) ส่วนคีย์ number ไว้ให้ col.format · @author Wichit Wongta @since 2026-09-20",
+  "record": {
+    "tranid": "VB-2026-0203",
+    "trandate": "18/07/2026",
+    "duedate": "17/08/2026",
+    "terms": "เครดิต 30 วัน",
+    "employee": "สมชาย ใจดี",
+    "entity": "บริษัท ออฟฟิศ ซัพพลายส์ แอนด์ เซอร์วิส จำกัด",
+    "billaddress": "88/12 ถนนสุขุมวิท 71 แขวงพระโขนงเหนือ เขตวัฒนา กรุงเทพมหานคร 10110",
+    "shipaddress": "อาคารคลังสินค้า B ชั้น 1 — 99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "รับวางบิลค่าสินค้าตามใบส่งของ — โปรดตรวจสอบยอดก่อนอนุมัติจ่ายชำระ",
+    "item": [
+      { "item": "OFC-DSK-A", "description": "โต๊ะทำงานผู้บริหาร ท็อปไม้วอลนัท 160x80 ซม.", "quantity": 8, "quantityText": "8", "units": "ตัว", "rate": 2500.00, "rateText": "2,500.00", "amount": 20000.00, "amountText": "20,000.00" },
+      { "item": "OFC-CHR-B", "description": "เก้าอี้สำนักงานตาข่ายระบายอากาศ รับประกัน 3 ปี", "quantity": 12, "quantityText": "12", "units": "ตัว", "rate": 1500.00, "rateText": "1,500.00", "amount": 18000.00, "amountText": "18,000.00" },
+      { "item": "SVC-SETUP", "description": "ค่าบริการติดตั้งระบบและทดสอบการใช้งาน (ต่อวันทำงาน)", "quantity": 2, "quantityText": "2", "units": "วัน", "rate": 4500.00, "rateText": "4,500.00", "amount": 9000.00, "amountText": "9,000.00" }
+    ],
+    "subtotal": 47000.00,
+    "subtotalText": "47,000.00",
+    "discounttotal": -2000.00,
+    "discounttotalText": "2,000.00",
+    "netAmountText": "45,000.00",
+    "taxtotal": 3150.00,
+    "taxtotalText": "3,150.00",
+    "total": 48150.00,
+    "totalText": "48,150.00",
+    "bahtText": "สี่หมื่นแปดพันหนึ่งร้อยห้าสิบบาทถ้วน"
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
+    "phone": "0-2740-1234",
+    "email": "purchasing@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
+  },
+  "context": {
+    "today": "18/07/2026",
+    "now": "18/07/2026 09:30",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}
