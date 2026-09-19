@@ -1,0 +1,53 @@
+{
+  "_comment": "ข้อมูลสังเคราะห์ทั้งหมด — ห้ามใส่ข้อมูลจริงจาก account ลูกค้า · โครงตรงกับ alias ของ render Suitelet (record / company / context) · ใบลดหนี้ใช้โครงยอดเดียวกับใบแจ้งหนี้: subtotal 32,000.00 − ส่วนลด 2,000.00 = 30,000.00 + VAT 7% 2,100.00 = 32,100.00 (ตัวอักษร: สามหมื่นสองพันหนึ่งร้อยบาทถ้วน) · createdfrom = ใบแจ้งหนี้ต้นทางที่ถูกออกใบลดหนี้ · ค่าที่ template พิมพ์คือ *Text ที่ engine format มาแล้ว (#165) ส่วนคีย์ number ไว้ให้ col.format · @author Wichit Wongta @since 2026-09-20",
+  "record": {
+    "tranid": "CM-2026-0012",
+    "trandate": "20/07/2026",
+    "createdfrom": "INV-2026-0107",
+    "otherrefnum": "PO-CUST-8891",
+    "terms": "เครดิต 30 วัน",
+    "salesrep": "วรรณา ศรีสุข",
+    "entity": "บริษัท สยามเทครุ่งเรือง จำกัด",
+    "billaddress": "55/9 อาคารสาทรซิตี้ทาวเวอร์ ชั้น 21 ถนนสาทรใต้ แขวงทุ่งมหาเมฆ เขตสาทร กรุงเทพมหานคร 10120",
+    "custbody_buyer_taxid": "0105549123456",
+    "custbody_buyer_branch": "สำนักงานใหญ่",
+    "custbody_doc_copy_label": "ต้นฉบับ (Original)",
+    "memo": "ลดหนี้สินค้าชำรุดจากการขนส่งตามใบแจ้งหนี้ต้นทาง — โปรดเก็บเอกสารนี้ไว้เป็นหลักฐาน",
+    "item": [
+      { "item": "OFC-CHR-B", "description": "เก้าอี้สำนักงานตาข่ายระบายอากาศ รับประกัน 3 ปี (คืน 2 ตัว)", "quantity": 2, "quantityText": "2", "units": "ตัว", "rate": 1500.00, "rateText": "1,500.00", "amount": 3000.00, "amountText": "3,000.00" },
+      { "item": "NET-SW-24P", "description": "สวิตช์เครือข่าย 24 พอร์ต Gigabit (เปลี่ยนรุ่น)", "quantity": 5, "quantityText": "5", "units": "เครื่อง", "rate": 5000.00, "rateText": "5,000.00", "amount": 25000.00, "amountText": "25,000.00" },
+      { "item": "CBL-CAT6-305", "description": "สายแลน CAT6 กล่อง 305 เมตร (ลดราคาตามส่วนลดพิเศษ)", "quantity": 1, "quantityText": "1", "units": "กล่อง", "rate": 4000.00, "rateText": "4,000.00", "amount": 4000.00, "amountText": "4,000.00" }
+    ],
+    "subtotal": 32000.00,
+    "subtotalText": "32,000.00",
+    "discounttotal": -2000.00,
+    "discounttotalText": "2,000.00",
+    "netAmountText": "30,000.00",
+    "taxtotal": 2100.00,
+    "taxtotalText": "2,100.00",
+    "total": 32100.00,
+    "totalText": "32,100.00",
+    "bahtText": "สามหมื่นสองพันหนึ่งร้อยบาทถ้วน"
+  },
+  "company": {
+    "name": "บริษัท ทีบี เฟอร์นิเจอร์ แอนด์ ซัพพลาย จำกัด",
+    "nameEn": "TB Furniture & Supply Co., Ltd.",
+    "address": "99/1 หมู่ 4 ถนนบางนา-ตราด กม.18 ตำบลบางโฉลง อำเภอบางพลี จังหวัดสมุทรปราการ 10540",
+    "addressEn": "99/1 Moo 4, Bangna-Trad Rd. KM.18, Bang Chalong, Bang Phli, Samut Prakan 10540",
+    "phone": "0-2740-1234",
+    "email": "billing@tbfurniture.example.co.th",
+    "taxId": "0105561098765",
+    "branch": "สำนักงานใหญ่ (Head Office)",
+    "logo": "",
+    "themeColor": "#1a3c6e",
+    "fontRegular": "",
+    "fontBold": "",
+    "flags": "show_signature"
+  },
+  "context": {
+    "today": "20/07/2026",
+    "now": "20/07/2026 09:30",
+    "userName": "ระบบออกเอกสารอัตโนมัติ",
+    "userEmail": "system@tbfurniture.example.co.th"
+  }
+}

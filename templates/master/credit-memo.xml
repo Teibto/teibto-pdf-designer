@@ -1,0 +1,231 @@
+<?xml version="1.0"?>
+<!DOCTYPE pdf PUBLIC "-//big.faceless.org//report" "report-1.1.dtd">
+<#--
+  ใบลดหนี้ — master template · Issue #199
+  @author Wichit Wongta
+  @since 2026-09-20
+  pld:rectype creditmemo   — record type ที่ template นี้ผูกกับ (scripts/validate-templates.sh + engine test อ่านบรรทัดนี้)
+  โครง/CSS/macro/font pattern เดียวกับ tax-invoice.xml (reference ของ Standard Template Pack)
+  กติกา: docs/TOOLSTACK.md + templates/README.md (binding null-safe ทุกตัว,
+  header/footer ผ่าน macrolist, ฟอนต์ไทย embed เท่านั้น)
+
+  จุดต่อลูกค้าทั้งหมดมาจาก ${company.*} = config record customrecord_pld_config
+  ของแต่ละ account (#9) — รวมถึง URL ฟอนต์ไทย (company.fontRegular / company.fontBold)
+  → ไฟล์นี้ save เข้า account ได้ตรง ๆ ไม่ต้องแก้อะไรเลย · ดู engine/DEPLOYMENT.md §Company Config
+  URL ใน attribute ต้องผ่าน ?xml เสมอ (ค่า config มี & ดิบ — ไม่ escape = BFO parse พัง)
+
+  Field mapping ฝั่ง creditmemo: entity = ลูกค้า, createdfrom = ใบแจ้งหนี้/ใบกำกับภาษี
+  ต้นทางที่ถูกออกใบลดหนี้, รายการ + ยอดสรุปเหมือนใบแจ้งหนี้ (engine แปลงเครื่องหมาย
+  บรรทัดฝั่งขายให้แสดงเป็นค่าบวกแล้ว) · เอกสารนี้คือใบลดหนี้ ไม่ใช่ใบกำกับภาษี
+-->
+
+<#-- จำนวนเงินตัวอักษรไทยมาจาก engine แล้ว (${record.bahtText}) — helper FreeMarker เดิม
+     ถูกถอดออกใน #165: มันทำเลขคณิตกับ record.total ซึ่งข้าม render.DataSource.OBJECT
+     มาเป็น string เสมอ จึงคืนค่าว่างทุกครั้ง (พังเงียบ) · ตัวแปลงตัวจริงคือ
+     pld_lib_baht_text.js ที่ engine เรียกให้แล้ว -->
+
+<pdf>
+<head>
+<link name="THSarabunNew" type="font" subtype="truetype" src="${(company.fontRegular!'')?xml}" src-bold="${(company.fontBold!'')?xml}" bytes="2" />
+<macrolist>
+  <macro id="nlheader">
+    <#-- โลโก้: กำหนด width และ height "คู่กัน" เสมอ แล้ววางในแถวของตัวเอง (#178)
+         BFO ย่อภาพก็ต่อเมื่อได้กล่องครบทั้งสองแกน — ให้ค่าด้านเดียว (หรือ max-width)
+         มันเมินแล้ววาดภาพขนาดจริง ซึ่งโดนตัดตามขอบ cell/หน้ากระดาษเงียบ ๆ
+         เดิมใช้ style="width: 64pt" อย่างเดียวในคอลัมน์ 58% โลโก้แบนเนอร์ของ account
+         จึงวาดเต็มขนาดจริง ล้นออกนอกหน้า ดันบล็อกหัวเอกสารตกหน้า และทับกล่องคู่ค้า
+         กล่อง 150x40pt รับได้ทั้งโลโก้แนวนอนยาวและโลโก้จัตุรัส โดยไม่กินงบ header -->
+    <#if (company.logo!"") != "">
+    <p class="cell"><img src="${(company.logo)?xml}" style="width: 150pt; height: 40pt;" /></p>
+    </#if>
+    <table style="width: 100%;">
+      <tr>
+        <td style="width: 58%;">
+          <p class="cell">
+          <span class="company-name">${(company.name!"")?xml}</span><br />
+          <span>${(company.address!"")?xml}</span><br />
+          <span>โทร. ${(company.phone!"")?xml}<#if (company.email!"") != ""> อีเมล ${(company.email!"")?xml}</#if></span><br />
+          <span class="bold">เลขประจำตัวผู้เสียภาษี ${(company.taxId!"")?xml} ${(company.branch!"สำนักงานใหญ่ (Head Office)")?xml}</span>
+          </p>
+        </td>
+        <td style="width: 42%; text-align: right;">
+          <span class="doc-title">ใบลดหนี้</span><br />
+          <span class="doc-title-en">CREDIT NOTE</span><br />
+          <span class="doc-copy">${(copy.label!"ต้นฉบับ (Original)")?xml}</span><br />
+          <span>เลขที่ (No.) <span class="bold">${(record.tranid!"")?xml}</span></span><br />
+          <span>วันที่ (Date) <span class="bold">${(record.trandate!"")?xml}</span></span>
+        </td>
+      </tr>
+    </table>
+    <hr class="header-rule" />
+  </macro>
+  <macro id="nlfooter">
+    <table style="width: 100%;">
+      <tr>
+        <td class="footer-note">เอกสารเลขที่ ${(record.tranid!"")?xml} จัดทำโดยระบบคอมพิวเตอร์ (Computer-generated document)</td>
+        <td class="footer-note" style="text-align: right;">หน้า (Page) <pagenumber/> / <totalpages/></td>
+      </tr>
+    </table>
+  </macro>
+</macrolist>
+<style type="text/css">
+body { font-family: THSarabunNew, sans-serif; font-size: 12pt; color: #000000; }
+table { border-collapse: collapse; }
+td, th { padding: 2pt 4pt; vertical-align: top; }
+.bold { font-weight: bold; }
+.company-name { font-size: 15pt; font-weight: bold; }
+.doc-title { font-size: 17pt; font-weight: bold; }
+.doc-title-en { font-size: 11pt; color: #333333; }
+.doc-copy { font-size: 11pt; font-weight: bold; }
+.header-rule { border: none; border-top: 1pt solid #000000; margin-top: 4pt; }
+.section-label { font-size: 10pt; font-weight: bold; color: #555555; }
+.party-box td { border: 0.5pt solid #000000; padding: 4pt 6pt; }
+.items th { border: 0.5pt solid #000000; background-color: #eeeeee; text-align: center; font-weight: bold; padding: 3pt 4pt; }
+.items td { border: 0.5pt solid #000000; padding: 3pt 4pt; }
+/* BFO justify ข้อความเปล่าใน td ที่ wrap หลายบรรทัด (ช่องไฟยืด, cluster ไทยแตก) — text-align
+   บน td หรือ align attr เอาไม่อยู่ ต้องห่อเนื้อหา cell ด้วย block p ที่ระบุ alignment เอง */
+p.cell { margin: 0; text-align: left; }
+p.cell-c { margin: 0; text-align: center; }
+.desc { font-size: 10pt; color: #444444; }
+td.c { text-align: center; }
+td.r { text-align: right; }
+.summary td { padding: 2pt 6pt; }
+.grand td { font-weight: bold; font-size: 13pt; border-top: 1pt solid #000000; border-bottom: 2pt solid #000000; }
+.amount-text { font-weight: bold; }
+.sig-box { border: 0.5pt solid #000000; text-align: center; padding: 6pt 4pt; }
+.footer-note { font-size: 9pt; color: #555555; }
+</style>
+</head>
+<body header="nlheader" header-height="140pt" footer="nlfooter" footer-height="26pt" size="A4" padding="0.35in">
+
+<#-- ═══ ลูกค้า + เอกสารอ้างอิง ═══ -->
+<table class="party-box" style="width: 100%;">
+  <tr>
+    <td style="width: 62%;">
+      <p class="cell">
+      <span class="section-label">ลูกค้า (Customer)</span><br />
+      <span class="bold">${(record.entity!"")?xml}</span><br />
+      <span>${(record.billaddress!"")?xml}</span><br />
+      <span>เลขประจำตัวผู้เสียภาษี ${(record.custbody_buyer_taxid!"")?xml} สาขา ${(record.custbody_buyer_branch!"")?xml}</span>
+      </p>
+    </td>
+    <td style="width: 38%;">
+      <p class="cell">
+      <span class="section-label">อ้างอิง (Reference)</span><br />
+      <span>ใบแจ้งหนี้/ใบกำกับภาษี (Ref. Invoice): ${(record.createdfrom!"")?xml}</span><br />
+      <span>เลขที่อ้างอิง (Ref No.): ${(record.otherrefnum!"")?xml}</span><br />
+      <span>เงื่อนไขชำระเงิน (Terms): ${(record.terms!"")?xml}</span><br />
+      <span>พนักงานขาย (Sales Rep): ${(record.salesrep!"")?xml}</span>
+      </p>
+    </td>
+  </tr>
+</table>
+
+<br />
+
+<#-- ═══ รายการสินค้า/บริการที่ลดหนี้ ═══ -->
+<table class="items" style="width: 100%;">
+  <thead>
+    <tr>
+      <th style="width: 7%;">ลำดับ<br />No.</th>
+      <th style="width: 43%;">รายการ<br />Description</th>
+      <th style="width: 9%;">จำนวน<br />Qty</th>
+      <th style="width: 9%;">หน่วย<br />Unit</th>
+      <th style="width: 16%;">ราคาต่อหน่วย<br />Unit Price</th>
+      <th style="width: 16%;">จำนวนเงิน<br />Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    <#list (record.item)![] as line>
+    <tr>
+      <td class="c">${line_index + 1}</td>
+      <td><p class="cell">${(line.item!"")?xml}<#if (line.description!"") != ""><br /><span class="desc">${(line.description!"")?xml}</span></#if></p></td>
+      <td class="c">${(line.quantityText!"")?xml}</td>
+      <td class="c">${(line.units!"")?xml}</td>
+      <td class="r">${(line.rateText!"")?xml}</td>
+      <td class="r">${(line.amountText!"")?xml}</td>
+    </tr>
+    </#list>
+  </tbody>
+</table>
+
+<#-- ═══ สรุปยอด + จำนวนเงินตัวอักษร ═══ -->
+<table class="summary" style="width: 100%;">
+  <tr>
+    <td style="width: 55%;">
+      <p class="cell">
+      <br />
+      <span class="section-label">จำนวนเงินรวมทั้งสิ้น (ตัวอักษร)</span><br />
+      <span class="amount-text">(${(record.bahtText!"")?xml})</span>
+      <#if (record.memo!"") != "">
+      <br /><br />
+      <span class="section-label">หมายเหตุ (Remarks)</span><br />
+      <span>${(record.memo!"")?xml}</span>
+      </#if>
+      </p>
+    </td>
+    <td style="width: 45%;">
+      <table style="width: 100%;">
+        <tr>
+          <td><p class="cell">รวมมูลค่าสินค้า/บริการ (Subtotal)</p></td>
+          <td class="r">${(record.subtotalText!"")?xml}</td>
+        </tr>
+        <#if (record.discounttotalText!"") != "">
+        <tr>
+          <td><p class="cell">ส่วนลด (Discount)</p></td>
+          <td class="r">${(record.discounttotalText!"")?xml}</td>
+        </tr>
+        <tr>
+          <td><p class="cell">มูลค่าหลังหักส่วนลด (Net Amount)</p></td>
+          <td class="r">${(record.netAmountText!"")?xml}</td>
+        </tr>
+        </#if>
+        <tr>
+          <td><p class="cell">ภาษีมูลค่าเพิ่ม (VAT)</p></td>
+          <td class="r">${(record.taxtotalText!"")?xml}</td>
+        </tr>
+        <tr class="grand">
+          <td><p class="cell">จำนวนเงินรวมทั้งสิ้น (Grand Total)</p></td>
+          <td class="r">${(record.totalText!"")?xml}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<br /><br />
+
+<#-- ═══ ช่องลายเซ็น ═══ -->
+<table style="width: 100%;">
+  <tr>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ผู้จัดทำ (Prepared by)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+    <td style="width: 2%;"> </td>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ผู้มีอำนาจลงนาม (Authorized Signature)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+    <td style="width: 2%;"> </td>
+    <td class="sig-box" style="width: 32%;">
+      <p class="cell-c">
+      <br /><br />
+      .................................................<br />
+      ลูกค้ารับทราบ (Acknowledged by)<br />
+      วันที่ (Date) ......../......../........
+      </p>
+    </td>
+  </tr>
+</table>
+
+</body>
+</pdf>
